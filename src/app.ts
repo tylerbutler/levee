@@ -67,16 +67,26 @@ export function create(
 	// Bind routes
 	const routes = createRoutes(config, mongoManager, storage, collaborationSessionEventEmitter);
 
-	app.use(cors());
+	const corsDomains = new Set<string>(["localhost", "levee.tylerbutler.com"]);
+
+	app.use(
+		cors({
+			origin: (origin, callback) => {
+				if (corsDomains.has(origin)) {
+					callback(null, true);
+				} else {
+					callback(new Error("Not allowed by CORS"));
+				}
+			},
+		}),
+	);
 	app.use(routes.storage);
 	app.use(routes.ordering);
 
 	// Basic Help Message
 	app.use(
 		Router().get("/", (req, res) => {
-			res.status(200).send(
-				"This is Levee, a Fluid Framework service.",
-			);
+			res.status(200).send("This is Levee, a Fluid Framework service.");
 		}),
 	);
 
