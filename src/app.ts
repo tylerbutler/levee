@@ -72,6 +72,7 @@ export function create(
 		"http://localhost",
 		"https://levee.tylerbutler.com",
 		"https://levee-kb1a.onrender.com",
+		/https:\/\/\w+\.tylerbutler\.com/i,
 	];
 
 	app.use(
