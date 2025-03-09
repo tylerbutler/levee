@@ -75,7 +75,7 @@ export function create(
 
 	app.use(
 		cors({
-			origin: [...corsDomains],
+			origin: false, // [...corsDomains],
 			methods: ["GET", "PUT", "POST"],
 			// 	origin: (origin, callback) => {
 			// 		if (corsDomains.has(origin)) {
