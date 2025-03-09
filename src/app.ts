@@ -67,15 +67,16 @@ export function create(
 	// Bind routes
 	const routes = createRoutes(config, mongoManager, storage, collaborationSessionEventEmitter);
 
-	// const corsDomains: (string | RegExp)[] = [
-	// 	/http:\/\/localhost:\d+/i,
-	// 	"https://levee.tylerbutler.com",
-	// 	"https://levee-kb1a.onrender.com",
-	// ];
+	const corsDomains: (string | RegExp)[] = [
+		/http:\/\/localhost:\d+/i,
+		"http://localhost",
+		"https://levee.tylerbutler.com",
+		"https://levee-kb1a.onrender.com",
+	];
 
 	app.use(
 		cors({
-			origin: false, // [...corsDomains],
+			origin: corsDomains,
 			methods: ["GET", "PUT", "POST"],
 			// 	origin: (origin, callback) => {
 			// 		if (corsDomains.has(origin)) {
