@@ -62,9 +62,9 @@ export function create(store: nconf.Provider): Router {
 		const commitsP = getCommits(
 			store,
 			request.params.tenantId,
-			request.get("Authorization") ?? "",
-			queryParamToString(request.query.sha) ?? "",
-			queryParamToNumber(request.query.count) ?? 1,
+			request.get("Authorization"),
+			queryParamToString(request.query.sha),
+			queryParamToNumber(request.query.count),
 		);
 
 		utils.handleResponse(commitsP, response, false);

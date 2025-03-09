@@ -13,7 +13,7 @@ export function getParam(params: Params, key: string) {
  * Helper function to convert Request's query param to a number.
  * @param value - The value to be converted to number.
  */
-export function queryParamToNumber(value: any): number | undefined {
+export function queryParamToNumber(value: any): number {
 	if (typeof value !== "string") {
 		return undefined;
 	}
@@ -25,7 +25,7 @@ export function queryParamToNumber(value: any): number | undefined {
  * Helper function to convert Request's query param to a string.
  * @param value - The value to be converted to number.
  */
-export function queryParamToString(value: any): string | undefined {
+export function queryParamToString(value: any): string {
 	if (typeof value !== "string") {
 		return undefined;
 	}

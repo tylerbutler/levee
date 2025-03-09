@@ -18,7 +18,6 @@ import {
 	Historian,
 	IGitManager,
 } from "@fluidframework/server-services-client";
-import type { ScopeType, IUser } from "@fluidframework/protocol-definitions";
 
 export class TinyliciousTenant implements ITenant {
 	private readonly owner = "tinylicious";
@@ -53,10 +52,7 @@ export class TinyliciousTenant implements ITenant {
 		return {
 			historianUrl: this.historianUrl,
 			internalHistorianUrl: this.historianUrl,
-			credentials: {
-				user: "tinylicious",
-				password: "",
-			},
+			credentials: null,
 			owner: this.owner,
 			repository: this.repository,
 			url: this.url,
@@ -99,18 +95,5 @@ export class TenantManager implements ITenantManager, ITenantConfigManager {
 
 	public async getTenantStorageName(tenantId: string): Promise<string> {
 		return tenantId;
-	}
-
-	public async signToken(
-		tenantId: string,
-		documentId: string,
-		scopes: ScopeType[],
-		user?: IUser,
-		lifetime?: number,
-		ver?: string,
-		jti?: string,
-		includeDisabledTenant?: boolean,
-	): Promise<string> {
-		throw new Error("Method not implemented.");
 	}
 }

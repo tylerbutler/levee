@@ -7,7 +7,7 @@ import { MongoManager } from "@fluidframework/server-services-core";
 import { ISequencedDocumentMessage } from "@fluidframework/protocol-definitions";
 import { Router } from "express";
 import { Provider } from "nconf";
-import { queryParamToNumber } from "../../utils";
+import { getParam, queryParamToNumber } from "../../utils";
 
 async function getDeltas(
 	mongoManager: MongoManager,
@@ -52,15 +52,14 @@ export function create(config: Provider, mongoManager: MongoManager): Router {
 	router.get("/:tenantId/:id", (request, response, next) => {
 		const from = queryParamToNumber(request.query.from);
 		const to = queryParamToNumber(request.query.to);
-		const tenantId = request.params.tenantId;
-		const documentId = request.params.id;
+		const tenantId = getParam(request.params, "tenantId");
 
 		// Query for the deltas and return a filtered version of just the operations field
 		const deltasP = getDeltas(
 			mongoManager,
 			deltasCollectionName,
 			tenantId,
-			documentId,
+			getParam(request.params, "id"),
 			from,
 			to,
 		);
