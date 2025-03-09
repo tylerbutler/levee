@@ -67,21 +67,23 @@ export function create(
 	// Bind routes
 	const routes = createRoutes(config, mongoManager, storage, collaborationSessionEventEmitter);
 
-	const corsDomains = new Set<string>([
+	const corsDomains: (string | RegExp)[] = [
 		"http://localhost",
 		"https://levee.tylerbutler.com",
 		"https://levee-kb1a.onrender.com",
-	]);
+	];
 
 	app.use(
 		cors({
-			origin: (origin, callback) => {
-				if (corsDomains.has(origin)) {
-					callback(null, true);
-				} else {
-					callback(new Error("Not allowed by CORS"));
-				}
-			},
+			origin: [...corsDomains],
+			methods: ["GET", "PUT", "POST"],
+			// 	origin: (origin, callback) => {
+			// 		if (corsDomains.has(origin)) {
+			// 			callback(null, true);
+			// 		} else {
+			// 			callback(new Error("Not allowed by CORS"));
+			// 		}
+			// 	},
 		}),
 	);
 	app.use(routes.storage);
