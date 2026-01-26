@@ -397,7 +397,15 @@ defmodule Levee.Documents.Session do
     "#{state.tenant_id}_#{state.document_id}_#{state.client_counter + 1}"
   end
 
-  defp build_connected_response(client_id, mode, connect_msg, _state, sequence_state, clients, latest_summary) do
+  defp build_connected_response(
+         client_id,
+         mode,
+         connect_msg,
+         _state,
+         sequence_state,
+         clients,
+         latest_summary
+       ) do
     current_sn = Bridge.current_sn(sequence_state)
 
     # Build initial clients list (all clients except the joining one)
@@ -526,12 +534,27 @@ defmodule Levee.Documents.Session do
 
             if op_type == "summarize" do
               # Handle summarize op specially
-              process_summarize_op(op, client_id, assigned_sn, msn, new_seq_state, acc_ops, acc_nacks, acc_state)
+              process_summarize_op(
+                op,
+                client_id,
+                assigned_sn,
+                msn,
+                new_seq_state,
+                acc_ops,
+                acc_nacks,
+                acc_state
+              )
             else
               sequenced_op = build_sequenced_op(op, client_id, assigned_sn, msn)
               # Add to history (newest first) and trim if needed
               updated_history = add_to_history(sequenced_op, acc_state.op_history)
-              new_state = %{acc_state | sequence_state: new_seq_state, op_history: updated_history}
+
+              new_state = %{
+                acc_state
+                | sequence_state: new_seq_state,
+                  op_history: updated_history
+              }
+
               {[sequenced_op | acc_ops], acc_nacks, new_state}
             end
 
@@ -548,7 +571,16 @@ defmodule Levee.Documents.Session do
     end
   end
 
-  defp process_summarize_op(op, client_id, assigned_sn, msn, new_seq_state, acc_ops, acc_nacks, acc_state) do
+  defp process_summarize_op(
+         op,
+         client_id,
+         assigned_sn,
+         msn,
+         new_seq_state,
+         acc_ops,
+         acc_nacks,
+         acc_state
+       ) do
     contents = op["contents"] || %{}
 
     # Validate required fields in summarize op
@@ -563,53 +595,34 @@ defmodule Levee.Documents.Session do
 
         new_pending = Map.put(acc_state.pending_summaries, assigned_sn, pending_summary)
 
-        # Attempt to process and store the summary
-        case store_summary(acc_state.tenant_id, acc_state.document_id, contents, assigned_sn) do
-          {:ok, summary_handle} ->
-            # Summary stored successfully, generate summaryAck
-            summary_ack = build_summary_ack(summary_handle, assigned_sn, msn)
+        # Process and store the summary
+        {:ok, summary_handle} =
+          store_summary(acc_state.tenant_id, acc_state.document_id, contents, assigned_sn)
 
-            # Also generate the sequenced summarize op for the log
-            sequenced_summarize = build_sequenced_op(op, client_id, assigned_sn, msn)
-            updated_history = add_to_history(sequenced_summarize, acc_state.op_history)
-            updated_history = add_to_history(summary_ack, updated_history)
+        # Summary stored successfully, generate summaryAck
+        summary_ack = build_summary_ack(summary_handle, assigned_sn, msn)
 
-            # Update latest summary
-            new_latest_summary = %{
-              handle: summary_handle,
-              sequence_number: assigned_sn
-            }
+        # Also generate the sequenced summarize op for the log
+        sequenced_summarize = build_sequenced_op(op, client_id, assigned_sn, msn)
+        updated_history = add_to_history(sequenced_summarize, acc_state.op_history)
+        updated_history = add_to_history(summary_ack, updated_history)
 
-            new_state = %{
-              acc_state
-              | sequence_state: new_seq_state,
-                op_history: updated_history,
-                pending_summaries: Map.delete(new_pending, assigned_sn),
-                latest_summary: new_latest_summary
-            }
+        # Update latest summary
+        new_latest_summary = %{
+          handle: summary_handle,
+          sequence_number: assigned_sn
+        }
 
-            # Return both the sequenced summarize op and the summaryAck
-            {[summary_ack, sequenced_summarize | acc_ops], acc_nacks, new_state}
+        new_state = %{
+          acc_state
+          | sequence_state: new_seq_state,
+            op_history: updated_history,
+            pending_summaries: Map.delete(new_pending, assigned_sn),
+            latest_summary: new_latest_summary
+        }
 
-          {:error, reason} ->
-            # Summary failed, generate summaryNack
-            summary_nack = build_summary_nack(assigned_sn, msn, reason)
-
-            # Also generate the sequenced summarize op
-            sequenced_summarize = build_sequenced_op(op, client_id, assigned_sn, msn)
-            updated_history = add_to_history(sequenced_summarize, acc_state.op_history)
-            updated_history = add_to_history(summary_nack, updated_history)
-
-            new_state = %{
-              acc_state
-              | sequence_state: new_seq_state,
-                op_history: updated_history,
-                pending_summaries: new_pending
-            }
-
-            # Return both the sequenced summarize op and the summaryNack
-            {[summary_nack, sequenced_summarize | acc_ops], acc_nacks, new_state}
-        end
+        # Return both the sequenced summarize op and the summaryAck
+        {[summary_ack, sequenced_summarize | acc_ops], acc_nacks, new_state}
 
       {:error, reason} ->
         # Invalid summarize op contents
@@ -645,10 +658,8 @@ defmodule Levee.Documents.Session do
       message: message
     }
 
-    case Levee.Storage.ETS.store_summary(tenant_id, document_id, summary) do
-      {:ok, _stored} -> {:ok, handle}
-      {:error, reason} -> {:error, reason}
-    end
+    {:ok, _stored} = Levee.Storage.ETS.store_summary(tenant_id, document_id, summary)
+    {:ok, handle}
   end
 
   defp build_summary_ack(handle, sn, msn) do
@@ -664,32 +675,6 @@ defmodule Levee.Documents.Session do
         "summaryProposal" => %{
           "summarySequenceNumber" => sn
         }
-      },
-      "metadata" => nil,
-      "timestamp" => System.system_time(:millisecond)
-    }
-  end
-
-  defp build_summary_nack(sn, msn, reason) do
-    error_message =
-      case reason do
-        {:invalid_summarize, msg} -> "Invalid summarize op: #{msg}"
-        :not_found -> "Summary tree not found"
-        _ -> "Summary processing failed: #{inspect(reason)}"
-      end
-
-    %{
-      "clientId" => nil,
-      "sequenceNumber" => sn + 1,
-      "minimumSequenceNumber" => msn,
-      "clientSequenceNumber" => -1,
-      "referenceSequenceNumber" => sn,
-      "type" => "summaryNack",
-      "contents" => %{
-        "summaryProposal" => %{
-          "summarySequenceNumber" => sn
-        },
-        "message" => error_message
       },
       "metadata" => nil,
       "timestamp" => System.system_time(:millisecond)

@@ -14,6 +14,10 @@ defmodule Levee.Protocol.Bridge do
   @gleam_module :levee_protocol
   @gleam_sequencing :levee_protocol@sequencing
 
+  # Gleam modules are built separately and not visible to the Elixir compiler.
+  # This directive tells the compiler these modules will exist at runtime.
+  @compile {:no_warn_undefined, [:levee_protocol, :levee_protocol@sequencing]}
+
   @doc """
   Create a new sequence state for a document.
   """

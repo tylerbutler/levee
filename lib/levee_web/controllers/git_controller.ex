@@ -26,20 +26,14 @@ defmodule LeveeWeb.GitController do
   """
   def create_blob(conn, %{"tenant_id" => tenant_id} = params) do
     with {:ok, content} <- decode_blob_content(params) do
-      case Storage.create_blob(tenant_id, content) do
-        {:ok, blob} ->
-          conn
-          |> put_status(:created)
-          |> json(%{
-            sha: blob.sha,
-            url: blob_url(conn, tenant_id, blob.sha)
-          })
+      {:ok, blob} = Storage.create_blob(tenant_id, content)
 
-        {:error, reason} ->
-          conn
-          |> put_status(:bad_request)
-          |> json(%{error: inspect(reason)})
-      end
+      conn
+      |> put_status(:created)
+      |> json(%{
+        sha: blob.sha,
+        url: blob_url(conn, tenant_id, blob.sha)
+      })
     else
       {:error, reason} ->
         conn
@@ -100,17 +94,11 @@ defmodule LeveeWeb.GitController do
         }
       end)
 
-    case Storage.create_tree(tenant_id, entries) do
-      {:ok, tree} ->
-        conn
-        |> put_status(:created)
-        |> json(format_tree_response(conn, tenant_id, tree))
+    {:ok, tree} = Storage.create_tree(tenant_id, entries)
 
-      {:error, reason} ->
-        conn
-        |> put_status(:bad_request)
-        |> json(%{error: inspect(reason)})
-    end
+    conn
+    |> put_status(:created)
+    |> json(format_tree_response(conn, tenant_id, tree))
   end
 
   @doc """
@@ -149,17 +137,11 @@ defmodule LeveeWeb.GitController do
   - author: { name, email, date }
   """
   def create_commit(conn, %{"tenant_id" => tenant_id} = params) do
-    case Storage.create_commit(tenant_id, params) do
-      {:ok, commit} ->
-        conn
-        |> put_status(:created)
-        |> json(format_commit_response(conn, tenant_id, commit))
+    {:ok, commit} = Storage.create_commit(tenant_id, params)
 
-      {:error, reason} ->
-        conn
-        |> put_status(:bad_request)
-        |> json(%{error: inspect(reason)})
-    end
+    conn
+    |> put_status(:created)
+    |> json(format_commit_response(conn, tenant_id, commit))
   end
 
   @doc """

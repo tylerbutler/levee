@@ -59,8 +59,33 @@ defmodule Levee.MixProject do
   # See the documentation for `Mix` for more info on aliases.
   defp aliases do
     [
-      setup: ["deps.get"],
+      setup: ["deps.get", "gleam.build"],
+      "gleam.build": &gleam_build/1,
+      compile: ["gleam.build", "compile"],
       precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
     ]
+  end
+
+  defp gleam_build(_args) do
+    gleam_path = "levee_protocol"
+
+    if File.dir?(gleam_path) do
+      case System.cmd("gleam", ["build", "--target", "erlang"],
+             cd: gleam_path,
+             stderr_to_stdout: true
+           ) do
+        {output, 0} ->
+          if String.contains?(output, "Compiling") do
+            Mix.shell().info(output)
+          end
+
+          :ok
+
+        {output, _exit_code} ->
+          Mix.shell().error("Gleam compilation failed:")
+          Mix.shell().error(output)
+          Mix.raise("Gleam compilation failed")
+      end
+    end
   end
 end
