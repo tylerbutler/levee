@@ -11,8 +11,14 @@ local elixir_linters = new Mapping<String, Step> {
 }
 
 // Full test suite (slower, for pre-push or manual checks)
+// Note: We run the full test suite, not per-file, because mix test
+// doesn't support running tests based on which source files changed
 local test_linters = new Mapping<String, Step> {
-    ["mix_test"] = Builtins.mix_test
+    ["mix_test"] {
+        glob = "**/*.ex"
+        batch = true
+        check = "mix test"
+    }
 }
 
 // PKL config validation
