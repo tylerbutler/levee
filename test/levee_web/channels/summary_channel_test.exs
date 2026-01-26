@@ -97,7 +97,7 @@ defmodule LeveeWeb.SummaryChannelTest do
       document_id: document_id,
       topic: topic,
       token: token,
-      client_id: client_id
+      client_id: _client_id
     } do
       # First submit a summary using the existing connection
       # We need to get a fresh socket since we used the one from setup
@@ -184,9 +184,10 @@ defmodule LeveeWeb.SummaryChannelTest do
         "clientSequenceNumber" => 1,
         "referenceSequenceNumber" => 0,
         "type" => "summarize",
-        "contents" => %{
-          # Missing handle, message, parents, head
-        }
+        "contents" =>
+          %{
+            # Missing handle, message, parents, head
+          }
       }
 
       push(socket, "submitOp", %{
