@@ -11,7 +11,7 @@ defmodule LeveeWeb.GitController do
 
   use LeveeWeb, :controller
 
-  alias Levee.Storage.ETS, as: Storage
+  alias Levee.Storage
 
   # Blob operations
 

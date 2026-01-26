@@ -49,7 +49,10 @@ defmodule Levee.MixProject do
       # JWT authentication
       {:jose, "~> 1.11"},
       # CORS support
-      {:cors_plug, "~> 3.0"}
+      {:cors_plug, "~> 3.0"},
+      # Database (optional PostgreSQL backend)
+      {:ecto_sql, "~> 3.12"},
+      {:postgrex, "~> 0.19"}
     ]
   end
 
@@ -61,10 +64,12 @@ defmodule Levee.MixProject do
   # See the documentation for `Mix` for more info on aliases.
   defp aliases do
     [
-      setup: ["deps.get", "gleam.build"],
+      setup: ["deps.get", "gleam.build", "ecto.setup"],
       "gleam.build": &gleam_build/1,
       compile: ["gleam.build", "compile"],
-      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
+      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"],
+      "ecto.setup": ["ecto.create", "ecto.migrate"],
+      "ecto.reset": ["ecto.drop", "ecto.setup"]
     ]
   end
 

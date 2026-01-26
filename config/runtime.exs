@@ -20,8 +20,17 @@ if System.get_env("PHX_SERVER") do
   config :levee, LeveeWeb.Endpoint, server: true
 end
 
-config :levee, LeveeWeb.Endpoint,
-  http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+config :levee, LeveeWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+
+# Configure storage backend based on environment variable
+if database_url = System.get_env("DATABASE_URL") do
+  config :levee, Levee.Repo,
+    url: database_url,
+    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10")
+
+  # When DATABASE_URL is set, use PostgreSQL storage backend
+  config :levee, :storage_backend, Levee.Storage.Postgres
+end
 
 if config_env() == :prod do
   # The secret key base is used to sign/encrypt cookies and other secrets.

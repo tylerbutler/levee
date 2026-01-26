@@ -10,23 +10,28 @@ defmodule Levee.Application do
     # Add Gleam compiled modules to the code path
     load_gleam_modules()
 
-    children = [
-      LeveeWeb.Telemetry,
-      {DNSCluster, query: Application.get_env(:levee, :dns_cluster_query) || :ignore},
-      {Phoenix.PubSub, name: Levee.PubSub},
-      # ETS-based storage backend (must start before other services)
-      Levee.Storage.ETS,
-      # Registry for looking up document sessions by {tenant_id, document_id}
-      {Registry, keys: :unique, name: Levee.SessionRegistry},
-      # Tenant secrets for JWT authentication
-      Levee.Auth.TenantSecrets,
-      # DynamicSupervisor for document sessions
-      Levee.Documents.Supervisor,
-      # Registry manager
-      Levee.Documents.Registry,
-      # Start to serve requests, typically the last entry
-      LeveeWeb.Endpoint
-    ]
+    # Start storage backend based on configuration
+    storage_children = storage_children()
+
+    children =
+      [
+        LeveeWeb.Telemetry,
+        {DNSCluster, query: Application.get_env(:levee, :dns_cluster_query) || :ignore},
+        {Phoenix.PubSub, name: Levee.PubSub}
+      ] ++
+        storage_children ++
+        [
+          # Registry for looking up document sessions by {tenant_id, document_id}
+          {Registry, keys: :unique, name: Levee.SessionRegistry},
+          # Tenant secrets for JWT authentication
+          Levee.Auth.TenantSecrets,
+          # DynamicSupervisor for document sessions
+          Levee.Documents.Supervisor,
+          # Registry manager
+          Levee.Documents.Registry,
+          # Start to serve requests, typically the last entry
+          LeveeWeb.Endpoint
+        ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
@@ -57,6 +62,23 @@ defmodule Levee.Application do
   def config_change(changed, _new, removed) do
     LeveeWeb.Endpoint.config_change(changed, removed)
     :ok
+  end
+
+  # Return the appropriate storage backend children based on configuration
+  defp storage_children do
+    case Application.get_env(:levee, :storage_backend, Levee.Storage.ETS) do
+      Levee.Storage.Postgres ->
+        # PostgreSQL backend - start Repo
+        [Levee.Repo]
+
+      Levee.Storage.ETS ->
+        # ETS backend (default)
+        [Levee.Storage.ETS]
+
+      _other ->
+        # Default to ETS
+        [Levee.Storage.ETS]
+    end
   end
 
   # Load Gleam compiled BEAM files into the code path
