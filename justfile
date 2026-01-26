@@ -1,4 +1,4 @@
-# Fluid Server - Elixir + Gleam
+# Levee - Elixir + Gleam
 # Task runner for polyglot project
 
 set dotenv-load
@@ -16,7 +16,7 @@ setup: setup-gleam setup-elixir
 
 # Install Gleam dependencies
 setup-gleam:
-    cd gleam_protocol && gleam deps download
+    cd levee_protocol && gleam deps download
 
 # Install Elixir dependencies
 setup-elixir:
@@ -31,7 +31,7 @@ build: build-gleam build-elixir
 
 # Build Gleam package
 build-gleam:
-    cd gleam_protocol && gleam build --target erlang
+    cd levee_protocol && gleam build --target erlang
 
 # Build Elixir application
 build-elixir: build-gleam
@@ -46,7 +46,7 @@ test: test-gleam test-elixir
 
 # Run Gleam tests
 test-gleam:
-    cd gleam_protocol && gleam test
+    cd levee_protocol && gleam test
 
 # Run Elixir tests
 test-elixir:
@@ -77,7 +77,7 @@ format: format-gleam format-elixir
 
 # Format Gleam code
 format-gleam:
-    cd gleam_protocol && gleam format
+    cd levee_protocol && gleam format
 
 # Format Elixir code
 format-elixir:
@@ -87,7 +87,7 @@ format-elixir:
 check-format: check-format-gleam check-format-elixir
 
 check-format-gleam:
-    cd gleam_protocol && gleam format --check
+    cd levee_protocol && gleam format --check
 
 check-format-elixir:
     mix format --check-formatted
@@ -100,7 +100,7 @@ check-format-elixir:
 clean: clean-gleam clean-elixir
 
 clean-gleam:
-    cd gleam_protocol && rm -rf build
+    cd levee_protocol && rm -rf build
 
 clean-elixir:
     mix clean

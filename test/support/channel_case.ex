@@ -1,4 +1,4 @@
-defmodule FluidServerWeb.ChannelCase do
+defmodule LeveeWeb.ChannelCase do
   @moduledoc """
   This module defines the test case to be used by
   channel tests.
@@ -14,16 +14,16 @@ defmodule FluidServerWeb.ChannelCase do
     quote do
       # Import conveniences for testing with channels
       import Phoenix.ChannelTest
-      import FluidServerWeb.ChannelCase
+      import LeveeWeb.ChannelCase
 
       # The default endpoint for testing
-      @endpoint FluidServerWeb.Endpoint
+      @endpoint LeveeWeb.Endpoint
     end
   end
 
   setup _tags do
     # Start the application if not already started
-    {:ok, _} = Application.ensure_all_started(:fluid_server)
+    {:ok, _} = Application.ensure_all_started(:levee)
     :ok
   end
 end

@@ -7,18 +7,18 @@
 # General application configuration
 import Config
 
-config :fluid_server,
+config :levee,
   generators: [timestamp_type: :utc_datetime]
 
 # Configure the endpoint
-config :fluid_server, FluidServerWeb.Endpoint,
+config :levee, LeveeWeb.Endpoint,
   url: [host: "localhost"],
   adapter: Bandit.PhoenixAdapter,
   render_errors: [
-    formats: [json: FluidServerWeb.ErrorJSON],
+    formats: [json: LeveeWeb.ErrorJSON],
     layout: false
   ],
-  pubsub_server: FluidServer.PubSub,
+  pubsub_server: Levee.PubSub,
   live_view: [signing_salt: "f2avchZV"]
 
 # Configure Elixir's Logger

@@ -1,4 +1,4 @@
-# FluidServer
+# Levee
 
 To start your Phoenix server:
 

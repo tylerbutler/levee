@@ -2,8 +2,8 @@
 app_root = Path.expand("../", __DIR__)
 
 gleam_paths = [
-  Path.join([app_root, "gleam_protocol", "build", "dev", "erlang", "fluid_protocol", "ebin"]),
-  Path.join([app_root, "gleam_protocol", "build", "dev", "erlang", "gleam_stdlib", "ebin"])
+  Path.join([app_root, "levee_protocol", "build", "dev", "erlang", "levee_protocol", "ebin"]),
+  Path.join([app_root, "levee_protocol", "build", "dev", "erlang", "gleam_stdlib", "ebin"])
 ]
 
 Enum.each(gleam_paths, fn path ->
