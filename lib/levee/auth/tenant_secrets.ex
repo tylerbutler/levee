@@ -127,13 +127,15 @@ defmodule Levee.Auth.TenantSecrets do
       tenants: initial_tenants
     }
 
-    # Auto-register dev tenant in dev/test environments
+    # Auto-register tenant from environment variables if provided
     state =
-      if Mix.env() in [:dev, :test] do
-        Logger.debug("Registering default dev tenant for #{Mix.env()} environment")
-        put_in(state.tenants["dev-tenant"], @default_dev_secret)
-      else
-        state
+      case {System.get_env("LEVEE_TENANT_ID"), System.get_env("LEVEE_TENANT_KEY")} do
+        {tenant_id, tenant_key} when is_binary(tenant_id) and is_binary(tenant_key) ->
+          Logger.info("Registering tenant from environment: #{tenant_id}")
+          put_in(state.tenants[tenant_id], tenant_key)
+
+        _ ->
+          state
       end
 
     {:ok, state}
