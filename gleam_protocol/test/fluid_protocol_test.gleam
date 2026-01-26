@@ -1,5 +1,9 @@
 import fluid_protocol
+import fluid_protocol/jwt
 import fluid_protocol/sequencing
+import fluid_protocol/types
+import gleam/dict
+import gleam/option
 import gleeunit
 import gleeunit/should
 
@@ -145,4 +149,243 @@ pub fn msn_calculation_test() {
     }
     sequencing.SequenceError(_) -> panic
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// JWT Validation Tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn make_test_claims(
+  tenant_id: String,
+  document_id: String,
+  scopes: List(String),
+  exp: Int,
+) -> types.TokenClaims {
+  types.TokenClaims(
+    document_id: document_id,
+    scopes: scopes,
+    tenant_id: tenant_id,
+    user: types.User(id: "test-user", properties: dict.new()),
+    issued_at: 1000,
+    expiration: exp,
+    version: "1.0",
+    jti: option.None,
+  )
+}
+
+// Test expiration validation
+pub fn jwt_validate_expiration_valid_test() {
+  let claims = make_test_claims("tenant", "doc", ["doc:read"], 2000)
+
+  jwt.validate_expiration(claims, 1500)
+  |> should.be_ok()
+}
+
+pub fn jwt_validate_expiration_expired_test() {
+  let claims = make_test_claims("tenant", "doc", ["doc:read"], 1000)
+
+  case jwt.validate_expiration(claims, 1500) {
+    Ok(_) -> should.fail()
+    Error(jwt.TokenExpired(exp, current)) -> {
+      exp |> should.equal(1000)
+      current |> should.equal(1500)
+    }
+    Error(_) -> should.fail()
+  }
+}
+
+// Test tenant validation
+pub fn jwt_validate_tenant_match_test() {
+  let claims = make_test_claims("my-tenant", "doc", ["doc:read"], 2000)
+
+  jwt.validate_tenant(claims, "my-tenant")
+  |> should.be_ok()
+}
+
+pub fn jwt_validate_tenant_mismatch_test() {
+  let claims = make_test_claims("my-tenant", "doc", ["doc:read"], 2000)
+
+  case jwt.validate_tenant(claims, "other-tenant") {
+    Ok(_) -> should.fail()
+    Error(jwt.TenantMismatch(token, request)) -> {
+      token |> should.equal("my-tenant")
+      request |> should.equal("other-tenant")
+    }
+    Error(_) -> should.fail()
+  }
+}
+
+// Test document validation
+pub fn jwt_validate_document_match_test() {
+  let claims = make_test_claims("tenant", "my-doc", ["doc:read"], 2000)
+
+  jwt.validate_document(claims, "my-doc")
+  |> should.be_ok()
+}
+
+pub fn jwt_validate_document_mismatch_test() {
+  let claims = make_test_claims("tenant", "my-doc", ["doc:read"], 2000)
+
+  case jwt.validate_document(claims, "other-doc") {
+    Ok(_) -> should.fail()
+    Error(jwt.DocumentMismatch(token, request)) -> {
+      token |> should.equal("my-doc")
+      request |> should.equal("other-doc")
+    }
+    Error(_) -> should.fail()
+  }
+}
+
+// Test scope validation
+pub fn jwt_validate_scope_present_test() {
+  let claims = make_test_claims("tenant", "doc", ["doc:read", "doc:write"], 2000)
+
+  jwt.validate_scope(claims, "doc:read")
+  |> should.be_ok()
+
+  jwt.validate_scope(claims, "doc:write")
+  |> should.be_ok()
+}
+
+pub fn jwt_validate_scope_missing_test() {
+  let claims = make_test_claims("tenant", "doc", ["doc:read"], 2000)
+
+  case jwt.validate_scope(claims, "doc:write") {
+    Ok(_) -> should.fail()
+    Error(jwt.MissingScope(required, _available)) -> {
+      required |> should.equal("doc:write")
+    }
+    Error(_) -> should.fail()
+  }
+}
+
+// Test has_scope helpers
+pub fn jwt_has_scope_test() {
+  let claims = make_test_claims("tenant", "doc", ["doc:read", "doc:write"], 2000)
+
+  jwt.has_scope(claims, "doc:read") |> should.be_true()
+  jwt.has_scope(claims, "doc:write") |> should.be_true()
+  jwt.has_scope(claims, "summary:write") |> should.be_false()
+}
+
+pub fn jwt_has_read_scope_test() {
+  let claims_with = make_test_claims("tenant", "doc", ["doc:read"], 2000)
+  let claims_without = make_test_claims("tenant", "doc", ["doc:write"], 2000)
+
+  jwt.has_read_scope(claims_with) |> should.be_true()
+  jwt.has_read_scope(claims_without) |> should.be_false()
+}
+
+pub fn jwt_has_write_scope_test() {
+  let claims_with = make_test_claims("tenant", "doc", ["doc:write"], 2000)
+  let claims_without = make_test_claims("tenant", "doc", ["doc:read"], 2000)
+
+  jwt.has_write_scope(claims_with) |> should.be_true()
+  jwt.has_write_scope(claims_without) |> should.be_false()
+}
+
+pub fn jwt_has_summary_write_scope_test() {
+  let claims_with = make_test_claims("tenant", "doc", ["summary:write"], 2000)
+  let claims_without = make_test_claims("tenant", "doc", ["doc:write"], 2000)
+
+  jwt.has_summary_write_scope(claims_with) |> should.be_true()
+  jwt.has_summary_write_scope(claims_without) |> should.be_false()
+}
+
+// Test combined validation
+pub fn jwt_validate_connection_claims_test() {
+  let claims =
+    make_test_claims("my-tenant", "my-doc", ["doc:read", "doc:write"], 2000)
+
+  jwt.validate_connection_claims(claims, "my-tenant", "my-doc", 1500)
+  |> should.be_ok()
+}
+
+pub fn jwt_validate_connection_claims_expired_test() {
+  let claims = make_test_claims("my-tenant", "my-doc", ["doc:read"], 1000)
+
+  case jwt.validate_connection_claims(claims, "my-tenant", "my-doc", 1500) {
+    Ok(_) -> should.fail()
+    Error(jwt.TokenExpired(_, _)) -> should.be_ok(Ok(Nil))
+    Error(_) -> should.fail()
+  }
+}
+
+pub fn jwt_validate_connection_claims_tenant_mismatch_test() {
+  let claims = make_test_claims("my-tenant", "my-doc", ["doc:read"], 2000)
+
+  case jwt.validate_connection_claims(claims, "other-tenant", "my-doc", 1500) {
+    Ok(_) -> should.fail()
+    Error(jwt.TenantMismatch(_, _)) -> should.be_ok(Ok(Nil))
+    Error(_) -> should.fail()
+  }
+}
+
+pub fn jwt_validate_read_access_test() {
+  let claims = make_test_claims("tenant", "doc", ["doc:read"], 2000)
+
+  jwt.validate_read_access(claims, "tenant", "doc", 1500)
+  |> should.be_ok()
+}
+
+pub fn jwt_validate_read_access_missing_scope_test() {
+  let claims = make_test_claims("tenant", "doc", ["doc:write"], 2000)
+
+  case jwt.validate_read_access(claims, "tenant", "doc", 1500) {
+    Ok(_) -> should.fail()
+    Error(jwt.MissingScope(required, _)) -> {
+      required |> should.equal("doc:read")
+    }
+    Error(_) -> should.fail()
+  }
+}
+
+pub fn jwt_validate_write_access_test() {
+  let claims = make_test_claims("tenant", "doc", ["doc:read", "doc:write"], 2000)
+
+  jwt.validate_write_access(claims, "tenant", "doc", 1500)
+  |> should.be_ok()
+}
+
+pub fn jwt_validate_write_access_missing_write_scope_test() {
+  let claims = make_test_claims("tenant", "doc", ["doc:read"], 2000)
+
+  case jwt.validate_write_access(claims, "tenant", "doc", 1500) {
+    Ok(_) -> should.fail()
+    Error(jwt.MissingScope(required, _)) -> {
+      required |> should.equal("doc:write")
+    }
+    Error(_) -> should.fail()
+  }
+}
+
+pub fn jwt_validate_summary_access_test() {
+  let claims =
+    make_test_claims("tenant", "doc", ["doc:read", "summary:write"], 2000)
+
+  jwt.validate_summary_access(claims, "tenant", "doc", 1500)
+  |> should.be_ok()
+}
+
+// Test error formatting
+pub fn jwt_format_error_test() {
+  let error = jwt.TokenExpired(1000, 1500)
+  let formatted = jwt.format_error(error)
+  formatted |> should.equal("Token expired at 1000 (current time: 1500)")
+}
+
+pub fn jwt_error_to_http_code_test() {
+  jwt.error_to_http_code(jwt.TokenExpired(0, 0)) |> should.equal(401)
+  jwt.error_to_http_code(jwt.TenantMismatch("", "")) |> should.equal(403)
+  jwt.error_to_http_code(jwt.DocumentMismatch("", "")) |> should.equal(403)
+  jwt.error_to_http_code(jwt.MissingScope("", [])) |> should.equal(403)
+  jwt.error_to_http_code(jwt.MissingClaim("")) |> should.equal(401)
+  jwt.error_to_http_code(jwt.InvalidClaim("", "")) |> should.equal(401)
+}
+
+// Test scope constants
+pub fn jwt_scope_constants_test() {
+  jwt.scope_doc_read |> should.equal("doc:read")
+  jwt.scope_doc_write |> should.equal("doc:write")
+  jwt.scope_summary_write |> should.equal("summary:write")
 }

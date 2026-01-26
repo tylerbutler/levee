@@ -1,16 +1,54 @@
 defmodule FluidServerWeb.Router do
   use FluidServerWeb, :router
 
+  alias FluidServerWeb.Plugs.Auth
+
   pipeline :api do
     plug :accepts, ["json"]
   end
 
-  # Document Operations (Storage Service)
-  scope "/documents", FluidServerWeb do
+  # Authenticated API routes - requires valid JWT token
+  pipeline :authenticated do
+    plug :accepts, ["json"]
+    plug Auth
+  end
+
+  # Read-only access - requires doc:read scope
+  pipeline :read_access do
+    plug :accepts, ["json"]
+    plug Auth, scopes: ["doc:read"]
+  end
+
+  # Write access - requires doc:read and doc:write scopes
+  pipeline :write_access do
+    plug :accepts, ["json"]
+    plug Auth, scopes: ["doc:read", "doc:write"]
+  end
+
+  # Summary write access - requires doc:read and summary:write scopes
+  pipeline :summary_access do
+    plug :accepts, ["json"]
+    plug Auth, scopes: ["doc:read", "summary:write"]
+  end
+
+  # Public API routes (health checks, etc.)
+  scope "/", FluidServerWeb do
     pipe_through :api
+
+    get "/health", HealthController, :index
+  end
+
+  # Document Operations (Storage Service) - write access for create
+  scope "/documents", FluidServerWeb do
+    pipe_through :write_access
 
     # POST /documents/:tenant_id - Create document
     post "/:tenant_id", DocumentController, :create
+  end
+
+  # Document Operations (Storage Service) - read access for queries
+  scope "/documents", FluidServerWeb do
+    pipe_through :read_access
 
     # GET /documents/:tenant_id/session/:id - Get session info
     # Note: This must come before the generic :id route
@@ -20,41 +58,47 @@ defmodule FluidServerWeb.Router do
     get "/:tenant_id/:id", DocumentController, :show
   end
 
-  # Delta Operations (Storage Service)
+  # Delta Operations (Storage Service) - read access
   scope "/deltas", FluidServerWeb do
-    pipe_through :api
+    pipe_through :read_access
 
     # GET /deltas/:tenant_id/:id - Get operations with pagination
     get "/:tenant_id/:id", DeltaController, :index
   end
 
-  # Git Storage Operations (Historian Service)
+  # Git Storage Operations (Historian Service) - read operations
   scope "/repos/:tenant_id/git", FluidServerWeb do
-    pipe_through :api
+    pipe_through :read_access
 
-    # Blob operations
-    post "/blobs", GitController, :create_blob
+    # Blob read operations
     get "/blobs/:sha", GitController, :show_blob
 
-    # Tree operations
-    post "/trees", GitController, :create_tree
+    # Tree read operations
     get "/trees/:sha", GitController, :show_tree
 
-    # Commit operations
-    post "/commits", GitController, :create_commit
+    # Commit read operations
     get "/commits/:sha", GitController, :show_commit
 
-    # Reference operations
+    # Reference read operations
     get "/refs", GitController, :list_refs
-    post "/refs", GitController, :create_ref
     get "/refs/*ref", GitController, :show_ref
-    patch "/refs/*ref", GitController, :update_ref
   end
 
-  # Health check endpoint
-  scope "/", FluidServerWeb do
-    pipe_through :api
+  # Git Storage Operations (Historian Service) - write operations (require summary:write)
+  scope "/repos/:tenant_id/git", FluidServerWeb do
+    pipe_through :summary_access
 
-    get "/health", HealthController, :index
+    # Blob write operations
+    post "/blobs", GitController, :create_blob
+
+    # Tree write operations
+    post "/trees", GitController, :create_tree
+
+    # Commit write operations
+    post "/commits", GitController, :create_commit
+
+    # Reference write operations
+    post "/refs", GitController, :create_ref
+    patch "/refs/*ref", GitController, :update_ref
   end
 end

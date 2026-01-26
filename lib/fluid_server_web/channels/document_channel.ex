@@ -7,12 +7,22 @@ defmodule FluidServerWeb.DocumentChannel do
   - submitOp: Client submits operations
   - submitSignal: Client sends signals
   - Delta catch-up on reconnection
+
+  ## Authentication
+
+  Clients must provide a valid JWT token in the connect_document message.
+  The token is validated against:
+  - Signature (using tenant secret)
+  - Expiration
+  - Tenant match
+  - Document match
+  - Required scopes (doc:read for connection, doc:write for operations)
   """
 
   use Phoenix.Channel
 
+  alias FluidServer.Auth.JWT
   alias FluidServer.Documents.Session
-  alias FluidServer.Protocol.Bridge
 
   require Logger
 
@@ -45,12 +55,17 @@ defmodule FluidServerWeb.DocumentChannel do
   def handle_in("connect_document", payload, socket) do
     with {:ok, connect_msg} <- parse_connect_message(payload),
          :ok <- validate_tenant_document(connect_msg, socket),
+         {:ok, claims} <- validate_token(connect_msg, socket),
+         :ok <- validate_connection_mode(connect_msg, claims),
          {:ok, session_pid} <- get_or_create_session(socket),
          {:ok, client_id, connected_response} <- Session.client_join(session_pid, connect_msg) do
       # Check if this is a reconnection with a last seen SN
       last_seen_sn = connect_msg["lastSeenSequenceNumber"]
 
-      # Update socket with client info
+      # Update connected_response with actual validated claims
+      connected_response = Map.put(connected_response, "claims", format_claims_for_response(claims))
+
+      # Update socket with client info and claims
       socket =
         socket
         |> assign(:client_id, client_id)
@@ -58,6 +73,7 @@ defmodule FluidServerWeb.DocumentChannel do
         |> assign(:connected, true)
         |> assign(:session_pid, session_pid)
         |> assign(:last_seen_sn, last_seen_sn)
+        |> assign(:claims, claims)
 
       # Monitor the session process
       Process.monitor(session_pid)
@@ -72,9 +88,10 @@ defmodule FluidServerWeb.DocumentChannel do
       {:noreply, socket}
     else
       {:error, reason} ->
+        {code, message} = format_connect_error(reason)
         error_response = %{
-          "code" => error_code_for_reason(reason),
-          "message" => format_error(reason)
+          "code" => code,
+          "message" => message
         }
 
         push(socket, "connect_document_error", error_response)
@@ -85,38 +102,19 @@ defmodule FluidServerWeb.DocumentChannel do
   def handle_in("submitOp", %{"clientId" => client_id, "messageBatches" => batches}, socket) do
     cond do
       not socket.assigns.connected ->
-        push(socket, "nack", %{
-          "clientId" => "",
-          "nacks" => [Bridge.build_nack_unknown_client(client_id)]
-        })
-
+        push_nack(socket, 400, "BadRequestError", "Client not connected")
         {:noreply, socket}
 
       socket.assigns.client_id != client_id ->
-        push(socket, "nack", %{
-          "clientId" => "",
-          "nacks" => [
-            %{
-              "operation" => nil,
-              "sequenceNumber" => -1,
-              "content" => %{
-                "code" => 400,
-                "type" => "BadRequestError",
-                "message" =>
-                  "Client ID mismatch: expected #{socket.assigns.client_id}, got #{client_id}"
-              }
-            }
-          ]
-        })
-
+        push_nack(socket, 400, "BadRequestError", "Client ID mismatch: expected #{socket.assigns.client_id}, got #{client_id}")
         {:noreply, socket}
 
       socket.assigns.mode == "read" ->
-        push(socket, "nack", %{
-          "clientId" => "",
-          "nacks" => [Bridge.build_nack_read_only()]
-        })
+        push_nack(socket, 403, "InvalidScopeError", "Read-only clients cannot submit operations")
+        {:noreply, socket}
 
+      not has_write_scope?(socket) ->
+        push_nack(socket, 403, "InvalidScopeError", "Missing doc:write scope")
         {:noreply, socket}
 
       true ->
@@ -124,21 +122,7 @@ defmodule FluidServerWeb.DocumentChannel do
         total_ops = batches |> List.flatten() |> length()
 
         if total_ops > @max_batch_size do
-          push(socket, "nack", %{
-            "clientId" => "",
-            "nacks" => [
-              %{
-                "operation" => nil,
-                "sequenceNumber" => -1,
-                "content" => %{
-                  "code" => 400,
-                  "type" => "BadRequestError",
-                  "message" => "Batch size #{total_ops} exceeds maximum #{@max_batch_size}"
-                }
-              }
-            ]
-          })
-
+          push_nack(socket, 400, "BadRequestError", "Batch size #{total_ops} exceeds maximum #{@max_batch_size}")
           {:noreply, socket}
         else
           session_pid = socket.assigns.session_pid
@@ -157,21 +141,7 @@ defmodule FluidServerWeb.DocumentChannel do
 
   def handle_in("submitOp", _payload, socket) do
     # Malformed submitOp - missing required fields
-    push(socket, "nack", %{
-      "clientId" => "",
-      "nacks" => [
-        %{
-          "operation" => nil,
-          "sequenceNumber" => -1,
-          "content" => %{
-            "code" => 400,
-            "type" => "BadRequestError",
-            "message" => "Malformed submitOp: missing clientId or messageBatches"
-          }
-        }
-      ]
-    })
-
+    push_nack(socket, 400, "BadRequestError", "Malformed submitOp: missing clientId or messageBatches")
     {:noreply, socket}
   end
 
@@ -318,28 +288,164 @@ defmodule FluidServerWeb.DocumentChannel do
     end
   end
 
-  defp format_error({:missing_fields, fields}) do
-    "Missing required fields: #{Enum.join(fields, ", ")}"
+  # JWT validation
+
+  defp validate_token(connect_msg, socket) do
+    token = connect_msg["token"]
+    tenant_id = socket.assigns.tenant_id
+    document_id = socket.assigns.document_id
+
+    cond do
+      is_nil(token) or token == "" ->
+        {:error, :missing_token}
+
+      true ->
+        case JWT.verify(token, tenant_id) do
+          {:ok, claims} ->
+            # Validate claims match request
+            with :ok <- validate_token_expiration(claims),
+                 :ok <- validate_token_tenant(claims, tenant_id),
+                 :ok <- validate_token_document(claims, document_id),
+                 :ok <- validate_token_read_scope(claims) do
+              {:ok, claims}
+            end
+
+          {:error, reason} ->
+            {:error, {:token_invalid, reason}}
+        end
+    end
   end
 
-  defp format_error(:tenant_document_mismatch) do
-    "Tenant/document ID mismatch with topic"
+  defp validate_token_expiration(claims) do
+    if JWT.expired?(claims) do
+      {:error, :token_expired}
+    else
+      :ok
+    end
   end
 
-  defp format_error(:session_not_found) do
-    "Document session not found"
+  defp validate_token_tenant(claims, tenant_id) do
+    if claims.tenantId == tenant_id do
+      :ok
+    else
+      {:error, {:tenant_mismatch, claims.tenantId, tenant_id}}
+    end
   end
 
-  defp format_error(:session_start_failed) do
-    "Failed to start document session"
+  defp validate_token_document(claims, document_id) do
+    if claims.documentId == document_id do
+      :ok
+    else
+      {:error, {:document_mismatch, claims.documentId, document_id}}
+    end
   end
 
-  defp format_error(reason) when is_binary(reason), do: reason
-  defp format_error(reason), do: inspect(reason)
+  defp validate_token_read_scope(claims) do
+    if JWT.has_read_scope?(claims) do
+      :ok
+    else
+      {:error, :missing_read_scope}
+    end
+  end
 
-  defp error_code_for_reason({:missing_fields, _}), do: 400
-  defp error_code_for_reason(:tenant_document_mismatch), do: 400
-  defp error_code_for_reason(:session_not_found), do: 404
-  defp error_code_for_reason(:session_start_failed), do: 500
-  defp error_code_for_reason(_), do: 400
+  defp validate_connection_mode(connect_msg, claims) do
+    mode = connect_msg["mode"] || "write"
+
+    cond do
+      mode == "write" and not JWT.has_write_scope?(claims) ->
+        {:error, :write_mode_without_write_scope}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp has_write_scope?(socket) do
+    case socket.assigns[:claims] do
+      nil -> false
+      claims -> JWT.has_write_scope?(claims)
+    end
+  end
+
+  defp push_nack(socket, code, type, message) do
+    push(socket, "nack", %{
+      "clientId" => "",
+      "nacks" => [%{
+        "operation" => nil,
+        "sequenceNumber" => -1,
+        "content" => %{
+          "code" => code,
+          "type" => type,
+          "message" => message
+        }
+      }]
+    })
+  end
+
+  defp format_claims_for_response(claims) do
+    %{
+      "documentId" => claims.documentId,
+      "scopes" => claims.scopes,
+      "tenantId" => claims.tenantId,
+      "user" => %{"id" => claims.user.id},
+      "iat" => claims.iat,
+      "exp" => claims.exp,
+      "ver" => claims.ver
+    }
+  end
+
+  defp format_connect_error({:missing_fields, fields}) do
+    {400, "Missing required fields: #{Enum.join(fields, ", ")}"}
+  end
+
+  defp format_connect_error(:tenant_document_mismatch) do
+    {400, "Tenant/document ID mismatch with topic"}
+  end
+
+  defp format_connect_error(:missing_token) do
+    {401, "Missing authentication token"}
+  end
+
+  defp format_connect_error(:token_expired) do
+    {401, "Token has expired"}
+  end
+
+  defp format_connect_error({:token_invalid, :invalid_signature}) do
+    {401, "Invalid token signature"}
+  end
+
+  defp format_connect_error({:token_invalid, {:tenant_secret_not_found, _}}) do
+    {401, "Unknown tenant"}
+  end
+
+  defp format_connect_error({:token_invalid, reason}) do
+    {401, "Invalid token: #{inspect(reason)}"}
+  end
+
+  defp format_connect_error({:tenant_mismatch, _token_tenant, _request_tenant}) do
+    {403, "Token not valid for this tenant"}
+  end
+
+  defp format_connect_error({:document_mismatch, _token_doc, _request_doc}) do
+    {403, "Token not valid for this document"}
+  end
+
+  defp format_connect_error(:missing_read_scope) do
+    {403, "Token missing required scope: doc:read"}
+  end
+
+  defp format_connect_error(:write_mode_without_write_scope) do
+    {403, "Write mode requires doc:write scope"}
+  end
+
+  defp format_connect_error(:session_not_found) do
+    {404, "Document session not found"}
+  end
+
+  defp format_connect_error(:session_start_failed) do
+    {500, "Failed to start document session"}
+  end
+
+  defp format_connect_error(reason) when is_binary(reason), do: {400, reason}
+  defp format_connect_error(reason), do: {400, inspect(reason)}
 end

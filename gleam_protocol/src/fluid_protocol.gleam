@@ -3,6 +3,7 @@
 //// This module provides the main API for the Elixir interop layer.
 //// All core types and functions are re-exported here.
 
+import fluid_protocol/jwt
 import fluid_protocol/message
 import fluid_protocol/nack
 import fluid_protocol/sequencing
@@ -71,6 +72,10 @@ pub type MessageType =
 // Expose validation module
 pub type ValidationError =
   validation.ValidationError
+
+// Expose JWT module
+pub type JwtValidationError =
+  jwt.JwtValidationError
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sequencing API (main entry points for Elixir)
@@ -248,4 +253,117 @@ pub fn nack_error_bad_request() -> NackErrorType {
 
 pub fn nack_error_limit_exceeded() -> NackErrorType {
   nack.LimitExceededError
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// JWT Validation API
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Standard permission scopes
+pub const jwt_scope_doc_read = jwt.scope_doc_read
+
+pub const jwt_scope_doc_write = jwt.scope_doc_write
+
+pub const jwt_scope_summary_write = jwt.scope_summary_write
+
+/// Validate that the token has not expired
+pub fn jwt_validate_expiration(
+  claims: TokenClaims,
+  current_time_seconds: Int,
+) -> Result(Nil, JwtValidationError) {
+  jwt.validate_expiration(claims, current_time_seconds)
+}
+
+/// Validate that the token tenant matches the request tenant
+pub fn jwt_validate_tenant(
+  claims: TokenClaims,
+  request_tenant_id: String,
+) -> Result(Nil, JwtValidationError) {
+  jwt.validate_tenant(claims, request_tenant_id)
+}
+
+/// Validate that the token document matches the request document
+pub fn jwt_validate_document(
+  claims: TokenClaims,
+  request_document_id: String,
+) -> Result(Nil, JwtValidationError) {
+  jwt.validate_document(claims, request_document_id)
+}
+
+/// Validate that the token has the required scope
+pub fn jwt_validate_scope(
+  claims: TokenClaims,
+  required_scope: String,
+) -> Result(Nil, JwtValidationError) {
+  jwt.validate_scope(claims, required_scope)
+}
+
+/// Check if token has a specific scope (returns Bool)
+pub fn jwt_has_scope(claims: TokenClaims, scope: String) -> Bool {
+  jwt.has_scope(claims, scope)
+}
+
+/// Check if token has read permission
+pub fn jwt_has_read_scope(claims: TokenClaims) -> Bool {
+  jwt.has_read_scope(claims)
+}
+
+/// Check if token has write permission
+pub fn jwt_has_write_scope(claims: TokenClaims) -> Bool {
+  jwt.has_write_scope(claims)
+}
+
+/// Check if token has summary write permission
+pub fn jwt_has_summary_write_scope(claims: TokenClaims) -> Bool {
+  jwt.has_summary_write_scope(claims)
+}
+
+/// Validate all claims for a document connection
+pub fn jwt_validate_connection_claims(
+  claims: TokenClaims,
+  tenant_id: String,
+  document_id: String,
+  current_time_seconds: Int,
+) -> Result(Nil, JwtValidationError) {
+  jwt.validate_connection_claims(claims, tenant_id, document_id, current_time_seconds)
+}
+
+/// Validate claims for read access
+pub fn jwt_validate_read_access(
+  claims: TokenClaims,
+  tenant_id: String,
+  document_id: String,
+  current_time_seconds: Int,
+) -> Result(Nil, JwtValidationError) {
+  jwt.validate_read_access(claims, tenant_id, document_id, current_time_seconds)
+}
+
+/// Validate claims for write access
+pub fn jwt_validate_write_access(
+  claims: TokenClaims,
+  tenant_id: String,
+  document_id: String,
+  current_time_seconds: Int,
+) -> Result(Nil, JwtValidationError) {
+  jwt.validate_write_access(claims, tenant_id, document_id, current_time_seconds)
+}
+
+/// Validate claims for summary write access
+pub fn jwt_validate_summary_access(
+  claims: TokenClaims,
+  tenant_id: String,
+  document_id: String,
+  current_time_seconds: Int,
+) -> Result(Nil, JwtValidationError) {
+  jwt.validate_summary_access(claims, tenant_id, document_id, current_time_seconds)
+}
+
+/// Format JWT validation error as human-readable message
+pub fn jwt_format_error(error: JwtValidationError) -> String {
+  jwt.format_error(error)
+}
+
+/// Get HTTP status code for JWT validation error
+pub fn jwt_error_to_http_code(error: JwtValidationError) -> Int {
+  jwt.error_to_http_code(error)
 }

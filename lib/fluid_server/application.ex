@@ -18,6 +18,8 @@ defmodule FluidServer.Application do
       FluidServer.Storage.ETS,
       # Registry for looking up document sessions by {tenant_id, document_id}
       {Registry, keys: :unique, name: FluidServer.SessionRegistry},
+      # Tenant secrets for JWT authentication
+      FluidServer.Auth.TenantSecrets,
       # DynamicSupervisor for document sessions
       FluidServer.Documents.Supervisor,
       # Registry manager
