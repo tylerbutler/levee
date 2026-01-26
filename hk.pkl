@@ -1,0 +1,71 @@
+amends "package://github.com/jdx/hk/releases/download/v1.32.0/hk@1.32.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.32.0/hk@1.32.0#/Builtins.pkl"
+
+// Elixir linters for Levee
+local elixir_linters = new Mapping<String, Step> {
+    // Format Elixir code with mix format
+    ["mix_fmt"] = Builtins.mix_fmt
+
+    // Compile with warnings as errors
+    ["mix_compile"] = Builtins.mix_compile
+}
+
+// Full test suite (slower, for pre-push or manual checks)
+// Note: We run the full test suite, not per-file, because mix test
+// doesn't support running tests based on which source files changed
+local test_linters = new Mapping<String, Step> {
+    ["mix_test"] {
+        glob = "**/*.ex"
+        batch = true
+        check = "mix test"
+    }
+}
+
+// PKL config validation
+local config_linters = new Mapping<String, Step> {
+    ["pkl"] {
+        glob = "*.pkl"
+        check = "pkl eval {{files}} >/dev/null"
+    }
+}
+
+hooks {
+    // Pre-commit: format and compile checks (fast, blocks commit on failure)
+    ["pre-commit"] {
+        fix = true    // auto-fix formatting issues
+        stash = "git" // stash unstaged changes while running fixes
+        steps {
+            ...elixir_linters
+            ...config_linters
+        }
+    }
+
+    // Pre-push: run full test suite (slower, blocks push on failure)
+    ["pre-push"] {
+        steps {
+            ...elixir_linters
+            ...test_linters
+        }
+    }
+
+    // Manual fix command: hk fix
+    ["fix"] {
+        fix = true
+        steps {
+            ...elixir_linters
+            ...config_linters
+        }
+    }
+
+    // Manual check command: hk check (add --slow for tests)
+    ["check"] {
+        steps {
+            ...elixir_linters
+            ...config_linters
+            // Tests only run with --slow flag
+            ["mix_test"] = (Builtins.mix_test) {
+                profiles = List("slow")
+            }
+        }
+    }
+}

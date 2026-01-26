@@ -38,20 +38,13 @@ defmodule LeveeWeb.DeltaController do
       limit: @max_ops_per_request
     ]
 
-    case Storage.get_deltas(tenant_id, document_id, opts) do
-      {:ok, deltas} ->
-        # Convert deltas to the ISequencedDocumentMessage format
-        messages = Enum.map(deltas, &format_sequenced_message/1)
+    {:ok, deltas} = Storage.get_deltas(tenant_id, document_id, opts)
+    # Convert deltas to the ISequencedDocumentMessage format
+    messages = Enum.map(deltas, &format_sequenced_message/1)
 
-        conn
-        |> put_status(:ok)
-        |> json(messages)
-
-      {:error, reason} ->
-        conn
-        |> put_status(:internal_server_error)
-        |> json(%{error: inspect(reason)})
-    end
+    conn
+    |> put_status(:ok)
+    |> json(messages)
   end
 
   # Private functions

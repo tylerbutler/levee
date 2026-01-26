@@ -35,3 +35,4 @@ fluid_server-*.tar
 *.swp
 *.swo
 
+.claude/settings.local.json
