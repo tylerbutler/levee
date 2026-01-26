@@ -61,7 +61,8 @@ defmodule LeveeWeb.DocumentChannel do
       last_seen_sn = connect_msg["lastSeenSequenceNumber"]
 
       # Update connected_response with actual validated claims
-      connected_response = Map.put(connected_response, "claims", format_claims_for_response(claims))
+      connected_response =
+        Map.put(connected_response, "claims", format_claims_for_response(claims))
 
       # Update socket with client info and claims
       socket =
@@ -87,6 +88,7 @@ defmodule LeveeWeb.DocumentChannel do
     else
       {:error, reason} ->
         {code, message} = format_connect_error(reason)
+
         error_response = %{
           "code" => code,
           "message" => message
@@ -104,7 +106,13 @@ defmodule LeveeWeb.DocumentChannel do
         {:noreply, socket}
 
       socket.assigns.client_id != client_id ->
-        push_nack(socket, 400, "BadRequestError", "Client ID mismatch: expected #{socket.assigns.client_id}, got #{client_id}")
+        push_nack(
+          socket,
+          400,
+          "BadRequestError",
+          "Client ID mismatch: expected #{socket.assigns.client_id}, got #{client_id}"
+        )
+
         {:noreply, socket}
 
       socket.assigns.mode == "read" ->
@@ -120,7 +128,13 @@ defmodule LeveeWeb.DocumentChannel do
         total_ops = batches |> List.flatten() |> length()
 
         if total_ops > @max_batch_size do
-          push_nack(socket, 400, "BadRequestError", "Batch size #{total_ops} exceeds maximum #{@max_batch_size}")
+          push_nack(
+            socket,
+            400,
+            "BadRequestError",
+            "Batch size #{total_ops} exceeds maximum #{@max_batch_size}"
+          )
+
           {:noreply, socket}
         else
           session_pid = socket.assigns.session_pid
@@ -139,7 +153,13 @@ defmodule LeveeWeb.DocumentChannel do
 
   def handle_in("submitOp", _payload, socket) do
     # Malformed submitOp - missing required fields
-    push_nack(socket, 400, "BadRequestError", "Malformed submitOp: missing clientId or messageBatches")
+    push_nack(
+      socket,
+      400,
+      "BadRequestError",
+      "Malformed submitOp: missing clientId or messageBatches"
+    )
+
     {:noreply, socket}
   end
 
@@ -171,7 +191,10 @@ defmodule LeveeWeb.DocumentChannel do
         {:noreply, socket}
 
       socket.assigns.client_id != client_id ->
-        Logger.warning("Signal client ID mismatch: expected #{socket.assigns.client_id}, got #{client_id}")
+        Logger.warning(
+          "Signal client ID mismatch: expected #{socket.assigns.client_id}, got #{client_id}"
+        )
+
         {:noreply, socket}
 
       true ->
@@ -231,9 +254,10 @@ defmodule LeveeWeb.DocumentChannel do
     # Check if any ops are summary ack/nack and push them as separate events
     ops = op_message["op"] || []
 
-    {summary_events, regular_ops} = Enum.split_with(ops, fn op ->
-      op["type"] in ["summaryAck", "summaryNack"]
-    end)
+    {summary_events, regular_ops} =
+      Enum.split_with(ops, fn op ->
+        op["type"] in ["summaryAck", "summaryNack"]
+      end)
 
     # Push summary events individually
     Enum.each(summary_events, fn event ->
@@ -338,95 +362,79 @@ defmodule LeveeWeb.DocumentChannel do
 
   # JWT validation
 
-  defp validate_token(connect_msg, socket) do
-    token = connect_msg["token"]
+  defp validate_token(%{"token" => token}, socket) when is_binary(token) and token != "" do
     tenant_id = socket.assigns.tenant_id
     document_id = socket.assigns.document_id
 
-    cond do
-      is_nil(token) or token == "" ->
-        {:error, :missing_token}
-
-      true ->
-        case JWT.verify(token, tenant_id) do
-          {:ok, claims} ->
-            # Validate claims match request
-            with :ok <- validate_token_expiration(claims),
-                 :ok <- validate_token_tenant(claims, tenant_id),
-                 :ok <- validate_token_document(claims, document_id),
-                 :ok <- validate_token_read_scope(claims) do
-              {:ok, claims}
-            end
-
-          {:error, reason} ->
-            {:error, {:token_invalid, reason}}
+    case JWT.verify(token, tenant_id) do
+      {:ok, claims} ->
+        with :ok <- validate_token_expiration(claims),
+             :ok <- validate_token_tenant(claims, tenant_id),
+             :ok <- validate_token_document(claims, document_id),
+             :ok <- validate_token_read_scope(claims) do
+          {:ok, claims}
         end
+
+      {:error, reason} ->
+        {:error, {:token_invalid, reason}}
     end
   end
+
+  defp validate_token(_connect_msg, _socket), do: {:error, :missing_token}
 
   defp validate_token_expiration(claims) do
-    if JWT.expired?(claims) do
-      {:error, :token_expired}
-    else
-      :ok
+    case JWT.expired?(claims) do
+      true -> {:error, :token_expired}
+      false -> :ok
     end
   end
 
-  defp validate_token_tenant(claims, tenant_id) do
-    if claims.tenantId == tenant_id do
-      :ok
-    else
-      {:error, {:tenant_mismatch, claims.tenantId, tenant_id}}
-    end
-  end
+  defp validate_token_tenant(%{tenantId: tenant_id}, tenant_id), do: :ok
 
-  defp validate_token_document(claims, document_id) do
-    if claims.documentId == document_id do
-      :ok
-    else
-      {:error, {:document_mismatch, claims.documentId, document_id}}
-    end
-  end
+  defp validate_token_tenant(claims, tenant_id),
+    do: {:error, {:tenant_mismatch, claims.tenantId, tenant_id}}
+
+  defp validate_token_document(%{documentId: document_id}, document_id), do: :ok
+
+  defp validate_token_document(claims, document_id),
+    do: {:error, {:document_mismatch, claims.documentId, document_id}}
 
   defp validate_token_read_scope(claims) do
-    if JWT.has_read_scope?(claims) do
-      :ok
-    else
-      {:error, :missing_read_scope}
+    case JWT.has_read_scope?(claims) do
+      true -> :ok
+      false -> {:error, :missing_read_scope}
     end
   end
 
-  defp validate_connection_mode(connect_msg, claims) do
-    mode = connect_msg["mode"] || "write"
-
-    cond do
-      mode == "write" and not JWT.has_write_scope?(claims) ->
-        {:error, :write_mode_without_write_scope}
-
-      true ->
-        :ok
+  defp validate_connection_mode(%{"mode" => "write"}, claims) do
+    case JWT.has_write_scope?(claims) do
+      true -> :ok
+      false -> {:error, :write_mode_without_write_scope}
     end
   end
 
-  defp has_write_scope?(socket) do
-    case socket.assigns[:claims] do
-      nil -> false
-      claims -> JWT.has_write_scope?(claims)
-    end
+  defp validate_connection_mode(_connect_msg, _claims), do: :ok
+
+  defp has_write_scope?(%{assigns: %{claims: claims}}) when is_map(claims) do
+    JWT.has_write_scope?(claims)
   end
+
+  defp has_write_scope?(_socket), do: false
 
   defp push_nack(socket, code, type, message) do
     push(socket, "nack", %{
       "clientId" => "",
-      "nacks" => [%{
-        "operation" => nil,
-        "sequenceNumber" => -1,
-        "content" => %{
-          "code" => code,
-          "type" => type,
-          "message" => message
+      "nacks" => [
+        %{
+          "operation" => nil,
+          "sequenceNumber" => -1,
+          "content" => %{
+            "code" => code,
+            "type" => type,
+            "message" => message
+          }
         }
-      }]
+      ]
     })
   end
 
@@ -503,41 +511,31 @@ defmodule LeveeWeb.DocumentChannel do
 
   # Process signal batches, detecting and normalizing v1/v2 formats
   defp process_signal_batches(batches) when is_list(batches) do
-    Enum.flat_map(batches, fn batch ->
-      case batch do
-        # Batch is a list of signals
-        signals when is_list(signals) ->
-          Enum.map(signals, &normalize_signal/1)
-
-        # Single signal (not in a list)
-        signal when is_map(signal) ->
-          [normalize_signal(signal)]
-
-        # JSON-stringified signal (v1 format)
-        signal when is_binary(signal) ->
-          case Jason.decode(signal) do
-            {:ok, decoded} -> [normalize_signal(decoded)]
-            {:error, _} -> []
-          end
-
-        _ ->
-          []
-      end
-    end)
+    Enum.flat_map(batches, &normalize_batch/1)
   end
 
   defp process_signal_batches(_), do: []
 
+  defp normalize_batch(signals) when is_list(signals), do: Enum.map(signals, &normalize_signal/1)
+  defp normalize_batch(signal) when is_map(signal), do: [normalize_signal(signal)]
+
+  defp normalize_batch(signal) when is_binary(signal) do
+    case Jason.decode(signal) do
+      {:ok, decoded} -> [normalize_signal(decoded)]
+      {:error, _} -> []
+    end
+  end
+
+  defp normalize_batch(_), do: []
+
   # Normalize a signal to a consistent internal format
   # Handles both v1 and v2 signal formats
   defp normalize_signal(signal) when is_map(signal) do
-    # Detect format: v1 has "address" and "contents", v2 has "content" directly
-    is_v1 = Map.has_key?(signal, "address") or Map.has_key?(signal, "contents")
-
-    if is_v1 do
-      normalize_v1_signal(signal)
-    else
-      normalize_v2_signal(signal)
+    # v1 format has "address" or "contents" keys; v2 has "content" directly
+    case {Map.has_key?(signal, "address"), Map.has_key?(signal, "contents")} do
+      {true, _} -> normalize_v1_signal(signal)
+      {_, true} -> normalize_v1_signal(signal)
+      _ -> normalize_v2_signal(signal)
     end
   end
 

@@ -211,9 +211,7 @@ defmodule Levee.Auth.JWTTest do
   describe "has_summary_write_scope?/1" do
     test "returns true when summary:write is present" do
       {:ok, token} =
-        JWT.generate_test_token(@tenant_id, @document_id, @user_id,
-          scopes: ["summary:write"]
-        )
+        JWT.generate_test_token(@tenant_id, @document_id, @user_id, scopes: ["summary:write"])
 
       {:ok, claims} = JWT.verify(token, @tenant_id)
 

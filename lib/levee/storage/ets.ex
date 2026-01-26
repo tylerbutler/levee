@@ -230,11 +230,13 @@ defmodule Levee.Storage.ETS do
       parents: params["parents"] || [],
       message: params["message"],
       author: params["author"],
-      committer: params["committer"] || %{
-        "name" => "Levee",
-        "email" => "server@fluid.local",
-        "date" => now
-      }
+      committer:
+        params["committer"] ||
+          %{
+            "name" => "Levee",
+            "email" => "server@fluid.local",
+            "date" => now
+          }
     }
 
     key = {tenant_id, sha}
@@ -333,11 +335,12 @@ defmodule Levee.Storage.ETS do
     # This allows efficient retrieval of latest summary
     key = {tenant_id, document_id, summary.sequence_number}
 
-    summary_with_meta = Map.merge(summary, %{
-      tenant_id: tenant_id,
-      document_id: document_id,
-      created_at: Map.get(summary, :created_at) || DateTime.utc_now()
-    })
+    summary_with_meta =
+      Map.merge(summary, %{
+        tenant_id: tenant_id,
+        document_id: document_id,
+        created_at: Map.get(summary, :created_at) || DateTime.utc_now()
+      })
 
     :ets.insert(@summaries_table, {key, summary_with_meta})
 
@@ -415,11 +418,13 @@ defmodule Levee.Storage.ETS do
 
     case :ets.lookup(@documents_table, key) do
       [{^key, document}] ->
-        updated = Map.merge(document, %{
-          latest_summary_handle: summary.handle,
-          latest_summary_sequence_number: summary.sequence_number,
-          updated_at: DateTime.utc_now()
-        })
+        updated =
+          Map.merge(document, %{
+            latest_summary_handle: summary.handle,
+            latest_summary_sequence_number: summary.sequence_number,
+            updated_at: DateTime.utc_now()
+          })
+
         :ets.insert(@documents_table, {key, updated})
         :ok
 
