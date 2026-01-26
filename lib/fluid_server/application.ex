@@ -9,10 +9,13 @@ defmodule FluidServer.Application do
   def start(_type, _args) do
     # Add Gleam compiled modules to the code path
     load_gleam_modules()
+
     children = [
       FluidServerWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:fluid_server, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: FluidServer.PubSub},
+      # ETS-based storage backend (must start before other services)
+      FluidServer.Storage.ETS,
       # Registry for looking up document sessions by {tenant_id, document_id}
       {Registry, keys: :unique, name: FluidServer.SessionRegistry},
       # DynamicSupervisor for document sessions
@@ -50,6 +53,7 @@ defmodule FluidServer.Application do
 
     Enum.each(gleam_paths, fn path ->
       expanded = Path.expand(path)
+
       if File.dir?(expanded) do
         :code.add_patha(String.to_charlist(expanded))
       end

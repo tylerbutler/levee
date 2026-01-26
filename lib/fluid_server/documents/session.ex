@@ -7,6 +7,7 @@ defmodule FluidServer.Documents.Session do
   - Connected client tracking
   - Operation ordering and broadcast
   - Signal relay
+  - Operation history for delta catch-up
 
   Uses the Gleam protocol module for sequence number logic.
   """
@@ -17,21 +18,30 @@ defmodule FluidServer.Documents.Session do
 
   require Logger
 
-  @max_message_size 16 * 1024 * 1024  # 16MB
-  @block_size 64 * 1024  # 64KB
+  # 16MB
+  @max_message_size 16 * 1024 * 1024
+  # 64KB
+  @block_size 64 * 1024
+  # Maximum operations to keep in history for catch-up
+  @max_history_size 1000
 
   defstruct [
     :tenant_id,
     :document_id,
     :sequence_state,
-    :clients,  # %{client_id => %{pid: pid, client: client_info, mode: mode}}
-    :client_counter
+    # %{client_id => %{pid: pid, client: client_info, mode: mode, last_seen_sn: sn}}
+    :clients,
+    :client_counter,
+    # List of sequenced operations for delta catch-up (newest first)
+    :op_history
   ]
 
   # Client API
 
   def start_link({tenant_id, document_id}) do
-    GenServer.start_link(__MODULE__, {tenant_id, document_id}, name: via_tuple(tenant_id, document_id))
+    GenServer.start_link(__MODULE__, {tenant_id, document_id},
+      name: via_tuple(tenant_id, document_id)
+    )
   end
 
   def client_join(pid, connect_msg) do
@@ -50,6 +60,28 @@ defmodule FluidServer.Documents.Session do
     GenServer.cast(pid, {:submit_signals, client_id, signal_batches})
   end
 
+  @doc """
+  Get operations since a given sequence number for delta catch-up.
+  Returns operations with SN > since_sn.
+  """
+  def get_ops_since(pid, since_sn) do
+    GenServer.call(pid, {:get_ops_since, since_sn})
+  end
+
+  @doc """
+  Update client's last seen sequence number (for NoOp/heartbeat handling).
+  """
+  def update_client_rsn(pid, client_id, rsn) do
+    GenServer.cast(pid, {:update_client_rsn, client_id, rsn})
+  end
+
+  @doc """
+  Get current session state summary (for debugging/monitoring).
+  """
+  def get_state_summary(pid) do
+    GenServer.call(pid, :get_state_summary)
+  end
+
   # Server callbacks
 
   @impl true
@@ -64,7 +96,8 @@ defmodule FluidServer.Documents.Session do
       document_id: document_id,
       sequence_state: sequence_state,
       clients: %{},
-      client_counter: 0
+      client_counter: 0,
+      op_history: []
     }
 
     {:ok, state}
@@ -82,41 +115,99 @@ defmodule FluidServer.Documents.Session do
     # Register client in sequence state
     new_sequence_state = Bridge.client_join(state.sequence_state, client_id, current_sn)
 
-    # Store client info
+    # Store client info with last seen SN for catch-up support
     client_info = %{
       pid: channel_pid,
       client: connect_msg["client"],
       mode: mode,
-      monitor_ref: Process.monitor(channel_pid)
+      monitor_ref: Process.monitor(channel_pid),
+      last_seen_sn: current_sn
     }
 
     new_clients = Map.put(state.clients, client_id, client_info)
 
-    # Build IConnected response
-    connected_response = build_connected_response(client_id, mode, connect_msg, state, new_sequence_state)
+    # Generate and sequence a system "join" message
+    {join_message, final_sequence_state, updated_history} =
+      generate_system_message(
+        "join",
+        client_id,
+        connect_msg["client"],
+        new_sequence_state,
+        state.op_history
+      )
 
-    # Broadcast join signal to other clients
-    broadcast_client_join(client_id, connect_msg["client"], new_clients)
+    # Build IConnected response with initial clients list
+    connected_response =
+      build_connected_response(
+        client_id,
+        mode,
+        connect_msg,
+        state,
+        final_sequence_state,
+        new_clients
+      )
 
-    new_state = %{state |
-      sequence_state: new_sequence_state,
-      clients: new_clients,
-      client_counter: state.client_counter + 1
+    # Broadcast join message to all clients (including the new one, as per protocol)
+    broadcast_ops(state.document_id, [join_message], new_clients)
+
+    new_state = %{
+      state
+      | sequence_state: final_sequence_state,
+        clients: new_clients,
+        client_counter: state.client_counter + 1,
+        op_history: updated_history
     }
 
     {:reply, {:ok, client_id, connected_response}, new_state}
   end
 
   def handle_call({:submit_ops, client_id, op_batches}, _from, state) do
-    case process_ops(client_id, op_batches, state) do
-      {:ok, sequenced_ops, new_state} ->
-        # Broadcast ops to all connected clients
-        broadcast_ops(state.document_id, sequenced_ops, new_state.clients)
-        {:reply, :ok, new_state}
+    # Verify client exists and is in write mode
+    case Map.get(state.clients, client_id) do
+      nil ->
+        nack = Bridge.build_nack_unknown_client(client_id)
+        {:reply, {:error, [nack]}, state}
 
-      {:error, nacks, new_state} ->
-        {:reply, {:error, nacks}, new_state}
+      %{mode: "read"} ->
+        nack = Bridge.build_nack_read_only()
+        {:reply, {:error, [nack]}, state}
+
+      _client_info ->
+        case process_ops(client_id, op_batches, state) do
+          {:ok, sequenced_ops, new_state} ->
+            # Broadcast ops to all connected clients
+            broadcast_ops(state.document_id, sequenced_ops, new_state.clients)
+            {:reply, :ok, new_state}
+
+          {:error, nacks, new_state} ->
+            {:reply, {:error, nacks}, new_state}
+        end
     end
+  end
+
+  def handle_call({:get_ops_since, since_sn}, _from, state) do
+    # Filter operations from history that have SN > since_sn
+    # History is stored newest-first, so we need to reverse for chronological order
+    ops =
+      state.op_history
+      |> Enum.filter(fn op -> op["sequenceNumber"] > since_sn end)
+      |> Enum.reverse()
+
+    {:reply, {:ok, ops}, state}
+  end
+
+  def handle_call(:get_state_summary, _from, state) do
+    summary = %{
+      tenant_id: state.tenant_id,
+      document_id: state.document_id,
+      current_sn: Bridge.current_sn(state.sequence_state),
+      current_msn: Bridge.current_msn(state.sequence_state),
+      client_count: map_size(state.clients),
+      client_ids: Map.keys(state.clients),
+      history_size: length(state.op_history)
+    }
+
+    {:reply, {:ok, summary}, state}
   end
 
   @impl true
@@ -133,12 +224,27 @@ defmodule FluidServer.Documents.Session do
         new_sequence_state = Bridge.client_leave(state.sequence_state, client_id)
         new_clients = Map.delete(state.clients, client_id)
 
-        # Broadcast leave signal
-        broadcast_client_leave(client_id, new_clients)
+        # Generate and sequence a system "leave" message
+        {leave_message, final_sequence_state, updated_history} =
+          generate_system_message(
+            "leave",
+            client_id,
+            # For leave, content is just the client_id
+            client_id,
+            new_sequence_state,
+            state.op_history
+          )
 
-        new_state = %{state |
-          sequence_state: new_sequence_state,
-          clients: new_clients
+        # Broadcast leave message to remaining clients
+        if map_size(new_clients) > 0 do
+          broadcast_ops(state.document_id, [leave_message], new_clients)
+        end
+
+        new_state = %{
+          state
+          | sequence_state: final_sequence_state,
+            clients: new_clients,
+            op_history: updated_history
         }
 
         # If no clients left, consider stopping
@@ -150,11 +256,30 @@ defmodule FluidServer.Documents.Session do
     end
   end
 
+  def handle_cast({:update_client_rsn, client_id, rsn}, state) do
+    case Bridge.update_client_rsn(state.sequence_state, client_id, rsn) do
+      {:ok, new_sequence_state} ->
+        # Also update client's last_seen_sn
+        new_clients =
+          Map.update(state.clients, client_id, nil, fn client_info ->
+            if client_info, do: %{client_info | last_seen_sn: rsn}, else: nil
+          end)
+          |> Map.reject(fn {_k, v} -> is_nil(v) end)
+
+        {:noreply, %{state | sequence_state: new_sequence_state, clients: new_clients}}
+
+      {:error, _reason} ->
+        # Client not found or invalid RSN - ignore silently
+        {:noreply, state}
+    end
+  end
+
   def handle_cast({:submit_signals, client_id, signal_batches}, state) do
     # Relay signals to appropriate clients
     Enum.each(signal_batches, fn signal ->
       broadcast_signal(client_id, signal, state.clients)
     end)
+
     {:noreply, state}
   end
 
@@ -184,8 +309,20 @@ defmodule FluidServer.Documents.Session do
     "#{state.tenant_id}_#{state.document_id}_#{state.client_counter + 1}"
   end
 
-  defp build_connected_response(client_id, mode, connect_msg, _state, sequence_state) do
+  defp build_connected_response(client_id, mode, connect_msg, _state, sequence_state, clients) do
     current_sn = Bridge.current_sn(sequence_state)
+
+    # Build initial clients list (all clients except the joining one)
+    initial_clients =
+      clients
+      |> Map.delete(client_id)
+      |> Enum.map(fn {cid, info} ->
+        %{
+          "clientId" => cid,
+          "client" => info.client,
+          "mode" => info.mode
+        }
+      end)
 
     %{
       "claims" => build_mock_claims(connect_msg),
@@ -197,7 +334,7 @@ defmodule FluidServer.Documents.Session do
         "blockSize" => @block_size,
         "maxMessageSize" => @max_message_size
       },
-      "initialClients" => [],  # TODO: populate with current clients
+      "initialClients" => initial_clients,
       "initialMessages" => [],
       "initialSignals" => [],
       "supportedVersions" => ["^0.1.0"],
@@ -235,7 +372,9 @@ defmodule FluidServer.Documents.Session do
         case Bridge.assign_sequence_number(acc_state.sequence_state, client_id, csn, rsn) do
           {:ok, new_seq_state, assigned_sn, msn} ->
             sequenced_op = build_sequenced_op(op, client_id, assigned_sn, msn)
-            new_state = %{acc_state | sequence_state: new_seq_state}
+            # Add to history (newest first) and trim if needed
+            updated_history = add_to_history(sequenced_op, acc_state.op_history)
+            new_state = %{acc_state | sequence_state: new_seq_state, op_history: updated_history}
             {[sequenced_op | acc_ops], acc_nacks, new_state}
 
           {:error, reason} ->
@@ -249,6 +388,12 @@ defmodule FluidServer.Documents.Session do
     else
       {:error, Enum.reverse(nacks), final_state}
     end
+  end
+
+  defp add_to_history(op, history) do
+    # Add operation to front (newest first) and trim to max size
+    [op | history]
+    |> Enum.take(@max_history_size)
   end
 
   defp build_sequenced_op(op, client_id, sn, msn) do
@@ -306,38 +451,63 @@ defmodule FluidServer.Documents.Session do
     end)
   end
 
-  defp broadcast_client_join(new_client_id, client_info, clients) do
-    signal = %{
-      "clientId" => nil,
-      "content" => Jason.encode!(%{
-        "type" => "join",
-        "content" => %{
-          "clientId" => new_client_id,
-          "client" => client_info
-        }
-      })
-    }
+  # Generate a system message (join/leave) with proper sequencing
+  # System messages have clientId: nil and get their own sequence number
+  defp generate_system_message(message_type, client_id, content, sequence_state, history) do
+    # System messages get the next sequence number
+    # We increment SN directly since system messages don't go through normal client sequencing
+    current_sn = Bridge.current_sn(sequence_state)
+    new_sn = current_sn + 1
+    msn = Bridge.current_msn(sequence_state)
 
-    # Send to all clients except the joining one
-    Enum.each(clients, fn {client_id, info} ->
-      if client_id != new_client_id do
-        send(info.pid, {:signal, signal})
+    # Build the system message content based on type
+    message_content =
+      case message_type do
+        "join" ->
+          %{
+            "clientId" => client_id,
+            "detail" => content
+          }
+
+        "leave" ->
+          client_id
+
+        _ ->
+          content
       end
-    end)
-  end
 
-  defp broadcast_client_leave(leaving_client_id, clients) do
-    signal = %{
+    system_message = %{
+      # System messages have no client ID
       "clientId" => nil,
-      "content" => Jason.encode!(%{
-        "type" => "leave",
-        "content" => leaving_client_id
-      })
+      "sequenceNumber" => new_sn,
+      "minimumSequenceNumber" => msn,
+      # System messages don't have CSN
+      "clientSequenceNumber" => -1,
+      "referenceSequenceNumber" => current_sn,
+      "type" => message_type,
+      "contents" => message_content,
+      "metadata" => nil,
+      "timestamp" => System.system_time(:millisecond),
+      # System messages include data field
+      "data" => Jason.encode!(message_content)
     }
 
-    Enum.each(clients, fn {_client_id, info} ->
-      send(info.pid, {:signal, signal})
-    end)
+    # Update sequence state to reflect the new SN
+    # We use from_checkpoint to update the SN since we're manually incrementing
+    updated_sequence_state = Bridge.sequence_state_from_checkpoint(new_sn, msn)
+
+    # Re-register all clients with their current RSN
+    # This is needed because from_checkpoint creates a fresh state
+    final_sequence_state =
+      Enum.reduce(Bridge.connected_clients(sequence_state), updated_sequence_state, fn cid, acc ->
+        # Use the current SN as the join RSN for existing clients
+        Bridge.client_join(acc, cid, current_sn)
+      end)
+
+    # Add to history
+    updated_history = add_to_history(system_message, history)
+
+    {system_message, final_sequence_state, updated_history}
   end
 
   defp broadcast_signal(sender_client_id, signal, clients) do

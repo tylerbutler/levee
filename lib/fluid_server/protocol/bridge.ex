@@ -3,14 +3,16 @@ defmodule FluidServer.Protocol.Bridge do
   Elixir bridge to Gleam protocol module.
 
   Provides idiomatic Elixir wrappers around the Gleam functions
-  for sequence number management and protocol validation.
+  for sequence number management, nack generation, and protocol validation.
 
   The Gleam module compiles to BEAM bytecode, so we can call
   it directly using the Erlang module naming convention.
   """
 
   # Gleam modules compile to :module_name atoms
+  # Note: Gleam submodules use @ separator (e.g., :fluid_protocol@sequencing)
   @gleam_module :fluid_protocol
+  @gleam_sequencing :fluid_protocol@sequencing
 
   @doc """
   Create a new sequence state for a document.
@@ -115,5 +117,152 @@ defmodule FluidServer.Protocol.Bridge do
   """
   def read_mode do
     @gleam_module.read_mode()
+  end
+
+  @doc """
+  Update a client's RSN without submitting an op (e.g., from NoOp).
+  """
+  def update_client_rsn(state, client_id, new_rsn) do
+    case @gleam_sequencing.update_client_rsn(state, client_id, new_rsn) do
+      {:ok, new_state} ->
+        {:ok, new_state}
+
+      {:error, {:unknown_client, cid}} ->
+        {:error, {:unknown_client, cid}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Nack generation helpers
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  @doc """
+  Build a nack for an unknown client error.
+  """
+  def build_nack_unknown_client(client_id) do
+    %{
+      "operation" => nil,
+      "sequenceNumber" => -1,
+      "content" => %{
+        "code" => 400,
+        "type" => "BadRequestError",
+        "message" => "Unknown client: #{client_id}"
+      }
+    }
+  end
+
+  @doc """
+  Build a nack for a read-only client trying to write.
+  """
+  def build_nack_read_only do
+    %{
+      "operation" => nil,
+      "sequenceNumber" => -1,
+      "content" => %{
+        "code" => 400,
+        "type" => "BadRequestError",
+        "message" => "Client is in read-only mode"
+      }
+    }
+  end
+
+  @doc """
+  Build a nack for invalid CSN.
+  """
+  def build_nack_invalid_csn(expected, received, op) do
+    %{
+      "operation" => op,
+      "sequenceNumber" => -1,
+      "content" => %{
+        "code" => 400,
+        "type" => "BadRequestError",
+        "message" => "Invalid CSN: expected > #{expected}, received #{received}"
+      }
+    }
+  end
+
+  @doc """
+  Build a nack for invalid RSN.
+  """
+  def build_nack_invalid_rsn(current_sn, received_rsn, op) do
+    %{
+      "operation" => op,
+      "sequenceNumber" => -1,
+      "content" => %{
+        "code" => 400,
+        "type" => "BadRequestError",
+        "message" => "Invalid RSN: current SN is #{current_sn}, received #{received_rsn}"
+      }
+    }
+  end
+
+  @doc """
+  Build a nack for throttling (rate limit exceeded).
+  """
+  def build_nack_throttled(retry_after_seconds) do
+    %{
+      "operation" => nil,
+      "sequenceNumber" => -1,
+      "content" => %{
+        "code" => 429,
+        "type" => "ThrottlingError",
+        "message" => "Rate limit exceeded",
+        "retryAfter" => retry_after_seconds
+      }
+    }
+  end
+
+  @doc """
+  Build a nack for message too large.
+  """
+  def build_nack_message_too_large(max_size, actual_size, op) do
+    %{
+      "operation" => op,
+      "sequenceNumber" => -1,
+      "content" => %{
+        "code" => 413,
+        "type" => "BadRequestError",
+        "message" => "Message size #{actual_size} exceeds limit #{max_size}"
+      }
+    }
+  end
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Message type helpers
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  @doc """
+  Convert message type atom to string.
+  """
+  def message_type_to_string(type) do
+    @gleam_module.message_type_to_string(type)
+  end
+
+  @doc """
+  Parse message type from string.
+  """
+  def message_type_from_string(str) do
+    @gleam_module.message_type_from_string(str)
+  end
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Validation helpers
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  @doc """
+  Validate message size against limit.
+  """
+  def validate_message_size(message_bytes, max_size) do
+    @gleam_module.validate_message_size(message_bytes, max_size)
+  end
+
+  @doc """
+  Validate client is in write mode.
+  """
+  def validate_write_mode(mode) do
+    @gleam_module.validate_write_mode(mode)
   end
 end
