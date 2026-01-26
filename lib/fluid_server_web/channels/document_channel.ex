@@ -228,7 +228,24 @@ defmodule FluidServerWeb.DocumentChannel do
 
   @impl true
   def handle_info({:op, op_message}, socket) do
-    push(socket, "op", op_message)
+    # Check if any ops are summary ack/nack and push them as separate events
+    ops = op_message["op"] || []
+
+    {summary_events, regular_ops} = Enum.split_with(ops, fn op ->
+      op["type"] in ["summaryAck", "summaryNack"]
+    end)
+
+    # Push summary events individually
+    Enum.each(summary_events, fn event ->
+      event_type = event["type"]
+      push(socket, event_type, event)
+    end)
+
+    # Push regular ops (including sequenced summarize ops)
+    if regular_ops != [] do
+      push(socket, "op", %{op_message | "op" => regular_ops})
+    end
+
     {:noreply, socket}
   end
 

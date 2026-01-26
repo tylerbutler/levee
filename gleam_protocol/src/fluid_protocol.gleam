@@ -7,6 +7,7 @@ import fluid_protocol/jwt
 import fluid_protocol/message
 import fluid_protocol/nack
 import fluid_protocol/sequencing
+import fluid_protocol/summary
 import fluid_protocol/types
 import fluid_protocol/validation
 import gleam/option
@@ -72,6 +73,28 @@ pub type MessageType =
 // Expose validation module
 pub type ValidationError =
   validation.ValidationError
+
+// Expose summary module
+pub type SummaryTree =
+  summary.SummaryTree
+
+pub type SummaryObject =
+  summary.SummaryObject
+
+pub type SummaryType =
+  summary.SummaryType
+
+pub type SummaryOp =
+  summary.SummaryOp
+
+pub type SummaryAck =
+  summary.SummaryAck
+
+pub type SummaryNack =
+  summary.SummaryNack
+
+pub type SummaryContext =
+  summary.SummaryContext
 
 // Expose JWT module
 pub type JwtValidationError =
@@ -366,4 +389,100 @@ pub fn jwt_format_error(error: JwtValidationError) -> String {
 /// Get HTTP status code for JWT validation error
 pub fn jwt_error_to_http_code(error: JwtValidationError) -> Int {
   jwt.error_to_http_code(error)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Summary API
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Create an empty summary tree
+pub fn empty_summary_tree() -> SummaryTree {
+  summary.empty_summary_tree()
+}
+
+/// Create a summary tree with entries
+pub fn new_summary_tree(entries: List(#(String, summary.SummaryObject))) -> SummaryTree {
+  summary.new_summary_tree(entries)
+}
+
+/// Add an entry to a summary tree
+pub fn add_to_summary_tree(
+  tree: SummaryTree,
+  path: String,
+  object: summary.SummaryObject,
+) -> SummaryTree {
+  summary.add_to_summary_tree(tree, path, object)
+}
+
+/// Get an entry from a summary tree
+pub fn get_from_summary_tree(
+  tree: SummaryTree,
+  path: String,
+) -> Result(summary.SummaryObject, Nil) {
+  summary.get_from_summary_tree(tree, path)
+}
+
+/// Create a SummaryAck
+pub fn create_summary_ack(handle: String, sequence_number: Int) -> SummaryAck {
+  summary.create_summary_ack(handle, sequence_number)
+}
+
+/// Create a SummaryNack with error message
+pub fn create_summary_nack(
+  sequence_number: Int,
+  code: option.Option(Int),
+  message: option.Option(String),
+) -> SummaryNack {
+  summary.create_summary_nack(sequence_number, code, message)
+}
+
+/// Create a SummaryContext for document open response
+pub fn create_summary_context(handle: String, sequence_number: Int) -> SummaryContext {
+  summary.create_summary_context(handle, sequence_number)
+}
+
+/// Convert SummaryType to string
+pub fn summary_type_to_string(st: SummaryType) -> String {
+  summary.summary_type_to_string(st)
+}
+
+/// Parse SummaryType from string
+pub fn summary_type_from_string(s: String) -> Result(SummaryType, Nil) {
+  summary.summary_type_from_string(s)
+}
+
+/// Convert SummaryType to numeric code
+pub fn summary_type_to_code(st: SummaryType) -> Int {
+  summary.summary_type_to_code(st)
+}
+
+/// Parse SummaryType from numeric code
+pub fn summary_type_from_code(code: Int) -> Result(SummaryType, Nil) {
+  summary.summary_type_from_code(code)
+}
+
+/// Summary type constructors
+pub fn summary_type_tree() -> SummaryType {
+  summary.Tree
+}
+
+pub fn summary_type_blob() -> SummaryType {
+  summary.Blob
+}
+
+pub fn summary_type_attachment() -> SummaryType {
+  summary.Attachment
+}
+
+/// Summary object constructors
+pub fn summary_blob(content: String) -> summary.SummaryObject {
+  summary.SummaryBlob(content)
+}
+
+pub fn summary_handle(handle: String, handle_type: SummaryType) -> summary.SummaryObject {
+  summary.SummaryHandle(handle, handle_type)
+}
+
+pub fn summary_attachment(id: String) -> summary.SummaryObject {
+  summary.SummaryAttachment(id)
 }

@@ -115,4 +115,29 @@ defmodule FluidServer.Storage.Behaviour do
 
   @callback update_ref(tenant_id(), ref_path(), sha()) ::
               {:ok, ref()} | {:error, term()}
+
+  # Summary operations
+  @type summary :: %{
+          handle: String.t(),
+          tenant_id: tenant_id(),
+          document_id: document_id(),
+          sequence_number: non_neg_integer(),
+          tree_sha: sha(),
+          commit_sha: sha() | nil,
+          parent_handle: String.t() | nil,
+          message: String.t() | nil,
+          created_at: DateTime.t()
+        }
+
+  @callback store_summary(tenant_id(), document_id(), summary()) ::
+              {:ok, summary()} | {:error, term()}
+
+  @callback get_summary(tenant_id(), document_id(), handle :: String.t()) ::
+              {:ok, summary()} | {:error, :not_found}
+
+  @callback get_latest_summary(tenant_id(), document_id()) ::
+              {:ok, summary()} | {:error, :not_found}
+
+  @callback list_summaries(tenant_id(), document_id(), opts :: keyword()) ::
+              {:ok, [summary()]}
 end

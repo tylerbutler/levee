@@ -54,7 +54,12 @@ defmodule FluidServer.Documents.Session do
     :clients,
     :client_counter,
     # List of sequenced operations for delta catch-up (newest first)
-    :op_history
+    :op_history,
+    # Summary state
+    # %{sequence_number => %{client_id: _, contents: _, timestamp: _}}
+    :pending_summaries,
+    # Latest acknowledged summary info
+    :latest_summary
   ]
 
   # Client API
@@ -122,6 +127,14 @@ defmodule FluidServer.Documents.Session do
     GenServer.call(pid, :get_state_summary)
   end
 
+  @doc """
+  Get the latest summary context for this document.
+  Returns nil if no summary exists.
+  """
+  def get_summary_context(pid) do
+    GenServer.call(pid, :get_summary_context)
+  end
+
   # Server callbacks
 
   @impl true
@@ -131,16 +144,34 @@ defmodule FluidServer.Documents.Session do
     # Initialize sequence state using Gleam
     sequence_state = Bridge.new_sequence_state()
 
+    # Try to load latest summary from storage
+    latest_summary = load_latest_summary(tenant_id, document_id)
+
     state = %__MODULE__{
       tenant_id: tenant_id,
       document_id: document_id,
       sequence_state: sequence_state,
       clients: %{},
       client_counter: 0,
-      op_history: []
+      op_history: [],
+      pending_summaries: %{},
+      latest_summary: latest_summary
     }
 
     {:ok, state}
+  end
+
+  defp load_latest_summary(tenant_id, document_id) do
+    case FluidServer.Storage.ETS.get_latest_summary(tenant_id, document_id) do
+      {:ok, summary} ->
+        %{
+          handle: summary.handle,
+          sequence_number: summary.sequence_number
+        }
+
+      {:error, :not_found} ->
+        nil
+    end
   end
 
   @impl true
@@ -180,7 +211,7 @@ defmodule FluidServer.Documents.Session do
         state.op_history
       )
 
-    # Build IConnected response with initial clients list
+    # Build IConnected response with initial clients list and summary context
     connected_response =
       build_connected_response(
         client_id,
@@ -188,7 +219,8 @@ defmodule FluidServer.Documents.Session do
         connect_msg,
         state,
         final_sequence_state,
-        new_clients
+        new_clients,
+        state.latest_summary
       )
 
     # Broadcast join message to all clients (including the new one, as per protocol)
@@ -238,6 +270,10 @@ defmodule FluidServer.Documents.Session do
       |> Enum.reverse()
 
     {:reply, {:ok, ops}, state}
+  end
+
+  def handle_call(:get_summary_context, _from, state) do
+    {:reply, {:ok, state.latest_summary}, state}
   end
 
   def handle_call(:get_state_summary, _from, state) do
@@ -361,7 +397,7 @@ defmodule FluidServer.Documents.Session do
     "#{state.tenant_id}_#{state.document_id}_#{state.client_counter + 1}"
   end
 
-  defp build_connected_response(client_id, mode, connect_msg, _state, sequence_state, clients) do
+  defp build_connected_response(client_id, mode, connect_msg, _state, sequence_state, clients, latest_summary) do
     current_sn = Bridge.current_sn(sequence_state)
 
     # Build initial clients list (all clients except the joining one)
@@ -384,7 +420,8 @@ defmodule FluidServer.Documents.Session do
     client_versions = connect_msg["versions"] || []
     negotiated_version = negotiate_version(client_versions)
 
-    %{
+    # Build base response
+    response = %{
       "claims" => build_mock_claims(connect_msg),
       "clientId" => client_id,
       "existing" => true,
@@ -402,6 +439,18 @@ defmodule FluidServer.Documents.Session do
       "version" => negotiated_version,
       "checkpointSequenceNumber" => current_sn
     }
+
+    # Add summary context if available
+    case latest_summary do
+      %{handle: handle, sequence_number: summary_sn} ->
+        Map.put(response, "summaryContext", %{
+          "handle" => handle,
+          "sequenceNumber" => summary_sn
+        })
+
+      nil ->
+        response
+    end
   end
 
   # Negotiate features between client and server capabilities
@@ -472,11 +521,19 @@ defmodule FluidServer.Documents.Session do
 
         case Bridge.assign_sequence_number(acc_state.sequence_state, client_id, csn, rsn) do
           {:ok, new_seq_state, assigned_sn, msn} ->
-            sequenced_op = build_sequenced_op(op, client_id, assigned_sn, msn)
-            # Add to history (newest first) and trim if needed
-            updated_history = add_to_history(sequenced_op, acc_state.op_history)
-            new_state = %{acc_state | sequence_state: new_seq_state, op_history: updated_history}
-            {[sequenced_op | acc_ops], acc_nacks, new_state}
+            # Check if this is a summarize op
+            op_type = op["type"] || "op"
+
+            if op_type == "summarize" do
+              # Handle summarize op specially
+              process_summarize_op(op, client_id, assigned_sn, msn, new_seq_state, acc_ops, acc_nacks, acc_state)
+            else
+              sequenced_op = build_sequenced_op(op, client_id, assigned_sn, msn)
+              # Add to history (newest first) and trim if needed
+              updated_history = add_to_history(sequenced_op, acc_state.op_history)
+              new_state = %{acc_state | sequence_state: new_seq_state, op_history: updated_history}
+              {[sequenced_op | acc_ops], acc_nacks, new_state}
+            end
 
           {:error, reason} ->
             nack = build_nack(op, reason)
@@ -489,6 +546,154 @@ defmodule FluidServer.Documents.Session do
     else
       {:error, Enum.reverse(nacks), final_state}
     end
+  end
+
+  defp process_summarize_op(op, client_id, assigned_sn, msn, new_seq_state, acc_ops, acc_nacks, acc_state) do
+    contents = op["contents"] || %{}
+
+    # Validate required fields in summarize op
+    case validate_summarize_contents(contents) do
+      :ok ->
+        # Store pending summary
+        pending_summary = %{
+          client_id: client_id,
+          contents: contents,
+          timestamp: System.system_time(:millisecond)
+        }
+
+        new_pending = Map.put(acc_state.pending_summaries, assigned_sn, pending_summary)
+
+        # Attempt to process and store the summary
+        case store_summary(acc_state.tenant_id, acc_state.document_id, contents, assigned_sn) do
+          {:ok, summary_handle} ->
+            # Summary stored successfully, generate summaryAck
+            summary_ack = build_summary_ack(summary_handle, assigned_sn, msn)
+
+            # Also generate the sequenced summarize op for the log
+            sequenced_summarize = build_sequenced_op(op, client_id, assigned_sn, msn)
+            updated_history = add_to_history(sequenced_summarize, acc_state.op_history)
+            updated_history = add_to_history(summary_ack, updated_history)
+
+            # Update latest summary
+            new_latest_summary = %{
+              handle: summary_handle,
+              sequence_number: assigned_sn
+            }
+
+            new_state = %{
+              acc_state
+              | sequence_state: new_seq_state,
+                op_history: updated_history,
+                pending_summaries: Map.delete(new_pending, assigned_sn),
+                latest_summary: new_latest_summary
+            }
+
+            # Return both the sequenced summarize op and the summaryAck
+            {[summary_ack, sequenced_summarize | acc_ops], acc_nacks, new_state}
+
+          {:error, reason} ->
+            # Summary failed, generate summaryNack
+            summary_nack = build_summary_nack(assigned_sn, msn, reason)
+
+            # Also generate the sequenced summarize op
+            sequenced_summarize = build_sequenced_op(op, client_id, assigned_sn, msn)
+            updated_history = add_to_history(sequenced_summarize, acc_state.op_history)
+            updated_history = add_to_history(summary_nack, updated_history)
+
+            new_state = %{
+              acc_state
+              | sequence_state: new_seq_state,
+                op_history: updated_history,
+                pending_summaries: new_pending
+            }
+
+            # Return both the sequenced summarize op and the summaryNack
+            {[summary_nack, sequenced_summarize | acc_ops], acc_nacks, new_state}
+        end
+
+      {:error, reason} ->
+        # Invalid summarize op contents
+        nack = build_nack(op, {:invalid_summarize, reason})
+        {acc_ops, [nack | acc_nacks], acc_state}
+    end
+  end
+
+  defp validate_summarize_contents(contents) do
+    required_fields = ["handle", "message", "parents", "head"]
+    missing = Enum.filter(required_fields, fn field -> not Map.has_key?(contents, field) end)
+
+    if Enum.empty?(missing) do
+      :ok
+    else
+      {:error, "missing fields: #{Enum.join(missing, ", ")}"}
+    end
+  end
+
+  defp store_summary(tenant_id, document_id, contents, sequence_number) do
+    handle = contents["handle"]
+    message = contents["message"]
+    parents = contents["parents"] || []
+    head = contents["head"]
+
+    # Create summary record
+    summary = %{
+      handle: handle,
+      sequence_number: sequence_number,
+      tree_sha: head,
+      commit_sha: nil,
+      parent_handle: List.first(parents),
+      message: message
+    }
+
+    case FluidServer.Storage.ETS.store_summary(tenant_id, document_id, summary) do
+      {:ok, _stored} -> {:ok, handle}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp build_summary_ack(handle, sn, msn) do
+    %{
+      "clientId" => nil,
+      "sequenceNumber" => sn + 1,
+      "minimumSequenceNumber" => msn,
+      "clientSequenceNumber" => -1,
+      "referenceSequenceNumber" => sn,
+      "type" => "summaryAck",
+      "contents" => %{
+        "handle" => handle,
+        "summaryProposal" => %{
+          "summarySequenceNumber" => sn
+        }
+      },
+      "metadata" => nil,
+      "timestamp" => System.system_time(:millisecond)
+    }
+  end
+
+  defp build_summary_nack(sn, msn, reason) do
+    error_message =
+      case reason do
+        {:invalid_summarize, msg} -> "Invalid summarize op: #{msg}"
+        :not_found -> "Summary tree not found"
+        _ -> "Summary processing failed: #{inspect(reason)}"
+      end
+
+    %{
+      "clientId" => nil,
+      "sequenceNumber" => sn + 1,
+      "minimumSequenceNumber" => msn,
+      "clientSequenceNumber" => -1,
+      "referenceSequenceNumber" => sn,
+      "type" => "summaryNack",
+      "contents" => %{
+        "summaryProposal" => %{
+          "summarySequenceNumber" => sn
+        },
+        "message" => error_message
+      },
+      "metadata" => nil,
+      "timestamp" => System.system_time(:millisecond)
+    }
   end
 
   defp add_to_history(op, history) do
@@ -535,6 +740,10 @@ defmodule FluidServer.Documents.Session do
 
   defp format_sequence_error({:unknown_client, client_id}) do
     {400, "BadRequestError", "Unknown client: #{client_id}"}
+  end
+
+  defp format_sequence_error({:invalid_summarize, msg}) do
+    {400, "BadRequestError", "Invalid summarize op: #{msg}"}
   end
 
   defp format_sequence_error(reason) do

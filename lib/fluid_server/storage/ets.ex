@@ -27,6 +27,7 @@ defmodule FluidServer.Storage.ETS do
   @trees_table :fluid_trees
   @commits_table :fluid_commits
   @refs_table :fluid_refs
+  @summaries_table :fluid_summaries
 
   # Client API
 
@@ -319,8 +320,113 @@ defmodule FluidServer.Storage.ETS do
     :ets.new(@trees_table, [:set, :public, :named_table, read_concurrency: true])
     :ets.new(@commits_table, [:set, :public, :named_table, read_concurrency: true])
     :ets.new(@refs_table, [:set, :public, :named_table, read_concurrency: true])
+    :ets.new(@summaries_table, [:ordered_set, :public, :named_table, read_concurrency: true])
 
     {:ok, %{}}
+  end
+
+  # Summary operations
+
+  @impl FluidServer.Storage.Behaviour
+  def store_summary(tenant_id, document_id, summary) do
+    # Key is {tenant_id, document_id, sequence_number} for ordered retrieval
+    # This allows efficient retrieval of latest summary
+    key = {tenant_id, document_id, summary.sequence_number}
+
+    summary_with_meta = Map.merge(summary, %{
+      tenant_id: tenant_id,
+      document_id: document_id,
+      created_at: Map.get(summary, :created_at) || DateTime.utc_now()
+    })
+
+    :ets.insert(@summaries_table, {key, summary_with_meta})
+
+    # Also update document metadata with latest summary info
+    update_document_latest_summary(tenant_id, document_id, summary_with_meta)
+
+    {:ok, summary_with_meta}
+  end
+
+  @impl FluidServer.Storage.Behaviour
+  def get_summary(tenant_id, document_id, handle) do
+    # Search for summary by handle - need to scan since handle is not in key
+    match_spec = [
+      {
+        {{tenant_id, document_id, :_}, :"$1"},
+        [{:==, {:map_get, :handle, :"$1"}, handle}],
+        [:"$1"]
+      }
+    ]
+
+    case :ets.select(@summaries_table, match_spec) do
+      [summary | _] -> {:ok, summary}
+      [] -> {:error, :not_found}
+    end
+  end
+
+  @impl FluidServer.Storage.Behaviour
+  def get_latest_summary(tenant_id, document_id) do
+    # Get the summary with the highest sequence number for this document
+    # Since we use ordered_set with {tenant_id, document_id, sn} key,
+    # we can use match to get all and take the last one
+    match_spec = [
+      {
+        {{tenant_id, document_id, :"$1"}, :"$2"},
+        [],
+        [{{:"$1", :"$2"}}]
+      }
+    ]
+
+    case :ets.select(@summaries_table, match_spec) do
+      [] ->
+        {:error, :not_found}
+
+      results ->
+        # Sort by sequence number descending and take first
+        {_sn, summary} = Enum.max_by(results, fn {sn, _summary} -> sn end)
+        {:ok, summary}
+    end
+  end
+
+  @impl FluidServer.Storage.Behaviour
+  def list_summaries(tenant_id, document_id, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 100)
+    from_sn = Keyword.get(opts, :from_sequence_number, 0)
+
+    match_spec = [
+      {
+        {{tenant_id, document_id, :"$1"}, :"$2"},
+        [{:>=, :"$1", from_sn}],
+        [:"$2"]
+      }
+    ]
+
+    summaries =
+      :ets.select(@summaries_table, match_spec)
+      |> Enum.sort_by(& &1.sequence_number)
+      |> Enum.take(limit)
+
+    {:ok, summaries}
+  end
+
+  # Update document metadata with latest summary reference
+  defp update_document_latest_summary(tenant_id, document_id, summary) do
+    key = {tenant_id, document_id}
+
+    case :ets.lookup(@documents_table, key) do
+      [{^key, document}] ->
+        updated = Map.merge(document, %{
+          latest_summary_handle: summary.handle,
+          latest_summary_sequence_number: summary.sequence_number,
+          updated_at: DateTime.utc_now()
+        })
+        :ets.insert(@documents_table, {key, updated})
+        :ok
+
+      [] ->
+        # Document doesn't exist yet, ignore
+        :ok
+    end
   end
 
   # Helper functions
