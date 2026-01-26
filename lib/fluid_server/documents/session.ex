@@ -6,10 +6,23 @@ defmodule FluidServer.Documents.Session do
   - Sequence number assignment
   - Connected client tracking
   - Operation ordering and broadcast
-  - Signal relay
+  - Signal relay (v1 and v2 formats with targeting)
   - Operation history for delta catch-up
 
   Uses the Gleam protocol module for sequence number logic.
+
+  ## Signal Handling
+
+  Supports two signal formats:
+  - **V1 (Legacy)**: Simple broadcast with `{clientId, content}` format
+  - **V2 (Current)**: Enhanced format with targeting support:
+    - `targetedClients`: Optional list of specific client IDs to receive the signal
+    - `ignoredClients`: Optional list of client IDs to exclude from receiving
+
+  ## Feature Negotiation
+
+  The server advertises `submit_signals_v2: true` in the connect_document_success
+  response, indicating v2 signal format support.
   """
 
   use GenServer
@@ -25,11 +38,19 @@ defmodule FluidServer.Documents.Session do
   # Maximum operations to keep in history for catch-up
   @max_history_size 1000
 
+  # Supported features advertised to clients
+  @supported_features %{
+    "submit_signals_v2" => true
+  }
+
+  # Supported protocol versions
+  @supported_versions ["^0.1.0", "^1.0.0"]
+
   defstruct [
     :tenant_id,
     :document_id,
     :sequence_state,
-    # %{client_id => %{pid: pid, client: client_info, mode: mode, last_seen_sn: sn}}
+    # %{client_id => %{pid: pid, client: client_info, mode: mode, last_seen_sn: sn, features: map}}
     :clients,
     :client_counter,
     # List of sequenced operations for delta catch-up (newest first)
@@ -56,6 +77,25 @@ defmodule FluidServer.Documents.Session do
     GenServer.call(pid, {:submit_ops, client_id, op_batches})
   end
 
+  @doc """
+  Submit signals to be relayed to other clients.
+
+  Supports both v1 (legacy) and v2 (current) signal formats:
+
+  ## V1 Format (Legacy)
+  Simple content broadcast: `{clientId, content}` - broadcasts to all other clients
+
+  ## V2 Format (Current)
+  Enhanced format with targeting support:
+  - `targetedClients`: Optional list of specific client IDs to receive the signal
+  - `ignoredClients`: Optional list of client IDs to exclude from receiving
+  - If neither specified, broadcasts to all clients except sender
+
+  ## Parameters
+  - `pid`: Session process PID
+  - `client_id`: The sending client's ID
+  - `signal_batches`: List of signal contents to relay
+  """
   def submit_signals(pid, client_id, signal_batches) do
     GenServer.cast(pid, {:submit_signals, client_id, signal_batches})
   end
@@ -116,12 +156,16 @@ defmodule FluidServer.Documents.Session do
     new_sequence_state = Bridge.client_join(state.sequence_state, client_id, current_sn)
 
     # Store client info with last seen SN for catch-up support
+    # Also store negotiated features for targeting decisions
+    client_features = connect_msg["supportedFeatures"] || %{}
+
     client_info = %{
       pid: channel_pid,
       client: connect_msg["client"],
       mode: mode,
       monitor_ref: Process.monitor(channel_pid),
-      last_seen_sn: current_sn
+      last_seen_sn: current_sn,
+      features: negotiate_features(client_features)
     }
 
     new_clients = Map.put(state.clients, client_id, client_info)
@@ -275,12 +319,20 @@ defmodule FluidServer.Documents.Session do
   end
 
   def handle_cast({:submit_signals, client_id, signal_batches}, state) do
-    # Relay signals to appropriate clients
-    Enum.each(signal_batches, fn signal ->
-      broadcast_signal(client_id, signal, state.clients)
-    end)
+    # Verify client exists
+    case Map.get(state.clients, client_id) do
+      nil ->
+        Logger.warning("Signal from unknown client: #{client_id}")
+        {:noreply, state}
 
-    {:noreply, state}
+      _client_info ->
+        # Relay signals to appropriate clients based on format (v1/v2)
+        Enum.each(signal_batches, fn signal ->
+          broadcast_signal(client_id, signal, state.clients, state.document_id)
+        end)
+
+        {:noreply, state}
+    end
   end
 
   @impl true
@@ -324,6 +376,14 @@ defmodule FluidServer.Documents.Session do
         }
       end)
 
+    # Negotiate features based on client's supported features
+    client_features = connect_msg["supportedFeatures"] || %{}
+    negotiated_features = negotiate_features(client_features)
+
+    # Negotiate protocol version based on client's supported versions
+    client_versions = connect_msg["versions"] || []
+    negotiated_version = negotiate_version(client_versions)
+
     %{
       "claims" => build_mock_claims(connect_msg),
       "clientId" => client_id,
@@ -337,14 +397,55 @@ defmodule FluidServer.Documents.Session do
       "initialClients" => initial_clients,
       "initialMessages" => [],
       "initialSignals" => [],
-      "supportedVersions" => ["^0.1.0"],
-      "supportedFeatures" => %{
-        "submit_signals_v2" => true
-      },
-      "version" => "0.1.0",
+      "supportedVersions" => @supported_versions,
+      "supportedFeatures" => negotiated_features,
+      "version" => negotiated_version,
       "checkpointSequenceNumber" => current_sn
     }
   end
+
+  # Negotiate features between client and server capabilities
+  # Returns features that both client and server support
+  defp negotiate_features(client_features) when is_map(client_features) do
+    # Start with server's supported features
+    # For each feature, check if client also supports it
+    @supported_features
+    |> Enum.map(fn {feature, server_value} ->
+      client_value = Map.get(client_features, feature)
+
+      negotiated_value =
+        case {server_value, client_value} do
+          # Both support it as boolean
+          {true, true} -> true
+          # Server supports, client doesn't specify - advertise server capability
+          {true, nil} -> true
+          # Feature not supported by client
+          {true, false} -> false
+          # Other cases - use server value
+          _ -> server_value
+        end
+
+      {feature, negotiated_value}
+    end)
+    |> Map.new()
+  end
+
+  defp negotiate_features(_), do: @supported_features
+
+  # Negotiate protocol version based on client's supported version ranges
+  # For now, we use a simple approach: return the first server version
+  # that matches any client version range
+  defp negotiate_version(client_versions) when is_list(client_versions) do
+    # Simple version negotiation - return first supported version
+    # In a full implementation, this would parse semver ranges
+    cond do
+      "^0.1.0" in client_versions -> "0.1.0"
+      "^1.0.0" in client_versions -> "1.0.0"
+      true -> "0.1.0"
+    end
+  end
+
+  defp negotiate_version(_), do: "0.1.0"
 
   defp build_mock_claims(connect_msg) do
     # In production, this would come from JWT validation
@@ -510,29 +611,80 @@ defmodule FluidServer.Documents.Session do
     {system_message, final_sequence_state, updated_history}
   end
 
-  defp broadcast_signal(sender_client_id, signal, clients) do
-    # Check if targeted
-    target_client_id = get_in(signal, ["targetClientId"])
+  # Broadcast a signal to appropriate clients based on format (v1/v2) and targeting
+  defp broadcast_signal(sender_client_id, signal, clients, _document_id) do
+    # Detect signal format and extract targeting info
+    {message, recipients} = process_signal_targeting(sender_client_id, signal, clients)
 
-    message = %{
+    # Send to each recipient
+    Enum.each(recipients, fn client_id ->
+      case Map.get(clients, client_id) do
+        nil -> :ok
+        info -> send(info.pid, {:signal, message})
+      end
+    end)
+  end
+
+  # Process signal targeting to determine recipients
+  # Returns {signal_message, list_of_recipient_client_ids}
+  defp process_signal_targeting(sender_client_id, signal, clients) do
+    all_client_ids = Map.keys(clients)
+
+    # Build the base signal message
+    base_message = %{
       "clientId" => sender_client_id,
       "content" => signal["content"],
       "type" => signal["type"]
     }
 
-    if target_client_id do
-      # Targeted signal
-      case Map.get(clients, target_client_id) do
-        nil -> :ok
-        info -> send(info.pid, {:signal, message})
-      end
-    else
-      # Broadcast to all except sender
-      Enum.each(clients, fn {client_id, info} ->
-        if client_id != sender_client_id do
-          send(info.pid, {:signal, message})
+    # Add optional fields if present
+    message =
+      base_message
+      |> maybe_put("clientConnectionNumber", signal["clientConnectionNumber"])
+      |> maybe_put("referenceSequenceNumber", signal["referenceSequenceNumber"])
+      |> maybe_put("targetClientId", signal["targetClientId"])
+
+    # Determine recipients based on targeting fields
+    recipients = determine_signal_recipients(sender_client_id, signal, all_client_ids)
+
+    {message, recipients}
+  end
+
+  # Determine which clients should receive a signal based on targeting rules
+  # Priority: targetedClients > ignoredClients > single targetClientId > broadcast
+  defp determine_signal_recipients(sender_client_id, signal, all_client_ids) do
+    targeted_clients = signal["targetedClients"]
+    ignored_clients = signal["ignoredClients"]
+    single_target = signal["targetClientId"]
+
+    cond do
+      # V2 with targetedClients: send only to specified clients (excluding sender)
+      is_list(targeted_clients) and targeted_clients != [] ->
+        targeted_clients
+        |> Enum.filter(&(&1 != sender_client_id))
+        |> Enum.filter(&(&1 in all_client_ids))
+
+      # V2 with ignoredClients: send to all except ignored and sender
+      is_list(ignored_clients) and ignored_clients != [] ->
+        all_client_ids
+        |> Enum.reject(&(&1 == sender_client_id))
+        |> Enum.reject(&(&1 in ignored_clients))
+
+      # V2 with single targetClientId
+      is_binary(single_target) and single_target != "" ->
+        if single_target in all_client_ids and single_target != sender_client_id do
+          [single_target]
+        else
+          []
         end
-      end)
+
+      # V1 or V2 broadcast: send to all except sender
+      true ->
+        Enum.reject(all_client_ids, &(&1 == sender_client_id))
     end
   end
+
+  # Helper to conditionally add a field to a map
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 end

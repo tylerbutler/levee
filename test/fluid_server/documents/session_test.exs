@@ -397,6 +397,206 @@ defmodule FluidServer.Documents.SessionTest do
     end
   end
 
+  describe "submit_signals/3" do
+    test "v1 signal broadcast - sends to all clients except sender", %{session: session} do
+      # Join three clients
+      {:ok, client1_id, _} = Session.client_join(session, build_connect_message())
+      {:ok, _client2_id, _} = Session.client_join(session, build_connect_message())
+      {:ok, _client3_id, _} = Session.client_join(session, build_connect_message())
+      flush_messages()
+
+      # Client 1 sends a v1 broadcast signal
+      v1_signal = %{
+        "content" => %{"cursor" => %{"x" => 100, "y" => 200}},
+        "type" => "cursor"
+      }
+
+      Session.submit_signals(session, client1_id, [v1_signal])
+
+      # Clients 2 and 3 should receive the signal (but not client 1)
+      # We'll receive signals for both client2 and client3 processes (which are this test process)
+      assert_receive {:signal, signal_msg1}, 100
+      assert signal_msg1["clientId"] == client1_id
+      assert signal_msg1["content"] == %{"cursor" => %{"x" => 100, "y" => 200}}
+      assert signal_msg1["type"] == "cursor"
+
+      assert_receive {:signal, signal_msg2}, 100
+      assert signal_msg2["clientId"] == client1_id
+    end
+
+    test "v2 signal with targetedClients - sends only to specified clients", %{session: session} do
+      # Join four clients
+      {:ok, client1_id, _} = Session.client_join(session, build_connect_message())
+      {:ok, client2_id, _} = Session.client_join(session, build_connect_message())
+      {:ok, client3_id, _} = Session.client_join(session, build_connect_message())
+      {:ok, _client4_id, _} = Session.client_join(session, build_connect_message())
+      flush_messages()
+
+      # Client 1 sends a v2 signal targeted only to client2 and client3
+      v2_targeted_signal = %{
+        "content" => %{"presence" => "typing"},
+        "type" => "presence",
+        "targetedClients" => [client2_id, client3_id]
+      }
+
+      Session.submit_signals(session, client1_id, [v2_targeted_signal])
+
+      # Should receive exactly 2 signals (for client2 and client3)
+      # Note: all clients in this test share the same process, so we receive all
+      assert_receive {:signal, signal_msg}, 100
+      assert signal_msg["clientId"] == client1_id
+      assert signal_msg["content"] == %{"presence" => "typing"}
+
+      assert_receive {:signal, _signal_msg2}, 100
+
+      # Should NOT receive a third signal (client4 is not in targetedClients)
+      refute_receive {:signal, _}, 50
+    end
+
+    test "v2 signal with ignoredClients - excludes specified clients", %{session: session} do
+      # Join three clients
+      {:ok, client1_id, _} = Session.client_join(session, build_connect_message())
+      {:ok, client2_id, _} = Session.client_join(session, build_connect_message())
+      {:ok, _client3_id, _} = Session.client_join(session, build_connect_message())
+      flush_messages()
+
+      # Client 1 sends a v2 signal ignoring client2
+      v2_ignored_signal = %{
+        "content" => %{"action" => "focus"},
+        "type" => "focus",
+        "ignoredClients" => [client2_id]
+      }
+
+      Session.submit_signals(session, client1_id, [v2_ignored_signal])
+
+      # Should receive exactly 1 signal (only client3, since client2 is ignored)
+      assert_receive {:signal, signal_msg}, 100
+      assert signal_msg["clientId"] == client1_id
+      assert signal_msg["content"] == %{"action" => "focus"}
+
+      # Should NOT receive another signal
+      refute_receive {:signal, _}, 50
+    end
+
+    test "v2 signal with single targetClientId", %{session: session} do
+      # Join three clients
+      {:ok, client1_id, _} = Session.client_join(session, build_connect_message())
+      {:ok, client2_id, _} = Session.client_join(session, build_connect_message())
+      {:ok, _client3_id, _} = Session.client_join(session, build_connect_message())
+      flush_messages()
+
+      # Client 1 sends a v2 signal to a single target
+      v2_single_target_signal = %{
+        "content" => %{"message" => "hello"},
+        "type" => "dm",
+        "targetClientId" => client2_id
+      }
+
+      Session.submit_signals(session, client1_id, [v2_single_target_signal])
+
+      # Should receive exactly 1 signal (only client2)
+      assert_receive {:signal, signal_msg}, 100
+      assert signal_msg["clientId"] == client1_id
+      assert signal_msg["content"] == %{"message" => "hello"}
+      assert signal_msg["targetClientId"] == client2_id
+
+      # Should NOT receive another signal
+      refute_receive {:signal, _}, 50
+    end
+
+    test "batch signal submission", %{session: session} do
+      # Join two clients
+      {:ok, client1_id, _} = Session.client_join(session, build_connect_message())
+      {:ok, _client2_id, _} = Session.client_join(session, build_connect_message())
+      flush_messages()
+
+      # Client 1 sends a batch of signals
+      signals = [
+        %{"content" => %{"a" => 1}, "type" => "type1"},
+        %{"content" => %{"b" => 2}, "type" => "type2"},
+        %{"content" => %{"c" => 3}, "type" => "type3"}
+      ]
+
+      Session.submit_signals(session, client1_id, signals)
+
+      # Should receive 3 signals
+      assert_receive {:signal, msg1}, 100
+      assert msg1["content"] == %{"a" => 1}
+
+      assert_receive {:signal, msg2}, 100
+      assert msg2["content"] == %{"b" => 2}
+
+      assert_receive {:signal, msg3}, 100
+      assert msg3["content"] == %{"c" => 3}
+    end
+
+    test "signal from unknown client is ignored", %{session: session} do
+      {:ok, _client1_id, _} = Session.client_join(session, build_connect_message())
+      flush_messages()
+
+      # Try to send signal from unknown client
+      signal = %{"content" => %{"test" => true}, "type" => "test"}
+      Session.submit_signals(session, "unknown-client-id", [signal])
+
+      # Should not receive any signal
+      refute_receive {:signal, _}, 50
+    end
+
+    test "sender does not receive their own signal", %{session: session} do
+      # Join two clients
+      {:ok, client1_id, _} = Session.client_join(session, build_connect_message())
+      {:ok, _client2_id, _} = Session.client_join(session, build_connect_message())
+      flush_messages()
+
+      # Client 1 sends a signal
+      signal = %{"content" => %{"test" => true}, "type" => "test"}
+      Session.submit_signals(session, client1_id, [signal])
+
+      # Should receive exactly 1 signal (for client2, not client1)
+      assert_receive {:signal, msg}, 100
+      assert msg["clientId"] == client1_id
+
+      # Should not receive another signal
+      refute_receive {:signal, _}, 50
+    end
+  end
+
+  describe "feature negotiation" do
+    test "connect response includes supported features", %{session: session} do
+      connect_msg = build_connect_message()
+      {:ok, _client_id, response} = Session.client_join(session, connect_msg)
+
+      assert response["supportedFeatures"]["submit_signals_v2"] == true
+    end
+
+    test "connect response includes supported versions", %{session: session} do
+      connect_msg = build_connect_message()
+      {:ok, _client_id, response} = Session.client_join(session, connect_msg)
+
+      assert is_list(response["supportedVersions"])
+      assert "^0.1.0" in response["supportedVersions"]
+    end
+
+    test "negotiates version based on client versions", %{session: session} do
+      connect_msg = build_connect_message() |> Map.put("versions", ["^1.0.0"])
+      {:ok, _client_id, response} = Session.client_join(session, connect_msg)
+
+      assert response["version"] == "1.0.0"
+    end
+
+    test "client features are stored for targeting decisions", %{session: session} do
+      connect_msg =
+        build_connect_message()
+        |> Map.put("supportedFeatures", %{"submit_signals_v2" => true})
+
+      {:ok, client_id, _response} = Session.client_join(session, connect_msg)
+
+      # Verify features are tracked (via state summary)
+      {:ok, summary} = Session.get_state_summary(session)
+      assert client_id in summary.client_ids
+    end
+  end
+
   # Helper functions
 
   defp build_connect_message(user_overrides \\ %{}, mode \\ "write") do

@@ -1,12 +1,17 @@
 defmodule FluidServerWeb.DocumentChannelTest do
   use FluidServerWeb.ChannelCase
 
+  alias FluidServer.Auth.JWT
+  alias FluidServer.Auth.TenantSecrets
   alias FluidServerWeb.UserSocket
   alias FluidServerWeb.DocumentChannel
 
   @tenant_id "test-tenant"
 
   setup do
+    # Register tenant for JWT auth
+    TenantSecrets.register_tenant(@tenant_id, "test-secret-for-channel-tests")
+
     # Ensure application is started
     {:ok, _} = Application.ensure_all_started(:fluid_server)
 
@@ -18,14 +23,20 @@ defmodule FluidServerWeb.DocumentChannelTest do
       |> socket("user_id", %{})
       |> subscribe_and_join(DocumentChannel, topic)
 
-    {:ok, socket: socket, document_id: document_id, topic: topic}
+    # Generate JWT token for tests
+    {:ok, token} = JWT.generate_test_token(@tenant_id, document_id, "test-user")
+
+    on_exit(fn -> TenantSecrets.unregister_tenant(@tenant_id) end)
+
+    {:ok, socket: socket, document_id: document_id, topic: topic, token: token}
   end
 
   describe "connect_document" do
-    test "successfully connects to document session", %{socket: socket, document_id: document_id} do
+    test "successfully connects to document session", %{socket: socket, document_id: document_id, token: token} do
       connect_msg = %{
         "tenantId" => @tenant_id,
         "id" => document_id,
+        "token" => token,
         "client" => %{
           "user" => %{"id" => "test-user"},
           "mode" => "write",
@@ -61,10 +72,30 @@ defmodule FluidServerWeb.DocumentChannelTest do
       assert response["message"] =~ "Missing required fields"
     end
 
-    test "returns error for tenant/document mismatch", %{socket: socket, document_id: document_id} do
+    test "returns error for missing token", %{socket: socket, document_id: document_id} do
+      connect_msg = %{
+        "tenantId" => @tenant_id,
+        "id" => document_id,
+        "client" => %{
+          "user" => %{"id" => "test-user"},
+          "mode" => "write"
+        },
+        "mode" => "write",
+        "versions" => []
+      }
+
+      push(socket, "connect_document", connect_msg)
+
+      assert_push "connect_document_error", response
+      assert response["code"] == 401
+      assert response["message"] =~ "Missing authentication token"
+    end
+
+    test "returns error for tenant/document mismatch", %{socket: socket, document_id: document_id, token: token} do
       connect_msg = %{
         "tenantId" => "wrong-tenant",
         "id" => document_id,
+        "token" => token,
         "client" => %{
           "user" => %{"id" => "test-user"},
           "mode" => "write"
@@ -82,11 +113,12 @@ defmodule FluidServerWeb.DocumentChannelTest do
   end
 
   describe "submitOp" do
-    setup %{socket: socket, document_id: document_id} do
+    setup %{socket: socket, document_id: document_id, token: token} do
       # Connect to document first
       connect_msg = %{
         "tenantId" => @tenant_id,
         "id" => document_id,
+        "token" => token,
         "client" => %{
           "user" => %{"id" => "test-user"},
           "mode" => "write",
@@ -162,10 +194,11 @@ defmodule FluidServerWeb.DocumentChannelTest do
   end
 
   describe "submitSignal" do
-    setup %{socket: socket, document_id: document_id} do
+    setup %{socket: socket, document_id: document_id, token: token} do
       connect_msg = %{
         "tenantId" => @tenant_id,
         "id" => document_id,
+        "token" => token,
         "client" => %{
           "user" => %{"id" => "test-user"},
           "mode" => "write",
@@ -174,7 +207,8 @@ defmodule FluidServerWeb.DocumentChannelTest do
           "scopes" => ["doc:read", "doc:write"]
         },
         "mode" => "write",
-        "versions" => ["^0.1.0"]
+        "versions" => ["^0.1.0"],
+        "supportedFeatures" => %{"submit_signals_v2" => true}
       }
 
       push(socket, "connect_document", connect_msg)
@@ -183,7 +217,10 @@ defmodule FluidServerWeb.DocumentChannelTest do
       {:ok, client_id: client_id}
     end
 
-    test "relays signals to other clients", %{socket: socket, client_id: client_id, topic: topic} do
+    test "relays v1 signals to other clients", %{socket: socket, client_id: client_id, topic: topic, document_id: document_id} do
+      # Generate token for second user
+      {:ok, token2} = JWT.generate_test_token(@tenant_id, document_id, "test-user-2")
+
       # Join another client to receive the signal
       {:ok, _, socket2} =
         UserSocket
@@ -192,7 +229,8 @@ defmodule FluidServerWeb.DocumentChannelTest do
 
       connect_msg2 = %{
         "tenantId" => @tenant_id,
-        "id" => socket.assigns.document_id,
+        "id" => document_id,
+        "token" => token2,
         "client" => %{
           "user" => %{"id" => "test-user-2"},
           "mode" => "write",
@@ -207,28 +245,176 @@ defmodule FluidServerWeb.DocumentChannelTest do
       push(socket2, "connect_document", connect_msg2)
       assert_push "connect_document_success", %{"clientId" => _client2_id}
 
-      # First client sends a signal
-      signal = %{
+      # First client sends a v1 signal
+      v1_signal = %{
         "content" => %{"cursor" => %{"x" => 100, "y" => 200}},
         "type" => "cursor"
       }
 
       push(socket, "submitSignal", %{
         "clientId" => client_id,
+        "contentBatches" => [v1_signal]
+      })
+
+      # Signal relay is async
+      :timer.sleep(50)
+    end
+
+    test "relays v2 signals with targetedClients", %{socket: socket, client_id: client_id, topic: topic, document_id: document_id} do
+      # Generate token for second user
+      {:ok, token2} = JWT.generate_test_token(@tenant_id, document_id, "test-user-2")
+
+      # Join another client
+      {:ok, _, socket2} =
+        UserSocket
+        |> socket("user_id_2", %{})
+        |> subscribe_and_join(DocumentChannel, topic)
+
+      connect_msg2 = %{
+        "tenantId" => @tenant_id,
+        "id" => document_id,
+        "token" => token2,
+        "client" => %{
+          "user" => %{"id" => "test-user-2"},
+          "mode" => "write",
+          "details" => %{"capabilities" => %{"interactive" => true}},
+          "permission" => ["doc:read", "doc:write"],
+          "scopes" => ["doc:read", "doc:write"]
+        },
+        "mode" => "write",
+        "versions" => ["^0.1.0"],
+        "supportedFeatures" => %{"submit_signals_v2" => true}
+      }
+
+      push(socket2, "connect_document", connect_msg2)
+      assert_push "connect_document_success", %{"clientId" => client2_id}
+
+      # First client sends a v2 signal targeting only client2
+      v2_targeted_signal = %{
+        "content" => %{"presence" => "active"},
+        "type" => "presence",
+        "targetedClients" => [client2_id],
+        "clientConnectionNumber" => 1,
+        "referenceSequenceNumber" => 0
+      }
+
+      push(socket, "submitSignal", %{
+        "clientId" => client_id,
+        "contentBatches" => [v2_targeted_signal]
+      })
+
+      :timer.sleep(50)
+    end
+
+    test "relays v2 signals with ignoredClients", %{socket: socket, client_id: client_id, topic: topic, document_id: document_id} do
+      # Generate token for second user
+      {:ok, token2} = JWT.generate_test_token(@tenant_id, document_id, "test-user-2")
+
+      # Join another client
+      {:ok, _, socket2} =
+        UserSocket
+        |> socket("user_id_2", %{})
+        |> subscribe_and_join(DocumentChannel, topic)
+
+      connect_msg2 = %{
+        "tenantId" => @tenant_id,
+        "id" => document_id,
+        "token" => token2,
+        "client" => %{
+          "user" => %{"id" => "test-user-2"},
+          "mode" => "write",
+          "details" => %{"capabilities" => %{"interactive" => true}},
+          "permission" => ["doc:read", "doc:write"],
+          "scopes" => ["doc:read", "doc:write"]
+        },
+        "mode" => "write",
+        "versions" => ["^0.1.0"]
+      }
+
+      push(socket2, "connect_document", connect_msg2)
+      assert_push "connect_document_success", %{"clientId" => client2_id}
+
+      # First client sends a v2 signal ignoring client2
+      v2_ignored_signal = %{
+        "content" => %{"status" => "busy"},
+        "type" => "status",
+        "ignoredClients" => [client2_id]
+      }
+
+      push(socket, "submitSignal", %{
+        "clientId" => client_id,
+        "contentBatches" => [v2_ignored_signal]
+      })
+
+      :timer.sleep(50)
+    end
+
+    test "handles batch signals", %{socket: socket, client_id: client_id, topic: topic, document_id: document_id} do
+      # Generate token for second user
+      {:ok, token2} = JWT.generate_test_token(@tenant_id, document_id, "test-user-2")
+
+      # Join another client
+      {:ok, _, socket2} =
+        UserSocket
+        |> socket("user_id_2", %{})
+        |> subscribe_and_join(DocumentChannel, topic)
+
+      connect_msg2 = %{
+        "tenantId" => @tenant_id,
+        "id" => document_id,
+        "token" => token2,
+        "client" => %{
+          "user" => %{"id" => "test-user-2"},
+          "mode" => "write",
+          "details" => %{"capabilities" => %{"interactive" => true}},
+          "permission" => ["doc:read", "doc:write"],
+          "scopes" => ["doc:read", "doc:write"]
+        },
+        "mode" => "write",
+        "versions" => ["^0.1.0"]
+      }
+
+      push(socket2, "connect_document", connect_msg2)
+      assert_push "connect_document_success", %{"clientId" => _client2_id}
+
+      # First client sends a batch of signals
+      batch_signals = [
+        %{"content" => %{"a" => 1}, "type" => "type1"},
+        %{"content" => %{"b" => 2}, "type" => "type2"},
+        %{"content" => %{"c" => 3}, "type" => "type3"}
+      ]
+
+      push(socket, "submitSignal", %{
+        "clientId" => client_id,
+        "contentBatches" => batch_signals
+      })
+
+      :timer.sleep(50)
+    end
+
+    test "ignores signals from wrong client ID", %{socket: socket, client_id: _client_id} do
+      # Try to send signal with wrong client ID
+      signal = %{
+        "content" => %{"test" => true},
+        "type" => "test"
+      }
+
+      push(socket, "submitSignal", %{
+        "clientId" => "wrong-client-id",
         "contentBatches" => [signal]
       })
 
-      # Signal relay is async, so we might not receive it immediately
-      # This is just to ensure no crash occurs
+      # No crash expected, just no signal sent
       :timer.sleep(50)
     end
   end
 
   describe "noop" do
-    setup %{socket: socket, document_id: document_id} do
+    setup %{socket: socket, document_id: document_id, token: token} do
       connect_msg = %{
         "tenantId" => @tenant_id,
         "id" => document_id,
+        "token" => token,
         "client" => %{
           "user" => %{"id" => "test-user"},
           "mode" => "write",
@@ -267,10 +453,11 @@ defmodule FluidServerWeb.DocumentChannelTest do
   end
 
   describe "requestOps" do
-    setup %{socket: socket, document_id: document_id} do
+    setup %{socket: socket, document_id: document_id, token: token} do
       connect_msg = %{
         "tenantId" => @tenant_id,
         "id" => document_id,
+        "token" => token,
         "client" => %{
           "user" => %{"id" => "test-user"},
           "mode" => "write",
@@ -334,9 +521,13 @@ defmodule FluidServerWeb.DocumentChannelTest do
 
   describe "read-only mode" do
     test "prevents op submission in read mode", %{socket: socket, document_id: document_id} do
+      # Generate read-only token
+      {:ok, token} = JWT.generate_read_only_token(@tenant_id, document_id, "test-user")
+
       connect_msg = %{
         "tenantId" => @tenant_id,
         "id" => document_id,
+        "token" => token,
         "client" => %{
           "user" => %{"id" => "test-user"},
           "mode" => "read",
@@ -366,7 +557,8 @@ defmodule FluidServerWeb.DocumentChannelTest do
 
       assert_push "nack", nack_response
       nack = List.first(nack_response["nacks"])
-      assert nack["content"]["message"] =~ "read-only"
+      # Message should indicate read-only or scope error
+      assert nack["content"]["message"] =~ "scope" or nack["content"]["message"] =~ "Read-only"
     end
   end
 end

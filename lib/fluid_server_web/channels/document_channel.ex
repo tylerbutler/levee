@@ -26,8 +26,6 @@ defmodule FluidServerWeb.DocumentChannel do
 
   require Logger
 
-  # 16MB default
-  @max_message_size 16 * 1024 * 1024
   # Maximum ops per batch submission
   @max_batch_size 100
 
@@ -145,13 +143,46 @@ defmodule FluidServerWeb.DocumentChannel do
     {:noreply, socket}
   end
 
-  def handle_in("submitSignal", %{"clientId" => client_id, "contentBatches" => batches}, socket) do
-    if socket.assigns.connected and socket.assigns.client_id == client_id do
-      session_pid = socket.assigns.session_pid
-      Session.submit_signals(session_pid, client_id, batches)
-    end
+  @doc """
+  Handle signal submission from clients.
 
-    {:noreply, socket}
+  Supports both v1 (legacy) and v2 (current) signal formats:
+
+  ## V1 Format (Legacy)
+  Content batches contain JSON-stringified envelope objects with:
+  - address: routing address
+  - contents: {type, content}
+  - clientBroadcastSignalSequenceNumber
+
+  ## V2 Format (Current)
+  Content batches contain signal objects with optional targeting:
+  - content: signal payload
+  - type: signal type
+  - clientConnectionNumber: client-assigned number
+  - referenceSequenceNumber: for ordering context
+  - targetClientId: single target (optional)
+  - targetedClients: list of target clients (optional)
+  - ignoredClients: list of clients to exclude (optional)
+  """
+  def handle_in("submitSignal", %{"clientId" => client_id, "contentBatches" => batches}, socket) do
+    cond do
+      not socket.assigns.connected ->
+        Logger.warning("Signal from unconnected client: #{client_id}")
+        {:noreply, socket}
+
+      socket.assigns.client_id != client_id ->
+        Logger.warning("Signal client ID mismatch: expected #{socket.assigns.client_id}, got #{client_id}")
+        {:noreply, socket}
+
+      true ->
+        session_pid = socket.assigns.session_pid
+
+        # Process signal batches - normalize v1/v2 formats
+        processed_signals = process_signal_batches(batches)
+        Session.submit_signals(session_pid, client_id, processed_signals)
+
+        {:noreply, socket}
+    end
   end
 
   def handle_in("noop", %{"clientId" => client_id, "referenceSequenceNumber" => rsn}, socket) do
@@ -448,4 +479,93 @@ defmodule FluidServerWeb.DocumentChannel do
 
   defp format_connect_error(reason) when is_binary(reason), do: {400, reason}
   defp format_connect_error(reason), do: {400, inspect(reason)}
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Signal Processing Helpers
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  # Process signal batches, detecting and normalizing v1/v2 formats
+  defp process_signal_batches(batches) when is_list(batches) do
+    Enum.flat_map(batches, fn batch ->
+      case batch do
+        # Batch is a list of signals
+        signals when is_list(signals) ->
+          Enum.map(signals, &normalize_signal/1)
+
+        # Single signal (not in a list)
+        signal when is_map(signal) ->
+          [normalize_signal(signal)]
+
+        # JSON-stringified signal (v1 format)
+        signal when is_binary(signal) ->
+          case Jason.decode(signal) do
+            {:ok, decoded} -> [normalize_signal(decoded)]
+            {:error, _} -> []
+          end
+
+        _ ->
+          []
+      end
+    end)
+  end
+
+  defp process_signal_batches(_), do: []
+
+  # Normalize a signal to a consistent internal format
+  # Handles both v1 and v2 signal formats
+  defp normalize_signal(signal) when is_map(signal) do
+    # Detect format: v1 has "address" and "contents", v2 has "content" directly
+    is_v1 = Map.has_key?(signal, "address") or Map.has_key?(signal, "contents")
+
+    if is_v1 do
+      normalize_v1_signal(signal)
+    else
+      normalize_v2_signal(signal)
+    end
+  end
+
+  defp normalize_signal(signal) when is_binary(signal) do
+    # Try to parse JSON string (v1 format typically sends stringified envelopes)
+    case Jason.decode(signal) do
+      {:ok, decoded} -> normalize_signal(decoded)
+      {:error, _} -> %{"content" => signal, "type" => nil}
+    end
+  end
+
+  defp normalize_signal(_), do: %{"content" => nil, "type" => nil}
+
+  # Normalize v1 signal format to internal format
+  # V1: {address, contents: {type, content}, clientBroadcastSignalSequenceNumber}
+  defp normalize_v1_signal(signal) do
+    contents = signal["contents"] || %{}
+
+    %{
+      "content" => contents["content"],
+      "type" => contents["type"],
+      # V1 doesn't have targeting, so these are nil
+      "targetClientId" => nil,
+      "targetedClients" => nil,
+      "ignoredClients" => nil,
+      # Map v1 sequence number to connection number
+      "clientConnectionNumber" => signal["clientBroadcastSignalSequenceNumber"]
+    }
+  end
+
+  # Normalize v2 signal format (already in correct format, just ensure all fields)
+  defp normalize_v2_signal(signal) do
+    # Check if this is a clientBroadcastSignalEnvelope (wrapper with targeting)
+    # or a direct signal
+    inner_signal = signal["signal"] || signal
+
+    %{
+      "content" => inner_signal["content"],
+      "type" => inner_signal["type"],
+      "clientConnectionNumber" => inner_signal["clientConnectionNumber"],
+      "referenceSequenceNumber" => inner_signal["referenceSequenceNumber"],
+      "targetClientId" => inner_signal["targetClientId"],
+      # Targeting from envelope level
+      "targetedClients" => signal["targetedClients"],
+      "ignoredClients" => signal["ignoredClients"]
+    }
+  end
 end
