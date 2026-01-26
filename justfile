@@ -93,6 +93,19 @@ check-format-elixir:
     mix format --check-formatted
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Code Generation
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Generate JSON schema from Gleam protocol types
+generate-schema:
+    mix generate_schema
+
+# Generate schema and copy to TypeScript project
+generate-schema-ts: generate-schema
+    mkdir -p ../tools-monorepo/packages/levee-driver/schemas
+    cp priv/protocol-schema.json ../tools-monorepo/packages/levee-driver/schemas/
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Clean
 # ─────────────────────────────────────────────────────────────────────────────
 
