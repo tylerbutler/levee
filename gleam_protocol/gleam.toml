@@ -1,0 +1,10 @@
+name = "fluid_protocol"
+version = "0.1.0"
+target = "erlang"
+description = "Type-safe Fluid Framework protocol implementation"
+
+[dependencies]
+gleam_stdlib = "~> 0.39"
+
+[dev-dependencies]
+gleeunit = "~> 1.0"
