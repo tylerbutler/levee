@@ -1,6 +1,6 @@
 [tools]
-elixir = "latest"
-erlang = "latest"
-gleam = "latest"
+elixir = "1.18.4-otp-28"
+erlang = "28.3"
+gleam = "1.14.0"
 just = "latest"
-rebar = "latest"
+rebar = "3.26.0"
