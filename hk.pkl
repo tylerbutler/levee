@@ -12,11 +12,13 @@ local elixir_linters = new Mapping<String, Step> {
 
 // Full test suite (slower, for pre-push or manual checks)
 // Note: We run the full test suite, not per-file, because mix test
-// doesn't support running tests based on which source files changed
+// doesn't support running tests based on which source files changed.
+// check_first runs the test suite once if any .ex file changed (before per-file processing).
 local test_linters = new Mapping<String, Step> {
     ["mix_test"] {
         glob = "**/*.ex"
-        batch = true
+        exclude = List("deps/**/*")
+        check_first = true
         check = "mix test"
     }
 }
