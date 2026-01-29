@@ -2,10 +2,12 @@
 # Multi-stage build for minimal production image
 
 # Build stage
-FROM elixir:1.16-otp-26-alpine AS builder
+FROM elixir:1.18-otp-27-slim AS builder
 
 # Install build dependencies including Gleam
-RUN apk add --no-cache git build-base curl
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git build-essential curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Gleam (required for levee_protocol)
 ARG GLEAM_VERSION=1.9.1
@@ -47,10 +49,15 @@ RUN mix compile
 RUN mix release
 
 # Runtime stage
-FROM alpine:3.19 AS runtime
+FROM debian:bookworm-slim AS runtime
 
 # Install runtime dependencies
-RUN apk add --no-cache libstdc++ openssl ncurses-libs
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libstdc++6 openssl libncurses6 locales ca-certificates wget \
+    && rm -rf /var/lib/apt/lists/* \
+    && sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
+
+ENV LANG=en_US.UTF-8
 
 WORKDIR /app
 
