@@ -1,3 +1,9 @@
+---
+name: test-helper
+description: Diagnose and fix test failures in the Levee codebase
+tools: Read, Grep, Glob, Bash
+---
+
 # Test Helper Agent
 
 Specialized for diagnosing and fixing test failures in the Levee codebase.
