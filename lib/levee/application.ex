@@ -47,18 +47,22 @@ defmodule Levee.Application do
     priv_dir = :code.priv_dir(:levee) |> to_string()
     app_root = Path.join([priv_dir, ".."])
 
-    # Gleam build output paths
-    gleam_paths = [
-      Path.join([app_root, "levee_protocol", "build", "dev", "erlang", "levee_protocol", "ebin"]),
-      Path.join([app_root, "levee_protocol", "build", "dev", "erlang", "gleam_stdlib", "ebin"])
+    # Try multiple possible locations for Gleam build output:
+    # 1. Development: relative to app root (mix compile)
+    # 2. Release: in /app/levee_protocol (Docker)
+    base_paths = [
+      Path.join([app_root, "levee_protocol", "build", "dev", "erlang"]),
+      "/app/levee_protocol/build/dev/erlang"
     ]
 
-    Enum.each(gleam_paths, fn path ->
-      expanded = Path.expand(path)
+    gleam_modules = ["levee_protocol", "gleam_stdlib"]
 
-      if File.dir?(expanded) do
-        :code.add_patha(String.to_charlist(expanded))
+    for base <- base_paths, mod <- gleam_modules do
+      path = Path.join([base, mod, "ebin"]) |> Path.expand()
+
+      if File.dir?(path) do
+        :code.add_patha(String.to_charlist(path))
       end
-    end)
+    end
   end
 end
