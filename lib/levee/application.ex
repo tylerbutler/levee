@@ -64,5 +64,11 @@ defmodule Levee.Application do
         :code.add_patha(String.to_charlist(path))
       end
     end
+
+    # Explicitly load the levee_protocol module to ensure it's available
+    case :code.load_file(:levee_protocol) do
+      {:module, _} -> :ok
+      {:error, reason} -> IO.warn("Failed to load levee_protocol: #{inspect(reason)}")
+    end
   end
 end
