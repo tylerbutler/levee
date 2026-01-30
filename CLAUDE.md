@@ -5,10 +5,18 @@ Fluid Framework-compatible collaborative document service written in Elixir/Glea
 ## Quick Reference
 
 ```bash
+# Using just (preferred)
+just setup            # Install all dependencies
+just build            # Build Gleam + Elixir
+just test             # Run all tests
+just server           # Start dev server (localhost:4000)
+just iex              # Start with interactive shell
+
+# Using mix directly
 mix deps.get          # Install dependencies
 mix compile           # Compile project
 mix test              # Run tests
-mix phx.server        # Start dev server (localhost:4000)
+mix phx.server        # Start dev server
 iex -S mix phx.server # Start with interactive shell
 ```
 
@@ -91,6 +99,39 @@ Client → Phoenix Router → Auth Plug (JWT) → Controller/Channel → Session
 | `levee_web/channels/*_test.exs` | Channel tests |
 | `levee_web/plugs/*_test.exs` | Auth plug tests |
 
+## Common Workflows
+
+### Adding a New API Endpoint
+
+1. Add route to `lib/levee_web/router.ex` in appropriate pipeline
+2. Create/update controller in `lib/levee_web/controllers/`
+3. Add tests in `test/levee_web/controllers/`
+4. Run `just test-elixir` to verify
+
+### Modifying Gleam Protocol
+
+1. Edit files in `levee_protocol/src/`
+2. Run `just build-gleam` to compile
+3. Update `lib/levee/protocol/bridge.ex` if Elixir interop changes
+4. Run `just test` to verify both Gleam and Elixir tests
+
+### Running Specific Tests
+
+```bash
+mix test test/levee/documents/session_test.exs       # Single file
+mix test test/levee/documents/session_test.exs:42    # Specific line
+mix test --only wip                                   # Tagged tests
+mix test test/levee_web/                              # Directory
+mix test --trace                                      # Verbose output
+```
+
+### Pre-Commit Checks
+
+Before committing, run:
+```bash
+just check-format && just test
+```
+
 ## Key Concepts
 
 ### Tenant System
@@ -134,6 +175,15 @@ JWT.generate_read_only_token(tenant_id, document_id, user_id)
 JWT.generate_full_access_token(tenant_id, document_id, user_id)
 ```
 
+### Authorization Scopes
+
+| Scope | Grants Access To |
+|-------|-----------------|
+| `doc:read` | Read document, subscribe to ops, get deltas |
+| `doc:write` | Submit operations (`submitOp`) |
+| `summary:read` | Read blobs, trees, commits, refs |
+| `summary:write` | Write blobs, trees, commits, update refs |
+
 ### Storage Keys
 
 All storage uses composite keys for tenant isolation:
@@ -154,6 +204,23 @@ Session.start_or_get(tenant_id, document_id)
 # - Connected clients
 # - Recent operations (for catch-up)
 ```
+
+### Document Session Lifecycle
+
+```
+                  ┌─────────────────────────────────────┐
+                  │                                     │
+                  ▼                                     │
+[Not Started] ──► [Initializing] ──► [Active] ──► [Idle/Timeout]
+                  │                     │              │
+                  │                     ▼              │
+                  │               [Processing Op]      │
+                  │                     │              │
+                  │                     ▼              │
+                  └─────────────── [Shutdown] ◄────────┘
+```
+
+Key state tracked: `%{seq_num: int, clients: MapSet, recent_ops: list}`
 
 ## API Routes
 
@@ -183,9 +250,98 @@ WS     /socket/websocket                  Real-time channel
        Topic: "document:{tenant_id}:{document_id}"
 ```
 
+### Route Pipelines
+
+| Pipeline | Auth Level | Use For |
+|----------|-----------|---------|
+| `:api` | None | Public endpoints (health check) |
+| `:authenticated` | Valid JWT | Basic auth, tenant validated |
+| `:read_access` | JWT + `doc:read` | Read document data |
+| `:write_access` | JWT + `doc:write` | Mutate document data |
+| `:summary_access` | JWT + `summary:read` | Read git-like storage |
+| `:summary_write_access` | JWT + `summary:write` | Write git-like storage |
+
+## Error Handling Patterns
+
+### Controller Errors
+
+Use `:error` tuples with appropriate status codes:
+```elixir
+case result do
+  {:ok, data} ->
+    json(conn, data)
+  {:error, :not_found} ->
+    conn |> put_status(:not_found) |> json(%{error: "not_found"})
+  {:error, :unauthorized} ->
+    conn |> put_status(:forbidden) |> json(%{error: "forbidden"})
+  {:error, :invalid_request} ->
+    conn |> put_status(:bad_request) |> json(%{error: "invalid_request"})
+end
+```
+
+### Common Status Codes
+
+| Status | When to Use |
+|--------|-------------|
+| 200 | Success with body |
+| 201 | Resource created |
+| 204 | Success, no body |
+| 400 | Invalid request data |
+| 401 | Missing/invalid authentication |
+| 403 | Valid auth but insufficient permissions |
+| 404 | Resource not found |
+| 409 | Conflict (e.g., ref update race) |
+
+## Gleam/Elixir Interoperability
+
+### Module Naming
+
+Gleam modules compile to BEAM and are called via atoms:
+
+| Gleam File | Erlang/Elixir Module |
+|------------|---------------------|
+| `levee_protocol.gleam` | `:levee_protocol` |
+| `sequencing.gleam` | `:levee_protocol@sequencing` |
+| `message.gleam` | `:levee_protocol@message` |
+
+### Type Conversions
+
+| Gleam | Elixir |
+|-------|--------|
+| `String` | binary `""` |
+| `Int` | integer |
+| `Float` | float |
+| `Bool` | `true`/`false` |
+| `List(a)` | list `[]` |
+| `Dict(k, v)` | map `%{}` |
+| `Option(a)` | `nil` or value |
+| `Result(ok, err)` | `{:ok, val}` or `{:error, val}` |
+
+### Calling Gleam from Elixir
+
+```elixir
+# Direct call
+result = :levee_protocol.validate_message(msg)
+
+# Pattern match on Result
+case :levee_protocol@sequencing.assign_sequence(state, msg) do
+  {:ok, {new_state, sequenced_msg}} -> # success
+  {:error, :invalid_ref_seq} -> # specific error
+  {:error, reason} -> # other errors
+end
+```
+
+### Rebuilding After Gleam Changes
+
+```bash
+just build-gleam      # or: cd levee_protocol && gleam build --target erlang
+mix compile --force   # Reload BEAM modules
+```
+
 ## Testing Patterns
 
-Standard test setup:
+### Standard Test Setup
+
 ```elixir
 @tenant_id "test-tenant"
 @document_id "test-doc"
@@ -194,6 +350,32 @@ setup do
   TenantSecrets.register_tenant(@tenant_id, "test-secret-key")
   on_exit(fn -> TenantSecrets.unregister_tenant(@tenant_id) end)
   :ok
+end
+```
+
+### HTTP Tests (ConnCase)
+
+```elixir
+test "returns document with valid token", %{conn: conn} do
+  token = JWT.generate_test_token(@tenant_id, @document_id, "user-1")
+
+  conn =
+    conn
+    |> put_req_header("authorization", "Bearer #{token}")
+    |> get("/documents/#{@tenant_id}/#{@document_id}")
+
+  assert json_response(conn, 200)
+end
+```
+
+### Channel Tests (ChannelCase)
+
+```elixir
+test "connect_document with valid token", %{socket: socket} do
+  token = JWT.generate_test_token(@tenant_id, @document_id, "user-1")
+
+  ref = push(socket, "connect_document", %{"token" => token})
+  assert_reply ref, :ok, %{"clientId" => _}
 end
 ```
 
@@ -206,3 +388,21 @@ end
 | `SECRET_KEY_BASE` | Phoenix secret (production) |
 | `PHX_HOST` | Host for production |
 | `PORT` | HTTP port (default: 4000) |
+
+## Claude Code Integration
+
+### Available Agents
+
+| Agent | Purpose |
+|-------|---------|
+| `security-reviewer` | Security audit for auth, scopes, tenant isolation |
+| `test-helper` | Diagnose and fix test failures |
+| `gleam-bridge` | Gleam ↔ Elixir interoperability issues |
+
+### Available Skills
+
+| Skill | Purpose |
+|-------|---------|
+| `api-doc` | Generate OpenAPI documentation from router |
+| `new-endpoint` | Guide for adding new REST endpoints |
+| `debug-channel` | Debug WebSocket channel issues |
