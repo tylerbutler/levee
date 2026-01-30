@@ -65,10 +65,10 @@ defmodule Levee.Application do
       end
     end
 
-    # Explicitly load all levee_protocol modules to ensure they're available
-    # Gleam creates separate BEAM files for each submodule (e.g., levee_protocol@sequencing)
-    for base <- base_paths do
-      ebin_path = Path.join([base, "levee_protocol", "ebin"]) |> Path.expand()
+    # Explicitly load all Gleam modules to ensure they're available
+    # Gleam creates separate BEAM files for each submodule (e.g., levee_protocol@sequencing, gleam@dict)
+    for base <- base_paths, mod <- gleam_modules do
+      ebin_path = Path.join([base, mod, "ebin"]) |> Path.expand()
 
       if File.dir?(ebin_path) do
         ebin_path
