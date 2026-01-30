@@ -1,3 +1,9 @@
+---
+name: security-reviewer
+description: Review authentication, authorization, and security-sensitive code for vulnerabilities
+tools: Read, Grep, Glob
+---
+
 # Security Reviewer
 
 Specialized agent for reviewing authentication, authorization, and security-sensitive code in the Levee codebase.
