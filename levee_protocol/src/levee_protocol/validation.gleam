@@ -1,7 +1,6 @@
 /// Message validation for Fluid Framework protocol
 ///
 /// Validates incoming messages against protocol requirements
-
 import gleam/int
 import gleam/list
 import gleam/result
@@ -50,7 +49,8 @@ pub fn validate_message_size(
 pub fn validate_write_mode(mode: ConnectionMode) -> ValidationResult(Nil) {
   case mode {
     WriteMode -> Ok(Nil)
-    ReadMode -> Error(OperationNotAllowed(mode: ReadMode, operation: "submitOp"))
+    ReadMode ->
+      Error(OperationNotAllowed(mode: ReadMode, operation: "submitOp"))
   }
 }
 
@@ -106,10 +106,7 @@ pub fn validate_token_claims(
 }
 
 /// Validate client sequence number
-pub fn validate_csn(
-  received_csn: Int,
-  last_csn: Int,
-) -> ValidationResult(Nil) {
+pub fn validate_csn(received_csn: Int, last_csn: Int) -> ValidationResult(Nil) {
   case received_csn > last_csn {
     True -> Ok(Nil)
     False ->
@@ -121,10 +118,7 @@ pub fn validate_csn(
 }
 
 /// Validate reference sequence number
-pub fn validate_rsn(
-  received_rsn: Int,
-  current_sn: Int,
-) -> ValidationResult(Nil) {
+pub fn validate_rsn(received_rsn: Int, current_sn: Int) -> ValidationResult(Nil) {
   case received_rsn <= current_sn {
     True -> Ok(Nil)
     False ->

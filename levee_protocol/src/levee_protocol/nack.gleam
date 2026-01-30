@@ -1,7 +1,6 @@
 /// Nack (Negative Acknowledgment) types for Fluid Framework protocol
 ///
 /// Nacks are sent when operations or signals are rejected by the server
-
 import gleam/int
 import gleam/option.{type Option}
 
@@ -81,7 +80,10 @@ pub fn bad_request(message: String, op: Option(DocumentMessage)) -> Nack {
 }
 
 /// Create a nack for missing required scope
-pub fn invalid_scope(required_scope: String, op: Option(DocumentMessage)) -> Nack {
+pub fn invalid_scope(
+  required_scope: String,
+  op: Option(DocumentMessage),
+) -> Nack {
   Nack(
     operation: op,
     sequence_number: -1,

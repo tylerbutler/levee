@@ -3,6 +3,7 @@
 //// This module provides the main API for the Elixir interop layer.
 //// All core types and functions are re-exported here.
 
+import gleam/option
 import levee_protocol/jwt
 import levee_protocol/message
 import levee_protocol/nack
@@ -10,7 +11,6 @@ import levee_protocol/sequencing
 import levee_protocol/summary
 import levee_protocol/types
 import levee_protocol/validation
-import gleam/option
 
 // Expose types module
 pub type ConnectionMode =
@@ -348,7 +348,12 @@ pub fn jwt_validate_connection_claims(
   document_id: String,
   current_time_seconds: Int,
 ) -> Result(Nil, JwtValidationError) {
-  jwt.validate_connection_claims(claims, tenant_id, document_id, current_time_seconds)
+  jwt.validate_connection_claims(
+    claims,
+    tenant_id,
+    document_id,
+    current_time_seconds,
+  )
 }
 
 /// Validate claims for read access
@@ -368,7 +373,12 @@ pub fn jwt_validate_write_access(
   document_id: String,
   current_time_seconds: Int,
 ) -> Result(Nil, JwtValidationError) {
-  jwt.validate_write_access(claims, tenant_id, document_id, current_time_seconds)
+  jwt.validate_write_access(
+    claims,
+    tenant_id,
+    document_id,
+    current_time_seconds,
+  )
 }
 
 /// Validate claims for summary write access
@@ -378,7 +388,12 @@ pub fn jwt_validate_summary_access(
   document_id: String,
   current_time_seconds: Int,
 ) -> Result(Nil, JwtValidationError) {
-  jwt.validate_summary_access(claims, tenant_id, document_id, current_time_seconds)
+  jwt.validate_summary_access(
+    claims,
+    tenant_id,
+    document_id,
+    current_time_seconds,
+  )
 }
 
 /// Format JWT validation error as human-readable message
@@ -401,7 +416,9 @@ pub fn empty_summary_tree() -> SummaryTree {
 }
 
 /// Create a summary tree with entries
-pub fn new_summary_tree(entries: List(#(String, summary.SummaryObject))) -> SummaryTree {
+pub fn new_summary_tree(
+  entries: List(#(String, summary.SummaryObject)),
+) -> SummaryTree {
   summary.new_summary_tree(entries)
 }
 
@@ -437,7 +454,10 @@ pub fn create_summary_nack(
 }
 
 /// Create a SummaryContext for document open response
-pub fn create_summary_context(handle: String, sequence_number: Int) -> SummaryContext {
+pub fn create_summary_context(
+  handle: String,
+  sequence_number: Int,
+) -> SummaryContext {
   summary.create_summary_context(handle, sequence_number)
 }
 
@@ -479,7 +499,10 @@ pub fn summary_blob(content: String) -> summary.SummaryObject {
   summary.SummaryBlob(content)
 }
 
-pub fn summary_handle(handle: String, handle_type: SummaryType) -> summary.SummaryObject {
+pub fn summary_handle(
+  handle: String,
+  handle_type: SummaryType,
+) -> summary.SummaryObject {
   summary.SummaryHandle(handle, handle_type)
 }
 

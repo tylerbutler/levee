@@ -1,11 +1,11 @@
-import levee_protocol
-import levee_protocol/jwt
-import levee_protocol/sequencing
-import levee_protocol/types
 import gleam/dict
 import gleam/option
 import gleeunit
 import gleeunit/should
+import levee_protocol
+import levee_protocol/jwt
+import levee_protocol/sequencing
+import levee_protocol/types
 
 pub fn main() -> Nil {
   gleeunit.main()
@@ -238,7 +238,8 @@ pub fn jwt_validate_document_mismatch_test() {
 
 // Test scope validation
 pub fn jwt_validate_scope_present_test() {
-  let claims = make_test_claims("tenant", "doc", ["doc:read", "doc:write"], 2000)
+  let claims =
+    make_test_claims("tenant", "doc", ["doc:read", "doc:write"], 2000)
 
   jwt.validate_scope(claims, "doc:read")
   |> should.be_ok()
@@ -261,7 +262,8 @@ pub fn jwt_validate_scope_missing_test() {
 
 // Test has_scope helpers
 pub fn jwt_has_scope_test() {
-  let claims = make_test_claims("tenant", "doc", ["doc:read", "doc:write"], 2000)
+  let claims =
+    make_test_claims("tenant", "doc", ["doc:read", "doc:write"], 2000)
 
   jwt.has_scope(claims, "doc:read") |> should.be_true()
   jwt.has_scope(claims, "doc:write") |> should.be_true()
@@ -341,7 +343,8 @@ pub fn jwt_validate_read_access_missing_scope_test() {
 }
 
 pub fn jwt_validate_write_access_test() {
-  let claims = make_test_claims("tenant", "doc", ["doc:read", "doc:write"], 2000)
+  let claims =
+    make_test_claims("tenant", "doc", ["doc:read", "doc:write"], 2000)
 
   jwt.validate_write_access(claims, "tenant", "doc", 1500)
   |> should.be_ok()

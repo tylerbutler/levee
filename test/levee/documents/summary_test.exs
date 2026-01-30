@@ -63,7 +63,9 @@ defmodule Levee.Documents.SummaryTest do
       assert summary_ack != nil
       assert summary_ack["type"] == "summaryAck"
       assert summary_ack["contents"]["handle"] == summary_handle
-      assert summary_ack["contents"]["summaryProposal"]["summarySequenceNumber"] == summarize["sequenceNumber"]
+
+      assert summary_ack["contents"]["summaryProposal"]["summarySequenceNumber"] ==
+               summarize["sequenceNumber"]
     end
 
     test "includes summary context on reconnection", %{session: session, document_id: document_id} do
@@ -113,9 +115,10 @@ defmodule Levee.Documents.SummaryTest do
         "clientSequenceNumber" => 1,
         "referenceSequenceNumber" => 0,
         "type" => "summarize",
-        "contents" => %{
-          # Missing "handle", "message", "parents", "head"
-        }
+        "contents" =>
+          %{
+            # Missing "handle", "message", "parents", "head"
+          }
       }
 
       {:error, nacks} = Session.submit_ops(session, client_id, [[invalid_summarize_op]])
@@ -154,7 +157,10 @@ defmodule Levee.Documents.SummaryTest do
       assert stored_summary.message == "Persisted summary"
     end
 
-    test "get_summary_context returns latest summary", %{session: session, document_id: document_id} do
+    test "get_summary_context returns latest summary", %{
+      session: session,
+      document_id: document_id
+    } do
       connect_msg = build_connect_message(document_id)
       {:ok, client_id, _} = Session.client_join(session, connect_msg)
       flush_messages()

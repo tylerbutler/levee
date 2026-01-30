@@ -32,7 +32,11 @@ defmodule LeveeWeb.DocumentChannelTest do
   end
 
   describe "connect_document" do
-    test "successfully connects to document session", %{socket: socket, document_id: document_id, token: token} do
+    test "successfully connects to document session", %{
+      socket: socket,
+      document_id: document_id,
+      token: token
+    } do
       connect_msg = %{
         "tenantId" => @tenant_id,
         "id" => document_id,
@@ -91,7 +95,11 @@ defmodule LeveeWeb.DocumentChannelTest do
       assert response["message"] =~ "Missing authentication token"
     end
 
-    test "returns error for tenant/document mismatch", %{socket: socket, document_id: document_id, token: token} do
+    test "returns error for tenant/document mismatch", %{
+      socket: socket,
+      document_id: document_id,
+      token: token
+    } do
       connect_msg = %{
         "tenantId" => "wrong-tenant",
         "id" => document_id,
@@ -217,7 +225,12 @@ defmodule LeveeWeb.DocumentChannelTest do
       {:ok, client_id: client_id}
     end
 
-    test "relays v1 signals to other clients", %{socket: socket, client_id: client_id, topic: topic, document_id: document_id} do
+    test "relays v1 signals to other clients", %{
+      socket: socket,
+      client_id: client_id,
+      topic: topic,
+      document_id: document_id
+    } do
       # Generate token for second user
       {:ok, token2} = JWT.generate_test_token(@tenant_id, document_id, "test-user-2")
 
@@ -260,7 +273,12 @@ defmodule LeveeWeb.DocumentChannelTest do
       :timer.sleep(50)
     end
 
-    test "relays v2 signals with targetedClients", %{socket: socket, client_id: client_id, topic: topic, document_id: document_id} do
+    test "relays v2 signals with targetedClients", %{
+      socket: socket,
+      client_id: client_id,
+      topic: topic,
+      document_id: document_id
+    } do
       # Generate token for second user
       {:ok, token2} = JWT.generate_test_token(@tenant_id, document_id, "test-user-2")
 
@@ -306,7 +324,12 @@ defmodule LeveeWeb.DocumentChannelTest do
       :timer.sleep(50)
     end
 
-    test "relays v2 signals with ignoredClients", %{socket: socket, client_id: client_id, topic: topic, document_id: document_id} do
+    test "relays v2 signals with ignoredClients", %{
+      socket: socket,
+      client_id: client_id,
+      topic: topic,
+      document_id: document_id
+    } do
       # Generate token for second user
       {:ok, token2} = JWT.generate_test_token(@tenant_id, document_id, "test-user-2")
 
@@ -349,7 +372,12 @@ defmodule LeveeWeb.DocumentChannelTest do
       :timer.sleep(50)
     end
 
-    test "handles batch signals", %{socket: socket, client_id: client_id, topic: topic, document_id: document_id} do
+    test "handles batch signals", %{
+      socket: socket,
+      client_id: client_id,
+      topic: topic,
+      document_id: document_id
+    } do
       # Generate token for second user
       {:ok, token2} = JWT.generate_test_token(@tenant_id, document_id, "test-user-2")
 
