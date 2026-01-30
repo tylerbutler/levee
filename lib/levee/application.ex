@@ -65,10 +65,21 @@ defmodule Levee.Application do
       end
     end
 
-    # Explicitly load the levee_protocol module to ensure it's available
-    case :code.load_file(:levee_protocol) do
-      {:module, _} -> :ok
-      {:error, reason} -> IO.warn("Failed to load levee_protocol: #{inspect(reason)}")
+    # Explicitly load all levee_protocol modules to ensure they're available
+    # Gleam creates separate BEAM files for each submodule (e.g., levee_protocol@sequencing)
+    for base <- base_paths do
+      ebin_path = Path.join([base, "levee_protocol", "ebin"]) |> Path.expand()
+
+      if File.dir?(ebin_path) do
+        ebin_path
+        |> File.ls!()
+        |> Enum.filter(&String.ends_with?(&1, ".beam"))
+        |> Enum.map(&String.trim_trailing(&1, ".beam"))
+        |> Enum.each(fn module_name ->
+          module_atom = String.to_atom(module_name)
+          :code.load_file(module_atom)
+        end)
+      end
     end
   end
 end
