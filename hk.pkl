@@ -33,6 +33,7 @@ hooks {
     // Pre-commit: format and compile checks (fast, blocks commit on failure)
     ["pre-commit"] {
         fix = true    // auto-fix formatting issues
+        stage = true  // auto-stage fixed files
         stash = "git" // stash unstaged changes while running fixes
         steps {
             ...elixir_linters
