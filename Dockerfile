@@ -64,6 +64,10 @@ WORKDIR /app
 # Copy the release from builder
 COPY --from=builder /build/_build/prod/rel/levee ./
 
+# Copy Gleam compiled modules (required at runtime)
+COPY --from=builder /build/levee_protocol/build/dev/erlang/levee_protocol/ebin ./levee_protocol/build/dev/erlang/levee_protocol/ebin
+COPY --from=builder /build/levee_protocol/build/dev/erlang/gleam_stdlib/ebin ./levee_protocol/build/dev/erlang/gleam_stdlib/ebin
+
 # Set runtime environment
 ENV MIX_ENV=prod
 ENV PHX_SERVER=true
