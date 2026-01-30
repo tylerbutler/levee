@@ -31,7 +31,24 @@ defmodule Levee.Application do
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Levee.Supervisor]
-    Supervisor.start_link(children, opts)
+    result = Supervisor.start_link(children, opts)
+
+    # Register dev tenant in dev/test environments
+    case result do
+      {:ok, _pid} ->
+        register_dev_tenants()
+
+      _ ->
+        :ok
+    end
+
+    result
+  end
+
+  defp register_dev_tenants do
+    if Application.get_env(:levee, :env) in [:dev, :test] do
+      Levee.Auth.TenantSecrets.register_dev_tenant("dev-tenant")
+    end
   end
 
   # Tell Phoenix to update the endpoint configuration
