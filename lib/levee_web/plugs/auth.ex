@@ -107,7 +107,8 @@ defmodule LeveeWeb.Plugs.Auth do
   @spec validate_claims(JWT.token_claims(), Plug.Conn.t(), map()) :: :ok | {:error, term()}
   def validate_claims(claims, conn, opts) do
     with :ok <- validate_expiration(claims),
-         :ok <- validate_tenant(claims, conn, opts),
+         {:ok, tenant_id} <- get_tenant_id(conn, opts),
+         :ok <- validate_tenant(claims, tenant_id),
          :ok <- validate_document(claims, conn, opts),
          :ok <- validate_scopes(claims, opts) do
       :ok
@@ -133,17 +134,11 @@ defmodule LeveeWeb.Plugs.Auth do
     end
   end
 
-  defp validate_tenant(claims, conn, opts) do
-    case get_tenant_id(conn, opts) do
-      {:ok, tenant_id} ->
-        if claims.tenantId == tenant_id do
-          :ok
-        else
-          {:error, {:tenant_mismatch, claims.tenantId, tenant_id}}
-        end
-
-      {:error, _} = err ->
-        err
+  defp validate_tenant(claims, tenant_id) do
+    if claims.tenantId == tenant_id do
+      :ok
+    else
+      {:error, {:tenant_mismatch, claims.tenantId, tenant_id}}
     end
   end
 
@@ -212,17 +207,13 @@ defmodule LeveeWeb.Plugs.Auth do
   end
 
   defp error_response({:tenant_mismatch, token_tenant, request_tenant}) do
-    Logger.warning(
-      "Tenant mismatch: token=#{token_tenant}, request=#{request_tenant}"
-    )
+    Logger.warning("Tenant mismatch: token=#{token_tenant}, request=#{request_tenant}")
 
     {403, "Token not valid for this tenant"}
   end
 
   defp error_response({:document_mismatch, token_doc, request_doc}) do
-    Logger.warning(
-      "Document mismatch: token=#{token_doc}, request=#{request_doc}"
-    )
+    Logger.warning("Document mismatch: token=#{token_doc}, request=#{request_doc}")
 
     {403, "Token not valid for this document"}
   end

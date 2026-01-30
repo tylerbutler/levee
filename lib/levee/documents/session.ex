@@ -339,17 +339,15 @@ defmodule Levee.Documents.Session do
   def handle_cast({:update_client_rsn, client_id, rsn}, state) do
     case Bridge.update_client_rsn(state.sequence_state, client_id, rsn) do
       {:ok, new_sequence_state} ->
-        # Also update client's last_seen_sn
         new_clients =
-          Map.update(state.clients, client_id, nil, fn client_info ->
-            if client_info, do: %{client_info | last_seen_sn: rsn}, else: nil
-          end)
-          |> Map.reject(fn {_k, v} -> is_nil(v) end)
+          case Map.get(state.clients, client_id) do
+            nil -> state.clients
+            client_info -> Map.put(state.clients, client_id, %{client_info | last_seen_sn: rsn})
+          end
 
         {:noreply, %{state | sequence_state: new_sequence_state, clients: new_clients}}
 
       {:error, _reason} ->
-        # Client not found or invalid RSN - ignore silently
         {:noreply, state}
     end
   end
@@ -583,49 +581,27 @@ defmodule Levee.Documents.Session do
        ) do
     contents = op["contents"] || %{}
 
-    # Validate required fields in summarize op
     case validate_summarize_contents(contents) do
       :ok ->
-        # Store pending summary
-        pending_summary = %{
-          client_id: client_id,
-          contents: contents,
-          timestamp: System.system_time(:millisecond)
-        }
-
-        new_pending = Map.put(acc_state.pending_summaries, assigned_sn, pending_summary)
-
-        # Process and store the summary
         {:ok, summary_handle} =
           store_summary(acc_state.tenant_id, acc_state.document_id, contents, assigned_sn)
 
-        # Summary stored successfully, generate summaryAck
         summary_ack = build_summary_ack(summary_handle, assigned_sn, msn)
-
-        # Also generate the sequenced summarize op for the log
         sequenced_summarize = build_sequenced_op(op, client_id, assigned_sn, msn)
-        updated_history = add_to_history(sequenced_summarize, acc_state.op_history)
-        updated_history = add_to_history(summary_ack, updated_history)
 
-        # Update latest summary
-        new_latest_summary = %{
-          handle: summary_handle,
-          sequence_number: assigned_sn
-        }
+        updated_history =
+          add_to_history(summary_ack, add_to_history(sequenced_summarize, acc_state.op_history))
 
         new_state = %{
           acc_state
           | sequence_state: new_seq_state,
             op_history: updated_history,
-            pending_summaries: Map.delete(new_pending, assigned_sn),
-            latest_summary: new_latest_summary
+            latest_summary: %{handle: summary_handle, sequence_number: assigned_sn}
         }
 
-        # Return both the sequenced summarize op and the summaryAck
         {[summary_ack, sequenced_summarize | acc_ops], acc_nacks, new_state}
 
       {:error, reason} ->
-        # Invalid summarize op contents
         nack = build_nack(op, {:invalid_summarize, reason})
         {acc_ops, [nack | acc_nacks], acc_state}
     end
@@ -633,12 +609,11 @@ defmodule Levee.Documents.Session do
 
   defp validate_summarize_contents(contents) do
     required_fields = ["handle", "message", "parents", "head"]
-    missing = Enum.filter(required_fields, fn field -> not Map.has_key?(contents, field) end)
+    missing = Enum.reject(required_fields, &Map.has_key?(contents, &1))
 
-    if Enum.empty?(missing) do
-      :ok
-    else
-      {:error, "missing fields: #{Enum.join(missing, ", ")}"}
+    case missing do
+      [] -> :ok
+      _ -> {:error, "missing fields: #{Enum.join(missing, ", ")}"}
     end
   end
 

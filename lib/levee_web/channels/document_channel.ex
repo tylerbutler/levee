@@ -61,7 +61,8 @@ defmodule LeveeWeb.DocumentChannel do
       last_seen_sn = connect_msg["lastSeenSequenceNumber"]
 
       # Update connected_response with actual validated claims
-      connected_response = Map.put(connected_response, "claims", format_claims_for_response(claims))
+      connected_response =
+        Map.put(connected_response, "claims", format_claims_for_response(claims))
 
       # Update socket with client info and claims
       socket =
@@ -87,6 +88,7 @@ defmodule LeveeWeb.DocumentChannel do
     else
       {:error, reason} ->
         {code, message} = format_connect_error(reason)
+
         error_response = %{
           "code" => code,
           "message" => message
@@ -104,7 +106,13 @@ defmodule LeveeWeb.DocumentChannel do
         {:noreply, socket}
 
       socket.assigns.client_id != client_id ->
-        push_nack(socket, 400, "BadRequestError", "Client ID mismatch: expected #{socket.assigns.client_id}, got #{client_id}")
+        push_nack(
+          socket,
+          400,
+          "BadRequestError",
+          "Client ID mismatch: expected #{socket.assigns.client_id}, got #{client_id}"
+        )
+
         {:noreply, socket}
 
       socket.assigns.mode == "read" ->
@@ -120,7 +128,13 @@ defmodule LeveeWeb.DocumentChannel do
         total_ops = batches |> List.flatten() |> length()
 
         if total_ops > @max_batch_size do
-          push_nack(socket, 400, "BadRequestError", "Batch size #{total_ops} exceeds maximum #{@max_batch_size}")
+          push_nack(
+            socket,
+            400,
+            "BadRequestError",
+            "Batch size #{total_ops} exceeds maximum #{@max_batch_size}"
+          )
+
           {:noreply, socket}
         else
           session_pid = socket.assigns.session_pid
@@ -139,7 +153,13 @@ defmodule LeveeWeb.DocumentChannel do
 
   def handle_in("submitOp", _payload, socket) do
     # Malformed submitOp - missing required fields
-    push_nack(socket, 400, "BadRequestError", "Malformed submitOp: missing clientId or messageBatches")
+    push_nack(
+      socket,
+      400,
+      "BadRequestError",
+      "Malformed submitOp: missing clientId or messageBatches"
+    )
+
     {:noreply, socket}
   end
 
@@ -171,7 +191,10 @@ defmodule LeveeWeb.DocumentChannel do
         {:noreply, socket}
 
       socket.assigns.client_id != client_id ->
-        Logger.warning("Signal client ID mismatch: expected #{socket.assigns.client_id}, got #{client_id}")
+        Logger.warning(
+          "Signal client ID mismatch: expected #{socket.assigns.client_id}, got #{client_id}"
+        )
+
         {:noreply, socket}
 
       true ->
@@ -231,9 +254,10 @@ defmodule LeveeWeb.DocumentChannel do
     # Check if any ops are summary ack/nack and push them as separate events
     ops = op_message["op"] || []
 
-    {summary_events, regular_ops} = Enum.split_with(ops, fn op ->
-      op["type"] in ["summaryAck", "summaryNack"]
-    end)
+    {summary_events, regular_ops} =
+      Enum.split_with(ops, fn op ->
+        op["type"] in ["summaryAck", "summaryNack"]
+      end)
 
     # Push summary events individually
     Enum.each(summary_events, fn event ->
@@ -327,13 +351,10 @@ defmodule LeveeWeb.DocumentChannel do
   end
 
   defp get_or_create_session(socket) do
-    tenant_id = socket.assigns.tenant_id
-    document_id = socket.assigns.document_id
-
-    case Levee.Documents.Registry.get_or_create_session(tenant_id, document_id) do
-      {:ok, pid} -> {:ok, pid}
-      {:error, reason} -> {:error, reason}
-    end
+    Levee.Documents.Registry.get_or_create_session(
+      socket.assigns.tenant_id,
+      socket.assigns.document_id
+    )
   end
 
   # JWT validation
@@ -343,68 +364,49 @@ defmodule LeveeWeb.DocumentChannel do
     tenant_id = socket.assigns.tenant_id
     document_id = socket.assigns.document_id
 
+    if is_nil(token) or token == "" do
+      {:error, :missing_token}
+    else
+      with {:ok, claims} <- verify_and_wrap_error(token, tenant_id),
+           :ok <- validate_claims_for_connection(claims, tenant_id, document_id) do
+        {:ok, claims}
+      end
+    end
+  end
+
+  defp verify_and_wrap_error(token, tenant_id) do
+    case JWT.verify(token, tenant_id) do
+      {:ok, claims} -> {:ok, claims}
+      {:error, reason} -> {:error, {:token_invalid, reason}}
+    end
+  end
+
+  defp validate_claims_for_connection(claims, tenant_id, document_id) do
     cond do
-      is_nil(token) or token == "" ->
-        {:error, :missing_token}
+      JWT.expired?(claims) ->
+        {:error, :token_expired}
+
+      claims.tenantId != tenant_id ->
+        {:error, {:tenant_mismatch, claims.tenantId, tenant_id}}
+
+      claims.documentId != document_id ->
+        {:error, {:document_mismatch, claims.documentId, document_id}}
+
+      not JWT.has_read_scope?(claims) ->
+        {:error, :missing_read_scope}
 
       true ->
-        case JWT.verify(token, tenant_id) do
-          {:ok, claims} ->
-            # Validate claims match request
-            with :ok <- validate_token_expiration(claims),
-                 :ok <- validate_token_tenant(claims, tenant_id),
-                 :ok <- validate_token_document(claims, document_id),
-                 :ok <- validate_token_read_scope(claims) do
-              {:ok, claims}
-            end
-
-          {:error, reason} ->
-            {:error, {:token_invalid, reason}}
-        end
-    end
-  end
-
-  defp validate_token_expiration(claims) do
-    if JWT.expired?(claims) do
-      {:error, :token_expired}
-    else
-      :ok
-    end
-  end
-
-  defp validate_token_tenant(claims, tenant_id) do
-    if claims.tenantId == tenant_id do
-      :ok
-    else
-      {:error, {:tenant_mismatch, claims.tenantId, tenant_id}}
-    end
-  end
-
-  defp validate_token_document(claims, document_id) do
-    if claims.documentId == document_id do
-      :ok
-    else
-      {:error, {:document_mismatch, claims.documentId, document_id}}
-    end
-  end
-
-  defp validate_token_read_scope(claims) do
-    if JWT.has_read_scope?(claims) do
-      :ok
-    else
-      {:error, :missing_read_scope}
+        :ok
     end
   end
 
   defp validate_connection_mode(connect_msg, claims) do
     mode = connect_msg["mode"] || "write"
 
-    cond do
-      mode == "write" and not JWT.has_write_scope?(claims) ->
-        {:error, :write_mode_without_write_scope}
-
-      true ->
-        :ok
+    if mode == "write" and not JWT.has_write_scope?(claims) do
+      {:error, :write_mode_without_write_scope}
+    else
+      :ok
     end
   end
 
@@ -418,15 +420,17 @@ defmodule LeveeWeb.DocumentChannel do
   defp push_nack(socket, code, type, message) do
     push(socket, "nack", %{
       "clientId" => "",
-      "nacks" => [%{
-        "operation" => nil,
-        "sequenceNumber" => -1,
-        "content" => %{
-          "code" => code,
-          "type" => type,
-          "message" => message
+      "nacks" => [
+        %{
+          "operation" => nil,
+          "sequenceNumber" => -1,
+          "content" => %{
+            "code" => code,
+            "type" => type,
+            "message" => message
+          }
         }
-      }]
+      ]
     })
   end
 

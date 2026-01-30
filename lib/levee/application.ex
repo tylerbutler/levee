@@ -22,8 +22,6 @@ defmodule Levee.Application do
       Levee.Auth.TenantSecrets,
       # DynamicSupervisor for document sessions
       Levee.Documents.Supervisor,
-      # Registry manager
-      Levee.Documents.Registry,
       # Start to serve requests, typically the last entry
       LeveeWeb.Endpoint
     ]
