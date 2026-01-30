@@ -21,6 +21,21 @@
 ////   channel.JoinOk(reply: None, socket: socket.set_assigns(socket, assigns))
 //// }
 //// ```
+////   ChatAssigns(username: String, room: String)
+//// }
+////
+//// pub type ChatInfo {
+////   UserJoined(username: String)
+////   UserLeft(username: String)
+//// }
+////
+//// pub fn new() -> Channel(ChatAssigns, ChatInfo) {
+////   channel.new(join)
+////   |> channel.with_handle_in(handle_in)
+////   |> channel.with_handle_info(handle_info)
+//// }
+////   channel.JoinOk(reply: None, socket: socket)
+//// })
 
 import gleam/json.{type Json}
 import gleam/option.{type Option}
@@ -66,19 +81,6 @@ pub type StopReason {
 ///
 /// ```gleam
 /// pub type ChatAssigns {
-////   ChatAssigns(username: String, room: String)
-//// }
-////
-//// pub type ChatInfo {
-////   UserJoined(username: String)
-////   UserLeft(username: String)
-//// }
-////
-//// pub fn new() -> Channel(ChatAssigns, ChatInfo) {
-////   channel.new(join)
-////   |> channel.with_handle_in(handle_in)
-////   |> channel.with_handle_info(handle_info)
-//// }
 /// ```
 pub type Channel(assigns, info) {
   Channel(
@@ -110,8 +112,6 @@ pub type Channel(assigns, info) {
 ///
 /// ```gleam
 /// channel.new(fn(topic, payload, socket) {
-////   channel.JoinOk(reply: None, socket: socket)
-//// })
 /// ```
 pub fn new(
   join: fn(String, Json, Socket(assigns)) -> JoinResult(assigns),
