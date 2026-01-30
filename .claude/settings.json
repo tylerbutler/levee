@@ -1,5 +1,18 @@
 {
   "enabledPlugins": {
     "security-guidance@claude-plugins-official": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "for f in $CLAUDE_FILE_PATHS; do case \"$f\" in *.gleam) cd levee_protocol && gleam build --target erlang 2>&1 | head -10; break;; esac; done"
+          }
+        ]
+      }
+    ]
   }
 }
