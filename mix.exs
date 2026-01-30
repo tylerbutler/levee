@@ -47,7 +47,9 @@ defmodule Levee.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       # JWT authentication
-      {:jose, "~> 1.11"}
+      {:jose, "~> 1.11"},
+      # CORS support
+      {:cors_plug, "~> 3.0"}
     ]
   end
 
