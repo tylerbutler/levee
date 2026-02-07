@@ -10,21 +10,23 @@ defmodule Levee.Application do
     # Add Gleam compiled modules to the code path
     load_gleam_modules()
 
-    children = [
-      LeveeWeb.Telemetry,
-      {DNSCluster, query: Application.get_env(:levee, :dns_cluster_query) || :ignore},
-      {Phoenix.PubSub, name: Levee.PubSub},
-      # ETS-based storage backend (must start before other services)
-      Levee.Storage.ETS,
-      # Registry for looking up document sessions by {tenant_id, document_id}
-      {Registry, keys: :unique, name: Levee.SessionRegistry},
-      # Tenant secrets for JWT authentication
-      Levee.Auth.TenantSecrets,
-      # DynamicSupervisor for document sessions
-      Levee.Documents.Supervisor,
-      # Start to serve requests, typically the last entry
-      LeveeWeb.Endpoint
-    ]
+    children =
+      maybe_start_repo() ++
+        [
+          LeveeWeb.Telemetry,
+          {DNSCluster, query: Application.get_env(:levee, :dns_cluster_query) || :ignore},
+          {Phoenix.PubSub, name: Levee.PubSub},
+          # ETS-based storage backend (must start before other services)
+          Levee.Storage.ETS,
+          # Registry for looking up document sessions by {tenant_id, document_id}
+          {Registry, keys: :unique, name: Levee.SessionRegistry},
+          # Tenant secrets for JWT authentication
+          Levee.Auth.TenantSecrets,
+          # DynamicSupervisor for document sessions
+          Levee.Documents.Supervisor,
+          # Start to serve requests, typically the last entry
+          LeveeWeb.Endpoint
+        ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
@@ -95,6 +97,15 @@ defmodule Levee.Application do
           :code.load_file(module_atom)
         end)
       end
+    end
+  end
+
+  # Only start the Repo if database is configured and available
+  defp maybe_start_repo do
+    if Application.get_env(:levee, :start_repo, true) do
+      [Levee.Repo]
+    else
+      []
     end
   end
 end

@@ -49,7 +49,10 @@ defmodule Levee.MixProject do
       # JWT authentication
       {:jose, "~> 1.11"},
       # CORS support
-      {:cors_plug, "~> 3.0"}
+      {:cors_plug, "~> 3.0"},
+      # Database
+      {:ecto_sql, "~> 3.12"},
+      {:postgrex, "~> 0.19"}
     ]
   end
 
