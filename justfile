@@ -118,3 +118,13 @@ clean-gleam:
 clean-elixir:
     mix clean
     rm -rf _build deps
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CI Parity
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Run PR checks
+pr: check-format build test
+
+# Run main branch checks
+main: pr
