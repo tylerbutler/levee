@@ -28,6 +28,9 @@ fluid_server-*.tar
 # Gleam build artifacts
 /gleam_protocol/build/
 /gleam_protocol/gleam.lock
+/levee_auth/build/
+/levee_admin/build/
+/levee_admin/.lustre/
 
 # IDE
 .elixir_ls/
