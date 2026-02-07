@@ -19,7 +19,7 @@ pub fn create_user_test() {
   // ID should be generated with usr_ prefix
   should.be_true(has_prefix(new_user.id, "usr_"))
   // Password hash should be set (not the raw password)
-  should.be_true(has_prefix(new_user.password_hash, "$argon2"))
+  should.be_true(has_prefix(new_user.password_hash, "$pbkdf2-sha256"))
   // Timestamps should be set
   should.be_true(new_user.created_at > 0)
   should.equal(new_user.created_at, new_user.updated_at)

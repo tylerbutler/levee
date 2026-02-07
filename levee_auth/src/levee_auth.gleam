@@ -5,7 +5,7 @@
 ////
 //// ## Modules
 ////
-//// - `password` - Argon2id password hashing and verification
+//// - `password` - PBKDF2-SHA256 password hashing and verification
 //// - `token` - JWT creation and verification for document access
 //// - `scopes` - Authorization scope definitions
 //// - `user` - User management and profile operations
@@ -55,9 +55,7 @@
 //// )
 //// ```
 
-import invite.{
-  type Invite, type InviteConfig, type InviteError, type InviteStatus,
-}
+import invite.{type Invite, type InviteConfig, type InviteError}
 import password
 import scopes.{type Scope}
 import session.{type Session, type SessionConfig}
@@ -67,7 +65,7 @@ import user.{type PublicUser, type User, type UserError}
 
 // Re-export main password functions
 
-/// Hash a password using Argon2id with default settings.
+/// Hash a password using PBKDF2-SHA256 with default settings.
 pub fn hash_password(pwd: String) -> Result(String, password.PasswordError) {
   password.hash(pwd)
 }

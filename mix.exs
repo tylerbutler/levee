@@ -69,25 +69,27 @@ defmodule Levee.MixProject do
   end
 
   defp gleam_build(_args) do
-    gleam_path = "levee_protocol"
+    gleam_projects = ["levee_protocol", "levee_auth"]
 
-    if File.dir?(gleam_path) do
-      case System.cmd("gleam", ["build", "--target", "erlang"],
-             cd: gleam_path,
-             stderr_to_stdout: true
-           ) do
-        {output, 0} ->
-          if String.contains?(output, "Compiling") do
-            Mix.shell().info(output)
-          end
+    Enum.each(gleam_projects, fn gleam_path ->
+      if File.dir?(gleam_path) do
+        case System.cmd("gleam", ["build", "--target", "erlang"],
+               cd: gleam_path,
+               stderr_to_stdout: true
+             ) do
+          {output, 0} ->
+            if String.contains?(output, "Compiling") do
+              Mix.shell().info(output)
+            end
 
-          :ok
+            :ok
 
-        {output, _exit_code} ->
-          Mix.shell().error("Gleam compilation failed:")
-          Mix.shell().error(output)
-          Mix.raise("Gleam compilation failed")
+          {output, _exit_code} ->
+            Mix.shell().error("Gleam compilation failed for #{gleam_path}:")
+            Mix.shell().error(output)
+            Mix.raise("Gleam compilation failed")
+        end
       end
-    end
+    end)
   end
 end

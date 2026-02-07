@@ -16,8 +16,8 @@ pub fn hash_password_test() {
   should.be_ok(result)
 
   let assert Ok(hash) = result
-  // Argon2 hashes start with $argon2
-  should.be_true(has_prefix(hash, "$argon2"))
+  // PBKDF2-SHA256 hashes start with $pbkdf2-sha256
+  should.be_true(has_prefix(hash, "$pbkdf2-sha256"))
 }
 
 pub fn verify_correct_password_test() {
