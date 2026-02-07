@@ -1,45 +1,65 @@
 //// Levee Authentication Library
 ////
-//// Provides password hashing, JWT token management, and authorization scopes
-//// for the Levee collaborative document service.
+//// Provides password hashing, JWT token management, user/tenant management,
+//// and authorization for the Levee collaborative document service.
 ////
 //// ## Modules
 ////
-//// - `levee_auth/password` - Argon2id password hashing and verification
-//// - `levee_auth/token` - JWT creation and verification
-//// - `levee_auth/scopes` - Authorization scope definitions
+//// - `password` - Argon2id password hashing and verification
+//// - `token` - JWT creation and verification for document access
+//// - `scopes` - Authorization scope definitions
+//// - `user` - User management and profile operations
+//// - `tenant` - Multi-tenant organization management
+//// - `session` - User session lifecycle
 ////
 //// ## Example Usage
 ////
 //// ```gleam
 //// import levee_auth
-//// import levee_auth/password
-//// import levee_auth/token
-//// import levee_auth/scopes
+//// import password
+//// import token
+//// import scopes
+//// import user
+//// import tenant
+//// import session
 ////
-//// // Hash a password
-//// let assert Ok(hash) = password.hash("user_password")
+//// // Create a user
+//// let assert Ok(new_user) = user.create(
+////   email: "jane@example.com",
+////   password: "secure_password",
+////   display_name: "Jane Doe",
+//// )
 ////
-//// // Verify password
-//// let is_valid = password.matches("user_password", hash)
+//// // Create a tenant (user becomes owner)
+//// let assert Ok(#(new_tenant, membership)) = tenant.create(
+////   name: "Acme Corp",
+////   slug: "acme-corp",
+////   owner_id: new_user.id,
+//// )
+////
+//// // Create a session
+//// let new_session = session.create(
+////   user_id: new_user.id,
+////   tenant_id: new_tenant.id,
+//// )
 ////
 //// // Create a document access token
 //// let config = token.default_config("my-secret-key")
-//// let jwt = levee_auth.create_document_token(
-////   "user-123",
-////   "tenant-456",
+//// let jwt = token.create_document_token(
+////   new_user.id,
+////   new_tenant.id,
 ////   "doc-789",
 ////   scopes.read_write(),
 ////   config,
 //// )
-////
-//// // Verify and extract claims
-//// let assert Ok(claims) = token.verify(jwt, "my-secret-key")
 //// ```
 
 import password
 import scopes.{type Scope}
+import session.{type Session, type SessionConfig}
+import tenant.{type Membership, type Role, type Tenant}
 import token.{type TokenClaims, type TokenConfig, type TokenError}
+import user.{type PublicUser, type User, type UserError}
 
 // Re-export main password functions
 
@@ -88,4 +108,66 @@ pub fn default_token_config(secret: String) -> TokenConfig {
 /// Create short-lived token configuration (15 minutes).
 pub fn short_lived_token_config(secret: String) -> TokenConfig {
   token.short_lived_config(secret)
+}
+
+// Re-export main user functions
+
+/// Create a new user with the given credentials.
+pub fn create_user(
+  email: String,
+  pwd: String,
+  display_name: String,
+) -> Result(User, UserError) {
+  user.create(email: email, password: pwd, display_name: display_name)
+}
+
+/// Convert a user to public representation (no password hash).
+pub fn user_to_public(u: User) -> PublicUser {
+  user.to_public(u)
+}
+
+// Re-export main tenant functions
+
+/// Create a new tenant with the given owner.
+pub fn create_tenant(
+  name: String,
+  slug: String,
+  owner_id: String,
+) -> Result(#(Tenant, Membership), tenant.TenantError) {
+  tenant.create(name: name, slug: slug, owner_id: owner_id)
+}
+
+/// Check if a role can manage members.
+pub fn can_manage_members(role: Role) -> Bool {
+  tenant.can_manage_members(role)
+}
+
+// Re-export main session functions
+
+/// Create a new session for a user.
+pub fn create_session(user_id: String, tenant_id: String) -> Session {
+  session.create(user_id: user_id, tenant_id: tenant_id)
+}
+
+/// Create a session with custom configuration.
+pub fn create_session_with_config(
+  user_id: String,
+  tenant_id: String,
+  config: SessionConfig,
+) -> Session {
+  session.create_with_config(
+    user_id: user_id,
+    tenant_id: tenant_id,
+    config: config,
+  )
+}
+
+/// Check if a session is still valid.
+pub fn is_session_valid(s: Session) -> Bool {
+  session.is_valid(s)
+}
+
+/// Default session configuration (7 days).
+pub fn default_session_config() -> SessionConfig {
+  session.default_config()
 }
