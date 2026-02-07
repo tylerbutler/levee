@@ -38,6 +38,16 @@ defmodule LeveeWeb.Router do
     get "/health", HealthController, :index
   end
 
+  # Auth API routes (public - no JWT required)
+  scope "/api/auth", LeveeWeb do
+    pipe_through :api
+
+    post "/register", AuthController, :register
+    post "/login", AuthController, :login
+    post "/logout", AuthController, :logout
+    get "/me", AuthController, :me
+  end
+
   # Document Operations (Storage Service) - write access for create
   scope "/documents", LeveeWeb do
     pipe_through :write_access

@@ -22,6 +22,8 @@ defmodule Levee.Application do
           {Registry, keys: :unique, name: Levee.SessionRegistry},
           # Tenant secrets for JWT authentication
           Levee.Auth.TenantSecrets,
+          # In-memory user/session store (dev/test only, replaced by DB in prod)
+          Levee.Auth.SessionStore,
           # DynamicSupervisor for document sessions
           Levee.Documents.Supervisor,
           # Start to serve requests, typically the last entry
