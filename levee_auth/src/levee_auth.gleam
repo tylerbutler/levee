@@ -11,6 +11,7 @@
 //// - `user` - User management and profile operations
 //// - `tenant` - Multi-tenant organization management
 //// - `session` - User session lifecycle
+//// - `invite` - Tenant invitation management
 ////
 //// ## Example Usage
 ////
@@ -54,6 +55,9 @@
 //// )
 //// ```
 
+import invite.{
+  type Invite, type InviteConfig, type InviteError, type InviteStatus,
+}
 import password
 import scopes.{type Scope}
 import session.{type Session, type SessionConfig}
@@ -170,4 +174,31 @@ pub fn is_session_valid(s: Session) -> Bool {
 /// Default session configuration (7 days).
 pub fn default_session_config() -> SessionConfig {
   session.default_config()
+}
+
+// Re-export main invite functions
+
+/// Create an invite to join a tenant.
+pub fn create_invite(
+  email: String,
+  tenant_id: String,
+  role: Role,
+  invited_by: String,
+) -> Result(Invite, InviteError) {
+  invite.create(
+    email: email,
+    tenant_id: tenant_id,
+    role: role,
+    invited_by: invited_by,
+  )
+}
+
+/// Check if an invite is still valid (pending and not expired).
+pub fn is_invite_valid(inv: Invite) -> Bool {
+  invite.is_valid(inv)
+}
+
+/// Default invite configuration (7 days).
+pub fn default_invite_config() -> InviteConfig {
+  invite.default_config()
 }
