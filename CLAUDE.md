@@ -61,6 +61,7 @@ Client → Phoenix Router → Auth Plug (JWT) → Controller/Channel → Session
 | `controllers/delta_controller.ex` | Get deltas/ops REST API |
 | `controllers/git_controller.ex` | Git-like blob/tree/commit/ref APIs |
 | `controllers/health_controller.ex` | Health check endpoint |
+| `controllers/admin_controller.ex` | Admin UI SPA catch-all |
 
 ### Gleam Protocol (`levee_protocol/src/`)
 
@@ -76,6 +77,7 @@ Client → Phoenix Router → Auth Plug (JWT) → Controller/Channel → Session
 | `types.gleam` | Core type definitions |
 | `validation.gleam` | Message validation |
 | `schema.gleam` | JSON schema generation |
+| `schema_cli.gleam` | CLI entry point for `gleam run -m schema_cli` |
 
 ### Gleam Auth (`levee_auth/src/`)
 
@@ -140,6 +142,15 @@ Client → Phoenix Router → Auth Plug (JWT) → Controller/Channel → Session
 2. Run `just build-gleam` to compile
 3. Update `lib/levee/protocol/bridge.ex` if Elixir interop changes
 4. Run `just test` to verify both Gleam and Elixir tests
+5. If schema types changed, run `gleam run -m schema_cli` in `levee_protocol/` to regenerate
+
+### Gleam Testing (startest)
+
+levee_protocol uses **startest** (not gleeunit) for tests.
+- `should.*` → `expect.*` (e.g., `expect.to_equal`, `expect.to_be_ok`)
+- `startest.run(startest.default_config())` in `main()`
+- **Gotcha:** `let assert Pattern = expr` inside startest tests wraps values in `Ok()` due to startest's rescue mechanism. Use `case` expressions for error variant destructuring instead of `let assert`.
+- `gleam_stdlib` 0.62+ removed `dynamic.DecodeError`, `dynamic.Decoder`, and `result.then`
 
 ### Running Specific Tests
 
@@ -274,6 +285,10 @@ PATCH  /refs/:tenant_id/*path             Update ref
 # WebSocket
 WS     /socket/websocket                  Real-time channel
        Topic: "document:{tenant_id}:{document_id}"
+
+# Admin UI (Lustre SPA)
+GET    /admin                             Admin login page
+GET    /admin/*path                       SPA catch-all (serves index.html)
 ```
 
 ### Route Pipelines
@@ -286,6 +301,7 @@ WS     /socket/websocket                  Real-time channel
 | `:write_access` | JWT + `doc:write` | Mutate document data |
 | `:summary_access` | JWT + `summary:read` | Read git-like storage |
 | `:summary_write_access` | JWT + `summary:write` | Write git-like storage |
+| `:browser` | None | Admin UI (accepts html) |
 
 ## Error Handling Patterns
 
@@ -362,6 +378,12 @@ end
 ```bash
 just build-gleam      # or: cd levee_protocol && gleam build --target erlang
 mix compile --force   # Reload BEAM modules
+```
+
+### Rebuilding Admin UI
+
+```bash
+just build-admin      # Build Gleam JS and copy to priv/static/admin/
 ```
 
 ## Testing Patterns

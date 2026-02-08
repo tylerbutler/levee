@@ -29,13 +29,19 @@ setup-elixir:
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Build everything
-build: build-gleam build-elixir
+build: build-gleam build-admin build-elixir
 
 # Build Gleam packages
 build-gleam:
     cd levee_protocol && gleam build --target erlang
     cd levee_auth && gleam build --target erlang
     cd levee_admin && gleam build --target javascript
+
+# Build admin UI and copy to priv/static/admin
+build-admin: build-gleam
+    mkdir -p priv/static/admin
+    cp -r levee_admin/build/dev/javascript/* priv/static/admin/
+    cp levee_admin/index.html priv/static/admin/
 
 # Build Elixir application
 build-elixir: build-gleam
@@ -62,12 +68,15 @@ test-elixir:
 # Development
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Start Phoenix server (builds Gleam first)
-server: build-gleam
+# Start dev server (alias for server)
+start: server
+
+# Start Phoenix server (builds Gleam + admin first)
+server: build-gleam build-admin
     mix phx.server
 
 # Start Phoenix server with IEx
-iex: build-gleam
+iex: build-gleam build-admin
     iex -S mix phx.server
 
 # Development mode with auto-rebuild
@@ -126,6 +135,7 @@ clean-gleam:
     cd levee_protocol && rm -rf build
     cd levee_auth && rm -rf build
     cd levee_admin && rm -rf build
+    rm -rf priv/static/admin
 
 clean-elixir:
     mix clean
