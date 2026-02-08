@@ -102,11 +102,12 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         }
         True -> {
           // Set pending_submit so parent can make API call
-          let data = SubmitData(
-            email: model.email,
-            password: model.password,
-            display_name: model.display_name,
-          )
+          let data =
+            SubmitData(
+              email: model.email,
+              password: model.password,
+              display_name: model.display_name,
+            )
           #(Model(..model, pending_submit: Some(data)), effect.none())
         }
       }

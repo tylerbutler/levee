@@ -9,7 +9,8 @@ defmodule Levee.Auth.GleamBridge do
   them directly using the Erlang module naming convention.
   """
 
-  # Gleam modules compile to :module_name atoms
+  # Gleam modules at src/ root compile to simple atoms (not namespaced)
+  # e.g., src/password.gleam -> :password, not :levee_auth@password
   @gleam_password :password
   @gleam_user :user
   @gleam_tenant :tenant

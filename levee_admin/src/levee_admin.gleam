@@ -153,7 +153,8 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     }
 
     LoginResponse(Error(_error)) -> {
-      let login_model = login.set_error(model.login, "Invalid email or password")
+      let login_model =
+        login.set_error(model.login, "Invalid email or password")
       #(Model(..model, login: login_model), effect.none())
     }
 
@@ -183,12 +184,7 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 
     Logout -> {
       let model =
-        Model(
-          ..model,
-          user: None,
-          session_token: None,
-          route: router.Login,
-        )
+        Model(..model, user: None, session_token: None, route: router.Login)
       #(model, modem.push("/login", None, None))
     }
   }
@@ -214,7 +210,8 @@ fn view_content(model: Model) -> Element(Msg) {
         element.map(dashboard.view(model.dashboard), DashboardMsg),
       )
 
-    router.Tenants -> view_authenticated_layout(model, view_tenants_placeholder())
+    router.Tenants ->
+      view_authenticated_layout(model, view_tenants_placeholder())
 
     router.TenantDetail(id) ->
       view_authenticated_layout(model, view_tenant_detail_placeholder(id))
@@ -243,10 +240,9 @@ fn view_nav(model: Model) -> Element(Msg) {
     div([class("nav-brand")], [h1([], [text("Levee Admin")])]),
     div([class("nav-user")], [
       p([], [text(user_name)]),
-      html.button(
-        [attribute.type_("button"), event.on_click(Logout)],
-        [text("Logout")],
-      ),
+      html.button([attribute.type_("button"), event.on_click(Logout)], [
+        text("Logout"),
+      ]),
     ]),
   ])
 }

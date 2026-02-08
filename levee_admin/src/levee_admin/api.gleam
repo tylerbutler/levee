@@ -151,7 +151,12 @@ pub fn register(
       #("display_name", json.string(display_name)),
     ])
 
-  post_json(api_base <> "/auth/register", body, auth_response_decoder(), on_response)
+  post_json(
+    api_base <> "/auth/register",
+    body,
+    auth_response_decoder(),
+    on_response,
+  )
 }
 
 /// Login with email and password
@@ -166,7 +171,12 @@ pub fn login(
       #("password", json.string(password)),
     ])
 
-  post_json(api_base <> "/auth/login", body, auth_response_decoder(), on_response)
+  post_json(
+    api_base <> "/auth/login",
+    body,
+    auth_response_decoder(),
+    on_response,
+  )
 }
 
 /// Get current user
@@ -179,5 +189,10 @@ pub fn get_me(
     decode.success(user)
   }
 
-  get_json(api_base <> "/auth/me", Some(token), user_wrapper_decoder, on_response)
+  get_json(
+    api_base <> "/auth/me",
+    Some(token),
+    user_wrapper_decoder,
+    on_response,
+  )
 }

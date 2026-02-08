@@ -56,26 +56,33 @@ defmodule LeveeWeb.AuthController do
   Body: {email, password}
   Returns: {user, token}
   """
+  # Dummy hash for timing-safe comparison when user not found.
+  # This prevents user enumeration via timing attacks.
+  @dummy_hash "$pbkdf2-sha256$600000$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+
   def login(conn, %{"email" => email, "password" => password}) do
-    case SessionStore.find_user_by_email(email) do
-      {:ok, user} ->
-        if GleamBridge.verify_password(password, user.password_hash) do
-          session = GleamBridge.create_session(user.id, nil)
-          SessionStore.store_session(session)
+    {user, hash} =
+      case SessionStore.find_user_by_email(email) do
+        {:ok, user} -> {user, user.password_hash}
+        :error -> {nil, @dummy_hash}
+      end
 
-          conn
-          |> put_status(:ok)
-          |> json(%{
-            user: user_to_json(user),
-            token: session.id
-          })
-        else
-          conn
-          |> put_status(:unauthorized)
-          |> json(%{error: %{code: "invalid_credentials", message: "Invalid email or password"}})
-        end
+    # Always verify password to prevent timing attacks
+    password_valid = GleamBridge.verify_password(password, hash)
 
-      :error ->
+    case {user, password_valid} do
+      {%{} = user, true} ->
+        session = GleamBridge.create_session(user.id, nil)
+        SessionStore.store_session(session)
+
+        conn
+        |> put_status(:ok)
+        |> json(%{
+          user: user_to_json(user),
+          token: session.id
+        })
+
+      _ ->
         conn
         |> put_status(:unauthorized)
         |> json(%{error: %{code: "invalid_credentials", message: "Invalid email or password"}})

@@ -77,6 +77,32 @@ Client → Phoenix Router → Auth Plug (JWT) → Controller/Channel → Session
 | `validation.gleam` | Message validation |
 | `schema.gleam` | JSON schema generation |
 
+### Gleam Auth (`levee_auth/src/`)
+
+| File | Purpose |
+|------|---------|
+| `levee_auth.gleam` | Main module, exports public API |
+| `password.gleam` | PBKDF2-SHA256 password hashing |
+| `password_ffi.erl` | Erlang FFI for crypto:pbkdf2_hmac |
+| `jwt.gleam` | JWT creation and verification (HS256) |
+| `token.gleam` | Document access token management |
+| `user.gleam` | User type and operations |
+| `tenant.gleam` | Tenant and membership management |
+| `session.gleam` | Session lifecycle |
+| `invite.gleam` | Tenant invitation system |
+| `scopes.gleam` | Authorization scope definitions |
+
+### Lustre Admin (`levee_admin/src/`)
+
+| File | Purpose |
+|------|---------|
+| `levee_admin.gleam` | Main Lustre app, MVU architecture |
+| `levee_admin/api.gleam` | HTTP client for auth endpoints |
+| `levee_admin/router.gleam` | Client-side URL routing |
+| `pages/login.gleam` | Login form component |
+| `pages/register.gleam` | Registration form component |
+| `pages/dashboard.gleam` | Dashboard page placeholder |
+
 ### Configuration (`config/`)
 
 | File | Purpose |

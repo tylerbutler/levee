@@ -25,7 +25,13 @@ pub type Model {
 }
 
 pub fn init() -> Model {
-  Model(email: "", password: "", error: None, loading: False, pending_submit: None)
+  Model(
+    email: "",
+    password: "",
+    error: None,
+    loading: False,
+    pending_submit: None,
+  )
 }
 
 /// Clear the pending submit and set loading state

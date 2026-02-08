@@ -64,7 +64,10 @@ pub fn verify(token: String, secret: String) -> Result(JwtPayload, JwtError) {
         crypto.hmac(<<message:utf8>>, crypto.Sha256, <<secret:utf8>>)
         |> base64url_encode_bits
 
-      case signature_b64 == expected_sig {
+      // Use constant-time comparison to prevent timing attacks
+      let sig_match =
+        crypto.secure_compare(<<signature_b64:utf8>>, <<expected_sig:utf8>>)
+      case sig_match {
         False -> Error(InvalidSignature)
         True -> {
           // Decode payload

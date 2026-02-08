@@ -12,11 +12,7 @@ import lustre/element/html.{a, div, h1, h2, li, p, text, ul}
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub type Model {
-  Model(
-    tenants: List(Tenant),
-    loading: Bool,
-    error: Option(String),
-  )
+  Model(tenants: List(Tenant), loading: Bool, error: Option(String))
 }
 
 pub type Tenant {
