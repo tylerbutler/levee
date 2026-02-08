@@ -8,6 +8,7 @@
 import Config
 
 config :levee,
+  ecto_repos: [Levee.Repo],
   generators: [timestamp_type: :utc_datetime]
 
 # Configure the endpoint
