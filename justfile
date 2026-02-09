@@ -1,32 +1,17 @@
-# Levee - Elixir + Gleam
-# Task runner for polyglot project
+# Levee - Elixir + Gleam collaborative document service
 
-set dotenv-load
+# === ALIASES ===
+alias b := build
+alias t := test
+alias f := format
+alias l := lint
+alias c := clean
 
 # Default recipe
 default:
     @just --list
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Setup
-# ─────────────────────────────────────────────────────────────────────────────
-
-# Install all dependencies
-setup: setup-gleam setup-elixir
-
-# Install Gleam dependencies
-setup-gleam:
-    cd levee_protocol && gleam deps download
-    cd levee_auth && gleam deps download
-    cd levee_admin && gleam deps download
-
-# Install Elixir dependencies
-setup-elixir:
-    mix deps.get
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Build
-# ─────────────────────────────────────────────────────────────────────────────
+# === BUILD ===
 
 # Build everything
 build: build-gleam build-admin build-elixir
@@ -47,9 +32,7 @@ build-admin: build-gleam
 build-elixir: build-gleam
     mix compile
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Test
-# ─────────────────────────────────────────────────────────────────────────────
+# === TESTING ===
 
 # Run all tests
 test: test-gleam test-elixir
@@ -64,28 +47,7 @@ test-gleam:
 test-elixir:
     mix test
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Development
-# ─────────────────────────────────────────────────────────────────────────────
-
-# Start dev server (alias for server)
-start: server
-
-# Start Phoenix server (builds Gleam + admin first)
-server: build-gleam build-admin
-    mix phx.server
-
-# Start Phoenix server with IEx
-iex: build-gleam build-admin
-    iex -S mix phx.server
-
-# Development mode with auto-rebuild
-dev: build
-    mix phx.server
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Quality
-# ─────────────────────────────────────────────────────────────────────────────
+# === QUALITY ===
 
 # Format all code
 format: format-gleam format-elixir
@@ -100,35 +62,24 @@ format-gleam:
 format-elixir:
     mix format
 
-# Check formatting
-check-format: check-format-gleam check-format-elixir
+# Lint all code
+lint: lint-gleam lint-elixir
 
-check-format-gleam:
+# Lint Gleam code (format check)
+lint-gleam:
     cd levee_protocol && gleam format --check
     cd levee_auth && gleam format --check
     cd levee_admin && gleam format --check
 
-check-format-elixir:
+# Lint Elixir code
+lint-elixir:
     mix format --check-formatted
+    mix compile --warnings-as-errors
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Code Generation
-# ─────────────────────────────────────────────────────────────────────────────
+# Check formatting (alias for lint)
+check-format: lint
 
-# Generate JSON schema from Gleam protocol types
-generate-schema:
-    mix generate_schema
-
-# Generate schema and copy to TypeScript project
-generate-schema-ts: generate-schema
-    mkdir -p ../tools-monorepo/packages/levee-driver/schemas
-    cp priv/protocol-schema.json ../tools-monorepo/packages/levee-driver/schemas/
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Clean
-# ─────────────────────────────────────────────────────────────────────────────
-
-# Clean all build artifacts
+# Remove all build artifacts
 clean: clean-gleam clean-elixir
 
 clean-gleam:
@@ -141,12 +92,46 @@ clean-elixir:
     mix clean
     rm -rf _build deps
 
-# ─────────────────────────────────────────────────────────────────────────────
-# CI Parity
-# ─────────────────────────────────────────────────────────────────────────────
+# Full validation workflow
+ci: format lint test build
 
-# Run PR checks
-pr: check-format build test
+alias pr := ci
 
-# Run main branch checks
-main: pr
+# === SETUP ===
+
+# Install all dependencies
+setup: setup-gleam setup-elixir
+
+# Install Gleam dependencies
+setup-gleam:
+    cd levee_protocol && gleam deps download
+    cd levee_auth && gleam deps download
+    cd levee_admin && gleam deps download
+
+# Install Elixir dependencies
+setup-elixir:
+    mix deps.get
+
+# === DEVELOPMENT ===
+
+# Start dev server (alias for server)
+start: server
+
+# Start Phoenix server (builds Gleam + admin first)
+server: build-gleam build-admin
+    mix phx.server
+
+# Start Phoenix server with IEx
+iex: build-gleam build-admin
+    iex -S mix phx.server
+
+# === CODE GENERATION ===
+
+# Generate JSON schema from Gleam protocol types
+generate-schema:
+    mix generate_schema
+
+# Generate schema and copy to TypeScript project
+generate-schema-ts: generate-schema
+    mkdir -p ../tools-monorepo/packages/levee-driver/schemas
+    cp priv/protocol-schema.json ../tools-monorepo/packages/levee-driver/schemas/
