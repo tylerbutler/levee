@@ -1,3 +1,9 @@
+---
+name: gleam-bridge
+description: Work with Gleam code and Elixir interoperability issues
+tools: Read, Grep, Glob, Bash, Write, Edit
+---
+
 # Gleam Bridge Agent
 
 Specialized for working with Gleam code and Elixir interoperability in Levee.

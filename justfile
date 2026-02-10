@@ -17,6 +17,8 @@ setup: setup-gleam setup-elixir
 # Install Gleam dependencies
 setup-gleam:
     cd levee_protocol && gleam deps download
+    cd levee_auth && gleam deps download
+    cd levee_admin && gleam deps download
 
 # Install Elixir dependencies
 setup-elixir:
@@ -29,9 +31,11 @@ setup-elixir:
 # Build everything
 build: build-gleam build-elixir
 
-# Build Gleam package
+# Build Gleam packages
 build-gleam:
     cd levee_protocol && gleam build --target erlang
+    cd levee_auth && gleam build --target erlang
+    cd levee_admin && gleam build --target javascript
 
 # Build Elixir application
 build-elixir: build-gleam
@@ -47,6 +51,8 @@ test: test-gleam test-elixir
 # Run Gleam tests
 test-gleam:
     cd levee_protocol && gleam test
+    cd levee_auth && gleam test
+    cd levee_admin && gleam test
 
 # Run Elixir tests
 test-elixir:
@@ -78,6 +84,8 @@ format: format-gleam format-elixir
 # Format Gleam code
 format-gleam:
     cd levee_protocol && gleam format
+    cd levee_auth && gleam format
+    cd levee_admin && gleam format
 
 # Format Elixir code
 format-elixir:
@@ -88,6 +96,8 @@ check-format: check-format-gleam check-format-elixir
 
 check-format-gleam:
     cd levee_protocol && gleam format --check
+    cd levee_auth && gleam format --check
+    cd levee_admin && gleam format --check
 
 check-format-elixir:
     mix format --check-formatted
@@ -114,7 +124,19 @@ clean: clean-gleam clean-elixir
 
 clean-gleam:
     cd levee_protocol && rm -rf build
+    cd levee_auth && rm -rf build
+    cd levee_admin && rm -rf build
 
 clean-elixir:
     mix clean
     rm -rf _build deps
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CI Parity
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Run PR checks
+pr: check-format build test
+
+# Run main branch checks
+main: pr

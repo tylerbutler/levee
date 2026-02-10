@@ -25,10 +25,10 @@ defmodule Levee.Application do
           {Registry, keys: :unique, name: Levee.SessionRegistry},
           # Tenant secrets for JWT authentication
           Levee.Auth.TenantSecrets,
+          # In-memory user/session store (dev/test only, replaced by DB in prod)
+          Levee.Auth.SessionStore,
           # DynamicSupervisor for document sessions
           Levee.Documents.Supervisor,
-          # Registry manager
-          Levee.Documents.Registry,
           # Start to serve requests, typically the last entry
           LeveeWeb.Endpoint
         ]
@@ -88,13 +88,23 @@ defmodule Levee.Application do
 
     # Try multiple possible locations for Gleam build output:
     # 1. Development: relative to app root (mix compile)
-    # 2. Release: in /app/levee_protocol (Docker)
+    # 2. Release: in /app/<package> (Docker)
     base_paths = [
       Path.join([app_root, "levee_protocol", "build", "dev", "erlang"]),
-      "/app/levee_protocol/build/dev/erlang"
+      Path.join([app_root, "levee_auth", "build", "dev", "erlang"]),
+      "/app/levee_protocol/build/dev/erlang",
+      "/app/levee_auth/build/dev/erlang"
     ]
 
-    gleam_modules = ["levee_protocol", "gleam_stdlib"]
+    gleam_modules = [
+      "levee_protocol",
+      "levee_auth",
+      "gleam_stdlib",
+      "gleam_crypto",
+      "gleam_json",
+      "gleam_time",
+      "youid"
+    ]
 
     for base <- base_paths, mod <- gleam_modules do
       path = Path.join([base, mod, "ebin"]) |> Path.expand()

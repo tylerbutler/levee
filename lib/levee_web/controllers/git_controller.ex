@@ -171,14 +171,12 @@ defmodule LeveeWeb.GitController do
   GET /repos/:tenant_id/git/refs
   """
   def list_refs(conn, %{"tenant_id" => tenant_id}) do
-    case Storage.list_refs(tenant_id) do
-      {:ok, refs} ->
-        formatted_refs = Enum.map(refs, &format_ref_response(conn, tenant_id, &1))
+    {:ok, refs} = Storage.list_refs(tenant_id)
+    formatted_refs = Enum.map(refs, &format_ref_response(conn, tenant_id, &1))
 
-        conn
-        |> put_status(:ok)
-        |> json(formatted_refs)
-    end
+    conn
+    |> put_status(:ok)
+    |> json(formatted_refs)
   end
 
   @doc """

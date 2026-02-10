@@ -5,7 +5,6 @@
 /// - SN (Sequence Number): Server-assigned, globally monotonically increasing
 /// - RSN (Reference Sequence Number): Client's last-seen SN when creating op
 /// - MSN (Minimum Sequence Number): min(RSN of all connected clients)
-
 import gleam/dict.{type Dict}
 import gleam/int
 import gleam/list

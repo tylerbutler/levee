@@ -4,19 +4,12 @@ defmodule Levee.Documents.Registry do
 
   Provides process lookup and creation for document sessions,
   keyed by {tenant_id, document_id}.
+
+  This module does not maintain state - it wraps the Elixir Registry
+  and DynamicSupervisor for session management.
   """
 
-  use GenServer
-
   alias Levee.Documents.Session
-
-  @registry_name __MODULE__
-
-  # Client API
-
-  def start_link(_opts) do
-    GenServer.start_link(__MODULE__, %{}, name: @registry_name)
-  end
 
   @doc """
   Get an existing session or create a new one for the given tenant/document.
@@ -45,7 +38,7 @@ defmodule Levee.Documents.Registry do
   end
 
   @doc """
-  Get an existing session, returns nil if not found.
+  Get an existing session. Returns `{:error, :not_found}` if not found.
   """
   def get_session(tenant_id, document_id) do
     key = {tenant_id, document_id}
@@ -54,12 +47,5 @@ defmodule Levee.Documents.Registry do
       [{pid, _}] -> {:ok, pid}
       [] -> {:error, :not_found}
     end
-  end
-
-  # Server callbacks
-
-  @impl true
-  def init(state) do
-    {:ok, state}
   end
 end

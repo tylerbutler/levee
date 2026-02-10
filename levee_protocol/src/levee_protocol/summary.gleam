@@ -2,7 +2,6 @@
 ///
 /// Summaries capture point-in-time snapshots of document state for efficient loading.
 /// The summary tree structure allows for hierarchical representation of document state.
-
 import gleam/dict.{type Dict}
 import gleam/option.{type Option}
 
@@ -209,6 +208,9 @@ pub fn create_summary_nack_with_retry(
 }
 
 /// Create a SummaryContext for document open response
-pub fn create_summary_context(handle: String, sequence_number: Int) -> SummaryContext {
+pub fn create_summary_context(
+  handle: String,
+  sequence_number: Int,
+) -> SummaryContext {
   SummaryContext(handle: handle, sequence_number: sequence_number)
 }

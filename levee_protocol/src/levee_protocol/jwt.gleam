@@ -5,7 +5,6 @@
 /// - Tenant match
 /// - Expiration check
 /// - Scope checking
-
 import gleam/int
 import gleam/list
 import gleam/result

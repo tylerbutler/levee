@@ -7,7 +7,6 @@
 /// - Signal v1 (legacy) format: Simple broadcast with address/contents envelope
 /// - Signal v2 format: Enhanced format with targeting support (targetedClients, ignoredClients)
 /// - System signals: Join/Leave events (server-generated)
-
 import gleam/dynamic.{type Dynamic}
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -173,7 +172,9 @@ pub fn get_signal_recipients(
     // Ignored clients specified - send to all except ignored and sender
     None, Some(ignored) -> {
       all_clients
-      |> list.filter(fn(c) { c != sender_client_id && !list.contains(ignored, c) })
+      |> list.filter(fn(c) {
+        c != sender_client_id && !list.contains(ignored, c)
+      })
     }
 
     // No targeting - broadcast to all except sender
@@ -316,7 +317,10 @@ pub fn signal_message_from_v2(
 }
 
 /// Create a system signal message (for join/leave)
-pub fn system_signal_message(content: Dynamic, signal_type: String) -> SignalMessage {
+pub fn system_signal_message(
+  content: Dynamic,
+  signal_type: String,
+) -> SignalMessage {
   SignalMessage(
     client_id: None,
     content: content,
@@ -345,7 +349,11 @@ pub type SignalVersion {
 /// V1 signals typically have: address, contents, clientBroadcastSignalSequenceNumber
 /// V2 signals typically have: content, type, clientConnectionNumber, referenceSequenceNumber
 /// V2 with targeting has: targetedClients or ignoredClients
-pub fn detect_signal_version(has_address: Bool, has_targeted_clients: Bool, has_ignored_clients: Bool) -> SignalVersion {
+pub fn detect_signal_version(
+  has_address: Bool,
+  has_targeted_clients: Bool,
+  has_ignored_clients: Bool,
+) -> SignalVersion {
   case has_address, has_targeted_clients || has_ignored_clients {
     // Has address field - likely v1
     True, False -> V1Format

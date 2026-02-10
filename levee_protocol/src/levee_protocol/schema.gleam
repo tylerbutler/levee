@@ -1,6 +1,5 @@
 /// JSON Schema generation for Levee protocol types
 /// Uses json_blueprint to create decoders that can generate JSON Schema
-
 import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -46,7 +45,10 @@ pub fn user_decoder() -> bp.Decoder(#(String, json.Json)) {
 
 /// Decoder for ClientCapabilities type
 pub fn client_capabilities_decoder() -> bp.Decoder(Bool) {
-  bp.decode1(fn(interactive) { interactive }, bp.field("interactive", bp.bool()))
+  bp.decode1(
+    fn(interactive) { interactive },
+    bp.field("interactive", bp.bool()),
+  )
   |> bp.reuse_decoder
 }
 
@@ -169,8 +171,26 @@ pub fn document_message_decoder() -> bp.Decoder(
   ),
 ) {
   bp.decode8(
-    fn(csn, rsn, msg_type, contents, metadata, server_metadata, traces, compression) {
-      #(csn, rsn, msg_type, contents, metadata, server_metadata, traces, compression)
+    fn(
+      csn,
+      rsn,
+      msg_type,
+      contents,
+      metadata,
+      server_metadata,
+      traces,
+      compression,
+    ) {
+      #(
+        csn,
+        rsn,
+        msg_type,
+        contents,
+        metadata,
+        server_metadata,
+        traces,
+        compression,
+      )
     },
     bp.field("client_sequence_number", bp.int()),
     bp.field("reference_sequence_number", bp.int()),
@@ -235,20 +255,7 @@ pub fn sequenced_document_message_decoder() -> bp.Decoder(
 
   bp.Decoder(
     fn(_input) {
-      Ok(#(
-        None,
-        0,
-        0,
-        0,
-        0,
-        "",
-        json.null(),
-        None,
-        None,
-        None,
-        None,
-        0,
-      ))
+      Ok(#(None, 0, 0, 0, 0, "", json.null(), None, None, None, None, 0))
     },
     schema,
     [],
@@ -267,7 +274,16 @@ pub fn scope_decoder() -> bp.Decoder(String) {
 
 /// Decoder for TokenClaims type
 pub fn token_claims_decoder() -> bp.Decoder(
-  #(String, List(String), String, #(String, json.Json), Int, Int, String, Option(String)),
+  #(
+    String,
+    List(String),
+    String,
+    #(String, json.Json),
+    Int,
+    Int,
+    String,
+    Option(String),
+  ),
 ) {
   bp.decode8(
     fn(doc_id, scopes, tenant_id, user, iat, exp, version, jti) {
@@ -346,9 +362,7 @@ pub fn generate_protocol_schema() -> json.Json {
   // Create root properties that reference each type definition
   // This ensures json-schema-to-typescript generates all types
   let root_properties =
-    list.map(type_names, fn(name) {
-      #(name, jsch.Ref("#/$defs/" <> name))
-    })
+    list.map(type_names, fn(name) { #(name, jsch.Ref("#/$defs/" <> name)) })
 
   // Root schema wraps all definitions with properties referencing them
   let schema =

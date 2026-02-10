@@ -351,13 +351,10 @@ defmodule LeveeWeb.DocumentChannel do
   end
 
   defp get_or_create_session(socket) do
-    tenant_id = socket.assigns.tenant_id
-    document_id = socket.assigns.document_id
-
-    case Levee.Documents.Registry.get_or_create_session(tenant_id, document_id) do
-      {:ok, pid} -> {:ok, pid}
-      {:error, reason} -> {:error, reason}
-    end
+    Levee.Documents.Registry.get_or_create_session(
+      socket.assigns.tenant_id,
+      socket.assigns.document_id
+    )
   end
 
   # JWT validation
@@ -366,54 +363,49 @@ defmodule LeveeWeb.DocumentChannel do
     tenant_id = socket.assigns.tenant_id
     document_id = socket.assigns.document_id
 
-    case JWT.verify(token, tenant_id) do
-      {:ok, claims} ->
-        with :ok <- validate_token_expiration(claims),
-             :ok <- validate_token_tenant(claims, tenant_id),
-             :ok <- validate_token_document(claims, document_id),
-             :ok <- validate_token_read_scope(claims) do
-          {:ok, claims}
-        end
-
-      {:error, reason} ->
-        {:error, {:token_invalid, reason}}
+    with {:ok, claims} <- verify_and_wrap_error(token, tenant_id),
+         :ok <- validate_claims_for_connection(claims, tenant_id, document_id) do
+      {:ok, claims}
     end
   end
 
   defp validate_token(_connect_msg, _socket), do: {:error, :missing_token}
 
-  defp validate_token_expiration(claims) do
-    case JWT.expired?(claims) do
-      true -> {:error, :token_expired}
-      false -> :ok
+  defp verify_and_wrap_error(token, tenant_id) do
+    case JWT.verify(token, tenant_id) do
+      {:ok, claims} -> {:ok, claims}
+      {:error, reason} -> {:error, {:token_invalid, reason}}
     end
   end
 
-  defp validate_token_tenant(%{tenantId: tenant_id}, tenant_id), do: :ok
+  defp validate_claims_for_connection(claims, tenant_id, document_id) do
+    cond do
+      JWT.expired?(claims) ->
+        {:error, :token_expired}
 
-  defp validate_token_tenant(claims, tenant_id),
-    do: {:error, {:tenant_mismatch, claims.tenantId, tenant_id}}
+      claims.tenantId != tenant_id ->
+        {:error, {:tenant_mismatch, claims.tenantId, tenant_id}}
 
-  defp validate_token_document(%{documentId: document_id}, document_id), do: :ok
+      claims.documentId != document_id ->
+        {:error, {:document_mismatch, claims.documentId, document_id}}
 
-  defp validate_token_document(claims, document_id),
-    do: {:error, {:document_mismatch, claims.documentId, document_id}}
+      not JWT.has_read_scope?(claims) ->
+        {:error, :missing_read_scope}
 
-  defp validate_token_read_scope(claims) do
-    case JWT.has_read_scope?(claims) do
-      true -> :ok
-      false -> {:error, :missing_read_scope}
+      true ->
+        :ok
     end
   end
 
-  defp validate_connection_mode(%{"mode" => "write"}, claims) do
-    case JWT.has_write_scope?(claims) do
-      true -> :ok
-      false -> {:error, :write_mode_without_write_scope}
+  defp validate_connection_mode(connect_msg, claims) do
+    mode = connect_msg["mode"] || "write"
+
+    if mode == "write" and not JWT.has_write_scope?(claims) do
+      {:error, :write_mode_without_write_scope}
+    else
+      :ok
     end
   end
-
-  defp validate_connection_mode(_connect_msg, _claims), do: :ok
 
   defp has_write_scope?(%{assigns: %{claims: claims}}) when is_map(claims) do
     JWT.has_write_scope?(claims)

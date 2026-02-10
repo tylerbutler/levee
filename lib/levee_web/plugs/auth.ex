@@ -107,7 +107,8 @@ defmodule LeveeWeb.Plugs.Auth do
   @spec validate_claims(JWT.token_claims(), Plug.Conn.t(), map()) :: :ok | {:error, term()}
   def validate_claims(claims, conn, opts) do
     with :ok <- validate_expiration(claims),
-         :ok <- validate_tenant(claims, conn, opts),
+         {:ok, tenant_id} <- get_tenant_id(conn, opts),
+         :ok <- validate_tenant(claims, tenant_id),
          :ok <- validate_document(claims, conn, opts),
          :ok <- validate_scopes(claims, opts) do
       :ok
@@ -132,16 +133,11 @@ defmodule LeveeWeb.Plugs.Auth do
     end
   end
 
-  defp validate_tenant(claims, conn, opts) do
-    case get_tenant_id(conn, opts) do
-      {:ok, tenant_id} when tenant_id == claims.tenantId ->
-        :ok
-
-      {:ok, tenant_id} ->
-        {:error, {:tenant_mismatch, claims.tenantId, tenant_id}}
-
-      {:error, _} = err ->
-        err
+  defp validate_tenant(claims, tenant_id) do
+    if claims.tenantId == tenant_id do
+      :ok
+    else
+      {:error, {:tenant_mismatch, claims.tenantId, tenant_id}}
     end
   end
 
