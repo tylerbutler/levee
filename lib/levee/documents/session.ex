@@ -337,14 +337,20 @@ defmodule Levee.Documents.Session do
   end
 
   def handle_cast({:update_client_rsn, client_id, rsn}, state) do
-    with {:ok, new_sequence_state} <-
-           Bridge.update_client_rsn(state.sequence_state, client_id, rsn),
-         {:ok, client_info} <- Map.fetch(state.clients, client_id) do
-      new_clients = Map.put(state.clients, client_id, %{client_info | last_seen_sn: rsn})
-      {:noreply, %{state | sequence_state: new_sequence_state, clients: new_clients}}
-    else
-      _ ->
-        # Client not found or invalid RSN - ignore silently
+    case Bridge.update_client_rsn(state.sequence_state, client_id, rsn) do
+      {:ok, new_sequence_state} ->
+        new_clients =
+          case Map.fetch(state.clients, client_id) do
+            {:ok, client_info} ->
+              Map.put(state.clients, client_id, %{client_info | last_seen_sn: rsn})
+
+            :error ->
+              state.clients
+          end
+
+        {:noreply, %{state | sequence_state: new_sequence_state, clients: new_clients}}
+
+      {:error, _reason} ->
         {:noreply, state}
     end
   end
