@@ -93,7 +93,7 @@ fn view_tenants_section(model: Model) -> Element(Msg) {
           [] ->
             div([class("empty-state")], [
               p([], [text("You don't have any tenants yet.")]),
-              a([class("btn btn-primary"), href("/tenants/new")], [
+              a([class("btn btn-primary"), href("/admin/tenants/new")], [
                 text("Create Your First Tenant"),
               ]),
             ])
@@ -109,7 +109,7 @@ fn view_tenant_list(tenants: List(Tenant)) -> Element(Msg) {
 
 fn view_tenant_item(tenant: Tenant) -> Element(Msg) {
   li([class("tenant-item")], [
-    a([href("/tenants/" <> tenant.id)], [
+    a([href("/admin/tenants/" <> tenant.id)], [
       div([class("tenant-name")], [text(tenant.name)]),
       div([class("tenant-slug")], [text(tenant.slug)]),
     ]),
@@ -121,10 +121,10 @@ fn view_quick_actions() -> Element(Msg) {
     h2([], [text("Quick Actions")]),
     ul([class("action-list")], [
       li([], [
-        a([href("/tenants/new")], [text("Create New Tenant")]),
+        a([href("/admin/tenants/new")], [text("Create New Tenant")]),
       ]),
       li([], [
-        a([href("/tenants")], [text("View All Tenants")]),
+        a([href("/admin/tenants")], [text("View All Tenants")]),
       ]),
     ]),
   ])

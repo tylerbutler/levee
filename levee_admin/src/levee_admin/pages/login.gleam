@@ -133,7 +133,7 @@ pub fn view(model: Model) -> Element(Msg) {
       ]),
       p([class("auth-footer")], [
         text("Don't have an account? "),
-        a([attribute.href("/register")], [text("Register")]),
+        a([attribute.href("/admin/register")], [text("Register")]),
       ]),
     ]),
   ])
