@@ -25,7 +25,7 @@ iex -S mix phx.server # Start with interactive shell
 Levee provides real-time collaborative editing with:
 - **Multi-tenant isolation** - All data keyed by `{tenant_id, document_id}`
 - **JWT authentication** - Per-tenant signing keys
-- **ETS storage** - In-memory storage (dev), pluggable backend
+- **Pluggable storage** - ETS (in-memory, default) or PostgreSQL (persistent) backends
 - **Gleam protocol** - Type-safe sequencing logic on BEAM
 
 ### Request Flow
@@ -46,8 +46,12 @@ Client → Phoenix Router → Auth Plug (JWT) → Controller/Channel → Session
 | `documents/registry.ex` | Registry for looking up sessions by `{tenant_id, doc_id}` |
 | `documents/supervisor.ex` | DynamicSupervisor for document sessions |
 | `protocol/bridge.ex` | Elixir ↔ Gleam interop for protocol logic |
+| `repo.ex` | Ecto Repo for PostgreSQL backend |
+| `storage.ex` | Dynamic dispatch wrapper, delegates to configured backend |
 | `storage/behaviour.ex` | Storage interface (behaviour) |
-| `storage/ets.ex` | ETS-based storage implementation |
+| `storage/ets.ex` | ETS-based storage implementation (default) |
+| `storage/postgres.ex` | PostgreSQL storage implementation (persistent) |
+| `storage/schemas/*.ex` | Ecto schemas: Document, Delta, Blob, Tree, Commit, Ref, Summary |
 
 ### Web Layer (`lib/levee_web/`)
 
@@ -120,6 +124,7 @@ Client → Phoenix Router → Auth Plug (JWT) → Controller/Channel → Session
 | `test_helper.exs` | Test setup, loads Gleam BEAM modules |
 | `support/conn_case.ex` | HTTP test helpers |
 | `support/channel_case.ex` | WebSocket test helpers |
+| `support/data_case.ex` | Ecto sandbox test helpers (PostgreSQL backend) |
 | `levee/auth/*_test.exs` | Auth module tests |
 | `levee/documents/*_test.exs` | Document session tests |
 | `levee_web/channels/*_test.exs` | Channel tests |
@@ -209,6 +214,26 @@ JWT.generate_full_access_token(tenant_id, document_id, user_id)
 | `doc:write` | Submit operations (`submitOp`) |
 | `summary:read` | Read blobs, trees, commits, refs |
 | `summary:write` | Write blobs, trees, commits, update refs |
+
+### Storage Backends
+
+Levee uses a pluggable storage architecture. All backends implement `Levee.Storage.Behaviour` and are accessed via the `Levee.Storage` dispatcher.
+
+| Backend | Module | Use Case |
+|---------|--------|----------|
+| ETS (default) | `Levee.Storage.ETS` | Development, testing, ephemeral data |
+| PostgreSQL | `Levee.Storage.Postgres` | Production, persistent data |
+
+**Configuration:**
+```elixir
+# config.exs (default ETS)
+config :levee, :storage_backend, Levee.Storage.ETS
+
+# Or switch to PostgreSQL
+config :levee, :storage_backend, Levee.Storage.Postgres
+```
+
+Setting `DATABASE_URL` at runtime automatically enables the PostgreSQL backend.
 
 ### Storage Keys
 
@@ -409,6 +434,8 @@ end
 
 | Variable | Purpose |
 |----------|---------|
+| `DATABASE_URL` | PostgreSQL connection URL (enables Postgres backend) |
+| `POOL_SIZE` | Database connection pool size (default: 10) |
 | `LEVEE_TENANT_ID` | Auto-register tenant at startup |
 | `LEVEE_TENANT_KEY` | Secret for auto-registered tenant |
 | `SECRET_KEY_BASE` | Phoenix secret (production) |
