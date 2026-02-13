@@ -1,6 +1,5 @@
 /// Protocol message types for WebSocket communication
 /// Covers connection, operations, and signals
-
 import gleam/dict.{type Dict}
 import gleam/dynamic.{type Dynamic}
 import gleam/option.{type Option}

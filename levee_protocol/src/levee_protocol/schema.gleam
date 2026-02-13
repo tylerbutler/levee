@@ -1,366 +1,300 @@
 /// JSON Schema generation for Levee protocol types
-/// Uses json_blueprint to create decoders that can generate JSON Schema
+/// Builds JSON Schema (Draft 07) directly using gleam/json
+import gleam/json.{type Json}
 
-import gleam/json
-import gleam/list
-import gleam/option.{type Option, None, Some}
-import json/blueprint as bp
-import json/blueprint/schema as jsch
+// ─────────────────────────────────────────────────────────────────────────────
+// Schema helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
-// For Dict(String, Dynamic) fields, we use a permissive object schema
-fn dynamic_dict_decoder() -> bp.Decoder(json.Json) {
-  bp.Decoder(
-    fn(_input) { Ok(json.string("dynamic")) },
-    jsch.DetailedObject(
-      None,
-      None,
-      Some(jsch.TrueValue),
-      None,
-      None,
-      None,
-      None,
+fn string_type() -> Json {
+  json.object([#("type", json.string("string"))])
+}
+
+fn int_type() -> Json {
+  json.object([#("type", json.string("integer"))])
+}
+
+fn bool_type() -> Json {
+  json.object([#("type", json.string("boolean"))])
+}
+
+fn any_type() -> Json {
+  json.bool(True)
+}
+
+fn nullable_string() -> Json {
+  json.object([
+    #(
+      "type",
+      json.preprocessed_array([json.string("string"), json.string("null")]),
     ),
-    [],
-  )
-}
-
-// For Dynamic fields, we use a permissive schema
-fn dynamic_decoder() -> bp.Decoder(json.Json) {
-  bp.Decoder(fn(_input) { Ok(json.null()) }, jsch.TrueValue, [])
-}
-
-/// Decoder for ConnectionMode enum
-pub fn connection_mode_decoder() -> bp.Decoder(String) {
-  bp.enum_type_decoder([#("write", "write"), #("read", "read")])
-}
-
-/// Decoder for User type
-pub fn user_decoder() -> bp.Decoder(#(String, json.Json)) {
-  bp.decode2(
-    fn(id, props) { #(id, props) },
-    bp.field("id", bp.string()),
-    bp.field("properties", dynamic_dict_decoder()),
-  )
-  |> bp.reuse_decoder
-}
-
-/// Decoder for ClientCapabilities type
-pub fn client_capabilities_decoder() -> bp.Decoder(Bool) {
-  bp.decode1(fn(interactive) { interactive }, bp.field("interactive", bp.bool()))
-  |> bp.reuse_decoder
-}
-
-/// Decoder for ClientDetails type
-pub fn client_details_decoder() -> bp.Decoder(
-  #(Bool, Option(String), Option(String), Option(String)),
-) {
-  bp.decode4(
-    fn(capabilities, client_type, environment, device) {
-      #(capabilities, client_type, environment, device)
-    },
-    bp.field("capabilities", client_capabilities_decoder()),
-    bp.optional_field("client_type", bp.string()),
-    bp.optional_field("environment", bp.string()),
-    bp.optional_field("device", bp.string()),
-  )
-  |> bp.reuse_decoder
-}
-
-/// Decoder for Client type
-pub fn client_decoder() -> bp.Decoder(
-  #(
-    String,
-    #(Bool, Option(String), Option(String), Option(String)),
-    List(String),
-    #(String, json.Json),
-    List(String),
-    Option(Int),
-  ),
-) {
-  bp.decode6(
-    fn(mode, details, permission, user, scopes, timestamp) {
-      #(mode, details, permission, user, scopes, timestamp)
-    },
-    bp.field("mode", connection_mode_decoder()),
-    bp.field("details", client_details_decoder()),
-    bp.field("permission", bp.list(bp.string())),
-    bp.field("user", user_decoder()),
-    bp.field("scopes", bp.list(bp.string())),
-    bp.optional_field("timestamp", bp.int()),
-  )
-  |> bp.reuse_decoder
-}
-
-/// Decoder for SequencedClient type
-pub fn sequenced_client_decoder() -> bp.Decoder(#(json.Json, Int)) {
-  bp.decode2(
-    fn(client, seq) { #(client, seq) },
-    bp.field("client", client_decoder() |> bp.map(fn(_) { json.null() })),
-    bp.field("sequence_number", bp.int()),
-  )
-  |> bp.reuse_decoder
-}
-
-/// Decoder for SignalClient type
-pub fn signal_client_decoder() -> bp.Decoder(
-  #(String, json.Json, Option(Int), Option(Int)),
-) {
-  bp.decode4(
-    fn(client_id, client, conn_num, ref_seq) {
-      #(client_id, client, conn_num, ref_seq)
-    },
-    bp.field("client_id", bp.string()),
-    bp.field("client", client_decoder() |> bp.map(fn(_) { json.null() })),
-    bp.optional_field("client_connection_number", bp.int()),
-    bp.optional_field("reference_sequence_number", bp.int()),
-  )
-  |> bp.reuse_decoder
-}
-
-/// Decoder for ServiceConfiguration type
-pub fn service_configuration_decoder() -> bp.Decoder(
-  #(Int, Int, Option(Int), Option(Int)),
-) {
-  bp.decode4(
-    fn(block_size, max_msg_size, noop_time, noop_count) {
-      #(block_size, max_msg_size, noop_time, noop_count)
-    },
-    bp.field("block_size", bp.int()),
-    bp.field("max_message_size", bp.int()),
-    bp.optional_field("noop_time_frequency", bp.int()),
-    bp.optional_field("noop_count_frequency", bp.int()),
-  )
-  |> bp.reuse_decoder
-}
-
-/// Decoder for Trace type
-pub fn trace_decoder() -> bp.Decoder(#(String, String, Int)) {
-  bp.decode3(
-    fn(service, action, timestamp) { #(service, action, timestamp) },
-    bp.field("service", bp.string()),
-    bp.field("action", bp.string()),
-    bp.field("timestamp", bp.int()),
-  )
-  |> bp.reuse_decoder
-}
-
-/// Decoder for MessageOrigin type
-pub fn message_origin_decoder() -> bp.Decoder(#(String, Int, Int)) {
-  bp.decode3(
-    fn(id, seq, min_seq) { #(id, seq, min_seq) },
-    bp.field("id", bp.string()),
-    bp.field("sequence_number", bp.int()),
-    bp.field("minimum_sequence_number", bp.int()),
-  )
-  |> bp.reuse_decoder
-}
-
-/// Decoder for DocumentMessage type
-pub fn document_message_decoder() -> bp.Decoder(
-  #(
-    Int,
-    Int,
-    String,
-    json.Json,
-    Option(json.Json),
-    Option(json.Json),
-    Option(List(#(String, String, Int))),
-    Option(String),
-  ),
-) {
-  bp.decode8(
-    fn(csn, rsn, msg_type, contents, metadata, server_metadata, traces, compression) {
-      #(csn, rsn, msg_type, contents, metadata, server_metadata, traces, compression)
-    },
-    bp.field("client_sequence_number", bp.int()),
-    bp.field("reference_sequence_number", bp.int()),
-    bp.field("message_type", bp.string()),
-    bp.field("contents", dynamic_decoder()),
-    bp.optional_field("metadata", dynamic_decoder()),
-    bp.optional_field("server_metadata", dynamic_decoder()),
-    bp.optional_field("traces", bp.list(trace_decoder())),
-    bp.optional_field("compression", bp.string()),
-  )
-  |> bp.reuse_decoder
-}
-
-/// Decoder for SequencedDocumentMessage type
-pub fn sequenced_document_message_decoder() -> bp.Decoder(
-  #(
-    Option(String),
-    Int,
-    Int,
-    Int,
-    Int,
-    String,
-    json.Json,
-    Option(json.Json),
-    Option(json.Json),
-    Option(#(String, Int, Int)),
-    Option(List(#(String, String, Int))),
-    Int,
-  ),
-) {
-  // Using decode9 for first 9 fields plus additional handling
-  // json_blueprint supports up to decode9, so we'll split this into two parts
-  // For schema generation, we'll create a combined schema manually
-  let schema =
-    jsch.Object(
-      [
-        #("client_id", jsch.Nullable(jsch.Type(jsch.StringType))),
-        #("sequence_number", jsch.Type(jsch.IntegerType)),
-        #("minimum_sequence_number", jsch.Type(jsch.IntegerType)),
-        #("client_sequence_number", jsch.Type(jsch.IntegerType)),
-        #("reference_sequence_number", jsch.Type(jsch.IntegerType)),
-        #("message_type", jsch.Type(jsch.StringType)),
-        #("contents", jsch.TrueValue),
-        #("metadata", jsch.Optional(jsch.TrueValue)),
-        #("server_metadata", jsch.Optional(jsch.TrueValue)),
-        #("origin", jsch.Optional(message_origin_decoder().schema)),
-        #("traces", jsch.Optional(jsch.Array(Some(trace_decoder().schema)))),
-        #("timestamp", jsch.Type(jsch.IntegerType)),
-        #("data", jsch.Optional(jsch.Type(jsch.StringType))),
-      ],
-      Some(False),
-      Some([
-        "sequence_number",
-        "minimum_sequence_number",
-        "client_sequence_number",
-        "reference_sequence_number",
-        "message_type",
-        "contents",
-        "timestamp",
-      ]),
-    )
-
-  bp.Decoder(
-    fn(_input) {
-      Ok(#(
-        None,
-        0,
-        0,
-        0,
-        0,
-        "",
-        json.null(),
-        None,
-        None,
-        None,
-        None,
-        0,
-      ))
-    },
-    schema,
-    [],
-  )
-  |> bp.reuse_decoder
-}
-
-/// Decoder for Scope enum
-pub fn scope_decoder() -> bp.Decoder(String) {
-  bp.enum_type_decoder([
-    #("doc:read", "doc:read"),
-    #("doc:write", "doc:write"),
-    #("summary:write", "summary:write"),
   ])
 }
 
-/// Decoder for TokenClaims type
-pub fn token_claims_decoder() -> bp.Decoder(
-  #(String, List(String), String, #(String, json.Json), Int, Int, String, Option(String)),
-) {
-  bp.decode8(
-    fn(doc_id, scopes, tenant_id, user, iat, exp, version, jti) {
-      #(doc_id, scopes, tenant_id, user, iat, exp, version, jti)
-    },
-    bp.field("document_id", bp.string()),
-    bp.field("scopes", bp.list(bp.string())),
-    bp.field("tenant_id", bp.string()),
-    bp.field("user", user_decoder()),
-    bp.field("issued_at", bp.int()),
-    bp.field("expiration", bp.int()),
-    bp.field("version", bp.string()),
-    bp.optional_field("jti", bp.string()),
-  )
-  |> bp.reuse_decoder
+fn string_array() -> Json {
+  json.object([#("type", json.string("array")), #("items", string_type())])
 }
 
-/// Helper to collect decoder schema and defs as a named definition
-fn collect_decoder(
-  name: String,
-  decoder: bp.Decoder(a),
-) -> #(#(String, jsch.SchemaDefinition), List(#(String, jsch.SchemaDefinition))) {
-  #(#(name, decoder.schema), decoder.defs)
+fn array_of(items: Json) -> Json {
+  json.object([#("type", json.string("array")), #("items", items)])
 }
+
+fn ref(name: String) -> Json {
+  json.object([#("$ref", json.string("#/$defs/" <> name))])
+}
+
+fn string_enum(values: List(String)) -> Json {
+  json.object([
+    #("type", json.string("string")),
+    #("enum", json.array(values, json.string)),
+  ])
+}
+
+fn object_schema(
+  properties: List(#(String, Json)),
+  required: List(String),
+) -> Json {
+  json.object([
+    #("type", json.string("object")),
+    #("properties", json.object(properties)),
+    #("required", json.array(required, json.string)),
+    #("additionalProperties", json.bool(False)),
+  ])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Type schemas
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn connection_mode_schema() -> Json {
+  string_enum(["write", "read"])
+}
+
+fn scope_schema() -> Json {
+  string_enum(["doc:read", "doc:write", "summary:write"])
+}
+
+fn user_schema() -> Json {
+  object_schema(
+    [
+      #("id", string_type()),
+      #(
+        "properties",
+        json.object([
+          #("type", json.string("object")),
+          #("additionalProperties", any_type()),
+        ]),
+      ),
+    ],
+    ["id", "properties"],
+  )
+}
+
+fn client_capabilities_schema() -> Json {
+  object_schema([#("interactive", bool_type())], ["interactive"])
+}
+
+fn client_details_schema() -> Json {
+  object_schema(
+    [
+      #("capabilities", ref("ClientCapabilities")),
+      #("client_type", string_type()),
+      #("environment", string_type()),
+      #("device", string_type()),
+    ],
+    ["capabilities"],
+  )
+}
+
+fn client_schema() -> Json {
+  object_schema(
+    [
+      #("mode", connection_mode_schema()),
+      #("details", ref("ClientDetails")),
+      #("permission", string_array()),
+      #("user", ref("User")),
+      #("scopes", string_array()),
+      #("timestamp", int_type()),
+    ],
+    ["mode", "details", "permission", "user", "scopes"],
+  )
+}
+
+fn sequenced_client_schema() -> Json {
+  object_schema(
+    [
+      #("client", ref("Client")),
+      #("sequence_number", int_type()),
+    ],
+    ["client", "sequence_number"],
+  )
+}
+
+fn signal_client_schema() -> Json {
+  object_schema(
+    [
+      #("client_id", string_type()),
+      #("client", ref("Client")),
+      #("client_connection_number", int_type()),
+      #("reference_sequence_number", int_type()),
+    ],
+    ["client_id", "client"],
+  )
+}
+
+fn service_configuration_schema() -> Json {
+  object_schema(
+    [
+      #("block_size", int_type()),
+      #("max_message_size", int_type()),
+      #("noop_time_frequency", int_type()),
+      #("noop_count_frequency", int_type()),
+    ],
+    ["block_size", "max_message_size"],
+  )
+}
+
+fn trace_schema() -> Json {
+  object_schema(
+    [
+      #("service", string_type()),
+      #("action", string_type()),
+      #("timestamp", int_type()),
+    ],
+    ["service", "action", "timestamp"],
+  )
+}
+
+fn message_origin_schema() -> Json {
+  object_schema(
+    [
+      #("id", string_type()),
+      #("sequence_number", int_type()),
+      #("minimum_sequence_number", int_type()),
+    ],
+    ["id", "sequence_number", "minimum_sequence_number"],
+  )
+}
+
+fn document_message_schema() -> Json {
+  object_schema(
+    [
+      #("client_sequence_number", int_type()),
+      #("reference_sequence_number", int_type()),
+      #("message_type", string_type()),
+      #("contents", any_type()),
+      #("metadata", any_type()),
+      #("server_metadata", any_type()),
+      #("traces", array_of(ref("Trace"))),
+      #("compression", string_type()),
+    ],
+    [
+      "client_sequence_number",
+      "reference_sequence_number",
+      "message_type",
+      "contents",
+    ],
+  )
+}
+
+fn sequenced_document_message_schema() -> Json {
+  object_schema(
+    [
+      #("client_id", nullable_string()),
+      #("sequence_number", int_type()),
+      #("minimum_sequence_number", int_type()),
+      #("client_sequence_number", int_type()),
+      #("reference_sequence_number", int_type()),
+      #("message_type", string_type()),
+      #("contents", any_type()),
+      #("metadata", any_type()),
+      #("server_metadata", any_type()),
+      #("origin", ref("MessageOrigin")),
+      #("traces", array_of(ref("Trace"))),
+      #("timestamp", int_type()),
+      #("data", string_type()),
+    ],
+    [
+      "sequence_number",
+      "minimum_sequence_number",
+      "client_sequence_number",
+      "reference_sequence_number",
+      "message_type",
+      "contents",
+      "timestamp",
+    ],
+  )
+}
+
+fn token_claims_schema() -> Json {
+  object_schema(
+    [
+      #("document_id", string_type()),
+      #("scopes", string_array()),
+      #("tenant_id", string_type()),
+      #("user", ref("User")),
+      #("issued_at", int_type()),
+      #("expiration", int_type()),
+      #("version", string_type()),
+      #("jti", string_type()),
+    ],
+    [
+      "document_id",
+      "scopes",
+      "tenant_id",
+      "user",
+      "issued_at",
+      "expiration",
+      "version",
+    ],
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Public API
+// ─────────────────────────────────────────────────────────────────────────────
 
 /// Generate JSON schema for all protocol types as a combined schema
-pub fn generate_protocol_schema() -> json.Json {
-  // Type names to export
-  let type_names = [
-    "ConnectionMode",
-    "User",
-    "ClientCapabilities",
-    "ClientDetails",
-    "Client",
-    "SequencedClient",
-    "SignalClient",
-    "ServiceConfiguration",
-    "Trace",
-    "MessageOrigin",
-    "DocumentMessage",
-    "SequencedDocumentMessage",
-    "Scope",
-    "TokenClaims",
+pub fn generate_protocol_schema() -> Json {
+  let defs = [
+    #("ConnectionMode", connection_mode_schema()),
+    #("User", user_schema()),
+    #("ClientCapabilities", client_capabilities_schema()),
+    #("ClientDetails", client_details_schema()),
+    #("Client", client_schema()),
+    #("SequencedClient", sequenced_client_schema()),
+    #("SignalClient", signal_client_schema()),
+    #("ServiceConfiguration", service_configuration_schema()),
+    #("Trace", trace_schema()),
+    #("MessageOrigin", message_origin_schema()),
+    #("DocumentMessage", document_message_schema()),
+    #("SequencedDocumentMessage", sequenced_document_message_schema()),
+    #("Scope", scope_schema()),
+    #("TokenClaims", token_claims_schema()),
   ]
 
-  // Collect all decoders with their names
-  let collected = [
-    collect_decoder("ConnectionMode", connection_mode_decoder()),
-    collect_decoder("User", user_decoder()),
-    collect_decoder("ClientCapabilities", client_capabilities_decoder()),
-    collect_decoder("ClientDetails", client_details_decoder()),
-    collect_decoder("Client", client_decoder()),
-    collect_decoder("SequencedClient", sequenced_client_decoder()),
-    collect_decoder("SignalClient", signal_client_decoder()),
-    collect_decoder("ServiceConfiguration", service_configuration_decoder()),
-    collect_decoder("Trace", trace_decoder()),
-    collect_decoder("MessageOrigin", message_origin_decoder()),
-    collect_decoder("DocumentMessage", document_message_decoder()),
-    collect_decoder(
-      "SequencedDocumentMessage",
-      sequenced_document_message_decoder(),
-    ),
-    collect_decoder("Scope", scope_decoder()),
-    collect_decoder("TokenClaims", token_claims_decoder()),
+  let root_props = [
+    #("ConnectionMode", ref("ConnectionMode")),
+    #("User", ref("User")),
+    #("ClientCapabilities", ref("ClientCapabilities")),
+    #("ClientDetails", ref("ClientDetails")),
+    #("Client", ref("Client")),
+    #("SequencedClient", ref("SequencedClient")),
+    #("SignalClient", ref("SignalClient")),
+    #("ServiceConfiguration", ref("ServiceConfiguration")),
+    #("Trace", ref("Trace")),
+    #("MessageOrigin", ref("MessageOrigin")),
+    #("DocumentMessage", ref("DocumentMessage")),
+    #("SequencedDocumentMessage", ref("SequencedDocumentMessage")),
+    #("Scope", ref("Scope")),
+    #("TokenClaims", ref("TokenClaims")),
   ]
 
-  // Extract named definitions
-  let named_defs = list.map(collected, fn(c) { c.0 })
-
-  // Collect all nested defs from reuse_decoder
-  let nested_defs = list.flat_map(collected, fn(c) { c.1 })
-
-  // Merge all definitions
-  let all_defs = list.append(named_defs, nested_defs)
-
-  // Create root properties that reference each type definition
-  // This ensures json-schema-to-typescript generates all types
-  let root_properties =
-    list.map(type_names, fn(name) {
-      #(name, jsch.Ref("#/$defs/" <> name))
-    })
-
-  // Root schema wraps all definitions with properties referencing them
-  let schema =
-    jsch.new_schema(
-      jsch.Object(root_properties, Some(False), None),
-      Some(all_defs),
-    )
-
-  jsch.to_json(schema)
-}
-
-/// Generate JSON schema for individual decoders
-pub fn generate_schema(decoder: bp.Decoder(a)) -> json.Json {
-  bp.generate_json_schema(decoder)
+  json.object([
+    #("$schema", json.string("http://json-schema.org/draft-07/schema#")),
+    #("type", json.string("object")),
+    #("additionalProperties", json.bool(False)),
+    #("properties", json.object(root_props)),
+    #("$defs", json.object(defs)),
+  ])
 }

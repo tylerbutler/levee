@@ -38,6 +38,16 @@ defmodule LeveeWeb.Router do
     get "/health", HealthController, :index
   end
 
+  # Auth API routes (public - no JWT required)
+  scope "/api/auth", LeveeWeb do
+    pipe_through :api
+
+    post "/register", AuthController, :register
+    post "/login", AuthController, :login
+    post "/logout", AuthController, :logout
+    get "/me", AuthController, :me
+  end
+
   # Document Operations (Storage Service) - write access for create
   scope "/documents", LeveeWeb do
     pipe_through :write_access
@@ -100,5 +110,17 @@ defmodule LeveeWeb.Router do
     # Reference write operations
     post "/refs", GitController, :create_ref
     patch "/refs/*ref", GitController, :update_ref
+  end
+
+  # Admin UI - SPA catch-all (serves index.html for all /admin/* paths)
+  pipeline :browser do
+    plug :accepts, ["html"]
+  end
+
+  scope "/admin", LeveeWeb do
+    pipe_through :browser
+
+    get "/", AdminController, :index
+    get "/*path", AdminController, :index
   end
 end

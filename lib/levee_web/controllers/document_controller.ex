@@ -30,9 +30,8 @@ defmodule LeveeWeb.DocumentController do
 
     case Storage.create_document(tenant_id, document_id, %{sequence_number: sequence_number}) do
       {:ok, _document} ->
-        # Process initial summary if provided
         if summary = params["summary"] do
-          process_initial_summary(tenant_id, document_id, summary)
+          process_summary_tree(tenant_id, summary)
         end
 
         # Return the document ID or full session info
@@ -114,15 +113,8 @@ defmodule LeveeWeb.DocumentController do
   end
 
   defp build_session_info(tenant_id, document_id) do
-    # Get the endpoint URL from config
     host = LeveeWeb.Endpoint.url()
-
-    # Check if session is alive (has active GenServer)
-    is_alive =
-      case Registry.get_session(tenant_id, document_id) do
-        {:ok, _pid} -> true
-        _ -> false
-      end
+    is_alive = match?({:ok, _pid}, Registry.get_session(tenant_id, document_id))
 
     %{
       ordererUrl: "#{host}/socket",
@@ -131,11 +123,6 @@ defmodule LeveeWeb.DocumentController do
       isSessionAlive: is_alive,
       isSessionActive: is_alive
     }
-  end
-
-  defp process_initial_summary(tenant_id, _document_id, summary) do
-    # Process the summary tree and store blobs/trees
-    process_summary_tree(tenant_id, summary)
   end
 
   defp process_summary_tree(tenant_id, %{"type" => 1, "tree" => tree}) do

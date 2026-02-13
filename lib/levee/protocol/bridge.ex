@@ -127,16 +127,7 @@ defmodule Levee.Protocol.Bridge do
   Update a client's RSN without submitting an op (e.g., from NoOp).
   """
   def update_client_rsn(state, client_id, new_rsn) do
-    case @gleam_sequencing.update_client_rsn(state, client_id, new_rsn) do
-      {:ok, new_state} ->
-        {:ok, new_state}
-
-      {:error, {:unknown_client, cid}} ->
-        {:error, {:unknown_client, cid}}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    @gleam_sequencing.update_client_rsn(state, client_id, new_rsn)
   end
 
   # ─────────────────────────────────────────────────────────────────────────────

@@ -4,9 +4,8 @@ target = "erlang"
 description = "Type-safe Levee protocol implementation"
 
 [dependencies]
-gleam_stdlib = ">= 0.39.0 and < 0.47.0"
-json_blueprint = ">= 1.6.0 and < 2.0.0"
-gleam_json = ">= 2.1.0 and < 3.0.0"
+gleam_stdlib = ">= 0.62.0 and < 2.0.0"
+gleam_json = ">= 3.0.0 and < 4.0.0"
 
 [dev-dependencies]
-gleeunit = "~> 1.0"
+startest = "~> 0.8"

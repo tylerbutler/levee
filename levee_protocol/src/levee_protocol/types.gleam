@@ -1,6 +1,5 @@
 /// Core types for Fluid Framework protocol
 /// These types map directly to the protocol specification
-
 import gleam/dict.{type Dict}
 import gleam/dynamic.{type Dynamic}
 import gleam/option.{type Option}
@@ -121,11 +120,7 @@ pub type SequencedDocumentMessage {
 
 /// Branch origin for forked documents
 pub type MessageOrigin {
-  MessageOrigin(
-    id: String,
-    sequence_number: Int,
-    minimum_sequence_number: Int,
-  )
+  MessageOrigin(id: String, sequence_number: Int, minimum_sequence_number: Int)
 }
 
 /// JWT token claims

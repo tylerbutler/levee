@@ -2,7 +2,6 @@
 ///
 /// Signals are ephemeral messages broadcast to connected clients.
 /// Unlike operations, signals are NOT sequenced or persisted.
-
 import gleam/dynamic.{type Dynamic}
 import gleam/option.{type Option, None, Some}
 
