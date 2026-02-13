@@ -26,6 +26,8 @@ defmodule Levee.Application do
           Levee.Auth.SessionStore,
           # DynamicSupervisor for document sessions
           Levee.Documents.Supervisor,
+          # Beryl channels coordinator (must start before Endpoint)
+          Levee.Channels,
           # Start to serve requests, typically the last entry
           LeveeWeb.Endpoint
         ]

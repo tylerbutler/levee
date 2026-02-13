@@ -11,10 +11,8 @@ defmodule LeveeWeb.Endpoint do
     same_site: "Lax"
   ]
 
-  # Fluid Framework WebSocket endpoint
-  socket "/socket", LeveeWeb.UserSocket,
-    websocket: true,
-    longpoll: false
+  # Beryl WebSocket endpoint (replaces Phoenix.Channel)
+  plug LeveeWeb.Plugs.WebSocket
 
   # Serve at "/" the static files from "priv/static" directory.
   #
