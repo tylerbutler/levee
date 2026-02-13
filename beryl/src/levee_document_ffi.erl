@@ -5,13 +5,14 @@
     jwt_has_read_scope/1,
     jwt_has_write_scope/1,
     registry_get_or_create_session/2,
-    session_client_join/2,
+    session_client_join/3,
     session_submit_ops/3,
     session_submit_signals/3,
     session_update_client_rsn/3,
     session_get_ops_since/2,
     session_client_leave/2,
-    process_monitor/1
+    process_monitor/1,
+    notify_handler_session/2
 ]).
 
 %% JWT functions
@@ -31,9 +32,11 @@ jwt_has_write_scope(Claims) ->
 registry_get_or_create_session(TenantId, DocumentId) ->
     'Elixir.Levee.Documents.Registry':get_or_create_session(TenantId, DocumentId).
 
-%% Session functions - these use GenServer.call, so caller PID matters
-session_client_join(SessionPid, ConnectMsg) ->
-    'Elixir.Levee.Documents.Session':client_join(SessionPid, ConnectMsg).
+%% Session functions
+%% client_join now takes an explicit HandlerPid so the Session can
+%% send {:op, msg} and {:signal, msg} to the correct process
+session_client_join(SessionPid, ConnectMsg, HandlerPid) ->
+    'Elixir.Levee.Documents.Session':client_join(SessionPid, ConnectMsg, HandlerPid).
 
 session_submit_ops(SessionPid, ClientId, Batches) ->
     'Elixir.Levee.Documents.Session':submit_ops(SessionPid, ClientId, Batches).
@@ -53,3 +56,8 @@ session_client_leave(SessionPid, ClientId) ->
 %% Process monitoring
 process_monitor(Pid) ->
     erlang:monitor(process, Pid).
+
+%% Notify the WebSocket handler of the session PID so it can monitor it
+notify_handler_session(HandlerPid, SessionPid) ->
+    HandlerPid ! {session_started, SessionPid},
+    nil.

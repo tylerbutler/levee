@@ -8,6 +8,7 @@
 
 import gleam/bit_array
 import gleam/crypto
+import gleam/dynamic.{type Dynamic}
 import gleam/erlang/process.{type Subject}
 import gleam/option.{type Option, None}
 import gleam/result
@@ -15,6 +16,14 @@ import beryl/coordinator.{type Message as CoordinatorMessage}
 import beryl/wire
 import wisp
 import wisp/websocket
+
+/// Get current process PID as Dynamic (for handler_pid in SocketConnected)
+@external(erlang, "beryl_ffi", "identity")
+fn unsafe_coerce(value: a) -> Dynamic
+
+fn get_self() -> Dynamic {
+  unsafe_coerce(process.self())
+}
 
 /// Configuration for the WebSocket transport
 pub type TransportConfig {
@@ -98,8 +107,12 @@ fn on_init(
     |> result.replace_error(Nil)
   }
 
-  // Register with coordinator
-  process.send(coordinator, coordinator.SocketConnected(socket_id, send_fn))
+  // Register with coordinator (in wisp transport, self() is the handler)
+  let handler_pid = get_self()
+  process.send(
+    coordinator,
+    coordinator.SocketConnected(socket_id, send_fn, handler_pid),
+  )
 
   let state = ConnectionState(socket_id: socket_id, coordinator: coordinator)
 

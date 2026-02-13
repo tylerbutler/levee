@@ -59,7 +59,11 @@ fn registry_get_or_create_session(
 ) -> Dynamic
 
 @external(erlang, "levee_document_ffi", "session_client_join")
-fn session_client_join(session_pid: Dynamic, connect_msg: Dynamic) -> Dynamic
+fn session_client_join(
+  session_pid: Dynamic,
+  connect_msg: Dynamic,
+  handler_pid: Dynamic,
+) -> Dynamic
 
 @external(erlang, "levee_document_ffi", "session_submit_ops")
 fn session_submit_ops(
@@ -88,8 +92,9 @@ fn session_get_ops_since(session_pid: Dynamic, sn: Int) -> Dynamic
 @external(erlang, "levee_document_ffi", "session_client_leave")
 fn session_client_leave(session_pid: Dynamic, client_id: String) -> Dynamic
 
-@external(erlang, "levee_document_ffi", "process_monitor")
-fn process_monitor(pid: Dynamic) -> Dynamic
+/// Notify the WebSocket handler about the session PID so it can monitor it
+@external(erlang, "levee_document_ffi", "notify_handler_session")
+fn notify_handler_session(handler_pid: Dynamic, session_pid: Dynamic) -> Dynamic
 
 /// Unsafe coerce any value to Dynamic (uses beryl_ffi identity)
 @external(erlang, "beryl_ffi", "identity")
@@ -339,8 +344,9 @@ fn do_connect_with_session(
       NoReplyErased(assigns: ctx.assigns)
     }
     Ok(session_pid) -> {
-      // Client join
-      let join_result = session_client_join(session_pid, payload)
+      // Client join - pass handler_pid so Session sends {:op}/{:signal} to it
+      let join_result =
+        session_client_join(session_pid, payload, ctx.handler_pid)
 
       case decode_ok_tuple3(join_result) {
         Error(_) -> {
@@ -348,8 +354,8 @@ fn do_connect_with_session(
           NoReplyErased(assigns: ctx.assigns)
         }
         Ok(#(client_id, response)) -> {
-          // Monitor session
-          let _ = process_monitor(session_pid)
+          // Notify handler about session PID so it can monitor it
+          let _ = notify_handler_session(ctx.handler_pid, session_pid)
 
           // Push success response
           push_dynamic_to_ctx(ctx, "connect_document_success", response)

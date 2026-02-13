@@ -74,6 +74,10 @@ defmodule Levee.Documents.Session do
     GenServer.call(pid, {:client_join, connect_msg, self()})
   end
 
+  def client_join(pid, connect_msg, channel_pid) do
+    GenServer.call(pid, {:client_join, connect_msg, channel_pid})
+  end
+
   def client_leave(pid, client_id) do
     GenServer.cast(pid, {:client_leave, client_id})
   end

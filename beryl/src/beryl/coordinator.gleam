@@ -39,6 +39,8 @@ pub type SocketContext {
     assigns: Dynamic,
     /// Function to send messages to this socket
     send: fn(String) -> Result(Nil, Nil),
+    /// PID of the WebSocket handler process (for direct messaging)
+    handler_pid: Dynamic,
   )
 }
 
@@ -80,6 +82,8 @@ pub type SocketInfo {
     id: String,
     /// Function to send text to this socket's WebSocket
     send: fn(String) -> Result(Nil, Nil),
+    /// PID of the WebSocket handler process (for direct messaging)
+    handler_pid: Dynamic,
     /// Topics this socket is subscribed to
     subscribed_topics: Set(String),
     /// Per-topic assigns (topic -> Dynamic assigns)
@@ -96,7 +100,11 @@ pub type Message {
     reply: Subject(Result(Nil, RegisterError)),
   )
   // Socket lifecycle
-  SocketConnected(socket_id: String, send: fn(String) -> Result(Nil, Nil))
+  SocketConnected(
+    socket_id: String,
+    send: fn(String) -> Result(Nil, Nil),
+    handler_pid: Dynamic,
+  )
   SocketDisconnected(socket_id: String)
   // Channel operations
   Join(
@@ -141,8 +149,8 @@ fn handle_message(state: State, message: Message) -> actor.Next(State, Message) 
     RegisterChannel(pattern, handler, reply) ->
       handle_register_channel(state, pattern, handler, reply)
 
-    SocketConnected(socket_id, send) ->
-      handle_socket_connected(state, socket_id, send)
+    SocketConnected(socket_id, send, handler_pid) ->
+      handle_socket_connected(state, socket_id, send, handler_pid)
 
     SocketDisconnected(socket_id) ->
       handle_socket_disconnected(state, socket_id)
@@ -191,11 +199,13 @@ fn handle_socket_connected(
   state: State,
   socket_id: String,
   send: fn(String) -> Result(Nil, Nil),
+  handler_pid: Dynamic,
 ) -> actor.Next(State, Message) {
   let socket_info =
     SocketInfo(
       id: socket_id,
       send: send,
+      handler_pid: handler_pid,
       subscribed_topics: set.new(),
       channel_assigns: dict.new(),
     )
@@ -265,6 +275,7 @@ fn handle_join(
               topic: topic_name,
               assigns: dynamic.nil(),
               send: socket_info.send,
+              handler_pid: socket_info.handler_pid,
             )
 
           // Call join handler
@@ -383,6 +394,7 @@ fn handle_in(
                   topic: topic_name,
                   assigns: assigns,
                   send: socket_info.send,
+                  handler_pid: socket_info.handler_pid,
                 )
 
               // Call handler
@@ -523,6 +535,7 @@ fn terminate_channel(
                   topic: topic_name,
                   assigns: assigns,
                   send: socket_info.send,
+                  handler_pid: socket_info.handler_pid,
                 )
               handler.terminate(reason, ctx)
             }
