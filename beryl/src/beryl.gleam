@@ -1,4 +1,4 @@
-//// Gleam Channels - Type-safe real-time communication
+//// Beryl - Type-safe real-time communication
 ////
 //// A library for building real-time applications with WebSocket channels,
 //// presence tracking, and pub/sub messaging.
@@ -6,16 +6,16 @@
 //// ## Quick Start
 ////
 //// ```gleam
-//// import gleam_channels
-//// import gleam_channels/channel
-//// import gleam_channels/transport/websocket
+//// import beryl
+//// import beryl/channel
+//// import beryl/transport/websocket
 ////
 //// pub fn main() {
 ////   // Start channels system
-////   let assert Ok(channels) = gleam_channels.start(gleam_channels.default_config())
+////   let assert Ok(channels) = beryl.start(beryl.default_config())
 ////
 ////   // Register a channel handler
-////   let _ = gleam_channels.register(channels, "room:*", room_channel.new())
+////   let _ = beryl.register(channels, "room:*", room_channel.new())
 ////
 ////   // Use with wisp
 ////   let handler = fn(req) {
@@ -32,10 +32,10 @@ import gleam/erlang/process.{type Subject}
 import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
-import gleam_channels/channel.{type Channel}
-import gleam_channels/coordinator
-import gleam_channels/socket.{type Socket}
-import gleam_channels/topic
+import beryl/channel.{type Channel}
+import beryl/coordinator
+import beryl/socket.{type Socket}
+import beryl/topic
 
 // Re-export types from coordinator for convenience
 pub type ChannelHandler =
@@ -92,7 +92,7 @@ pub type StartError {
 ///
 /// ```gleam
 /// pub fn main() {
-///   let assert Ok(channels) = gleam_channels.start(gleam_channels.default_config())
+///   let assert Ok(channels) = beryl.start(beryl.default_config())
 ///   // Use channels...
 /// }
 /// ```
@@ -122,7 +122,7 @@ pub fn start(config: Config) -> Result(Channels, StartError) {
 /// })
 ///
 /// // Register it
-/// gleam_channels.register(channels, "chat:*", chat_channel)
+/// beryl.register(channels, "chat:*", chat_channel)
 /// ```
 pub fn register(
   channels: Channels,
@@ -145,7 +145,7 @@ pub fn register(
 /// ## Example
 ///
 /// ```gleam
-/// gleam_channels.broadcast(
+/// beryl.broadcast(
 ///   channels,
 ///   "room:lobby",
 ///   "new_message",
@@ -172,7 +172,7 @@ pub fn broadcast(
 ///
 /// ```gleam
 /// // In a channel handler, broadcast to others
-/// gleam_channels.broadcast_from(
+/// beryl.broadcast_from(
 ///   channels,
 ///   socket_id,
 ///   "room:lobby",
@@ -373,11 +373,11 @@ fn result_to_transport_result(
 }
 
 /// Unsafe coercion to Dynamic - only use for type erasure
-@external(erlang, "gleam_channels_ffi", "identity")
+@external(erlang, "beryl_ffi", "identity")
 fn unsafe_coerce_to_dynamic(value: a) -> Dynamic
 
 /// Unsafe coercion of socket types - only use for type erasure
-@external(erlang, "gleam_channels_ffi", "identity")
+@external(erlang, "beryl_ffi", "identity")
 fn unsafe_coerce_socket(socket: Socket(a)) -> Socket(b)
 
 /// Convert Dynamic to Json (best effort)

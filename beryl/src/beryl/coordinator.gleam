@@ -15,9 +15,9 @@ import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import gleam/result
 import gleam/set.{type Set}
-import gleam_channels/channel.{type StopReason}
-import gleam_channels/topic.{type TopicPattern}
-import gleam_channels/wire
+import beryl/channel.{type StopReason}
+import beryl/topic.{type TopicPattern}
+import beryl/wire
 
 /// Type-erased channel handler for storage
 /// The actual typed Channel is converted to this for the registry

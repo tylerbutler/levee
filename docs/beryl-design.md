@@ -1,4 +1,4 @@
-# Gleam Channels - Implementation Plan
+# Beryl - Implementation Plan
 
 **Building on Wisp PR #144 WebSocket support**
 
@@ -21,9 +21,9 @@ A type-safe library for real-time WebSocket communication in Gleam, with channel
 ## Module Structure
 
 ```
-gleam_channels/src/
-├── gleam_channels.gleam           # Main public API
-├── gleam_channels/
+beryl/src/
+├── beryl.gleam           # Main public API
+├── beryl/
 │   ├── socket.gleam               # Socket type and operations
 │   ├── channel.gleam              # Channel behavior/interface
 │   ├── topic.gleam                # Topic parsing and matching
@@ -42,7 +42,7 @@ gleam_channels/src/
 ### Socket (Type-Safe Assigns)
 
 ```gleam
-// gleam_channels/socket.gleam
+// beryl/socket.gleam
 
 import gleam/set.{type Set}
 
@@ -82,7 +82,7 @@ pub fn topics(socket: Socket(a)) -> Set(String)
 ### Channel Behavior
 
 ```gleam
-// gleam_channels/channel.gleam
+// beryl/channel.gleam
 
 import gleam/json.{type Json}
 import gleam/option.{type Option}
@@ -165,7 +165,7 @@ pub fn with_terminate(
 ### Topic Pattern Matching
 
 ```gleam
-// gleam_channels/topic.gleam
+// beryl/topic.gleam
 
 /// Topic pattern for routing
 pub type TopicPattern {
@@ -198,13 +198,13 @@ pub fn extract_id(pattern: TopicPattern, topic: String) -> Result(String, Nil)
 ## Main API
 
 ```gleam
-// gleam_channels.gleam
+// beryl.gleam
 
 import gleam/erlang/process.{type Subject}
 import gleam/json.{type Json}
-import gleam_channels/channel.{type Channel}
-import gleam_channels/socket.{type Socket}
-import gleam_channels/presence.{type PresenceList}
+import beryl/channel.{type Channel}
+import beryl/socket.{type Socket}
+import beryl/presence.{type PresenceList}
 
 /// Configuration for the channels system
 pub type Config {
@@ -278,9 +278,9 @@ pub fn push(socket: Socket(a), event: String, payload: Json) -> Nil
 pub fn topic_id(channels: Channels, topic: String) -> Result(String, Nil)
 
 // Re-exports for convenience
-pub const socket = gleam_channels/socket
-pub const channel = gleam_channels/channel
-pub const presence = gleam_channels/presence
+pub const socket = beryl/socket
+pub const channel = beryl/channel
+pub const presence = beryl/presence
 ```
 
 ---
@@ -288,9 +288,9 @@ pub const presence = gleam_channels/presence
 ## Wisp Integration
 
 ```gleam
-// gleam_channels/transport/websocket.gleam
+// beryl/transport/websocket.gleam
 
-import gleam_channels.{type Channels}
+import beryl.{type Channels}
 import wisp.{type Request, type Response}
 
 /// Configuration for WebSocket transport
@@ -371,11 +371,11 @@ pub fn encode_message(message: WireMessage) -> String
 ## Presence API
 
 ```gleam
-// gleam_channels/presence.gleam
+// beryl/presence.gleam
 
 import gleam/dict.{type Dict}
 import gleam/json.{type Json}
-import gleam_channels/socket.{type Socket}
+import beryl/socket.{type Socket}
 
 /// Presence metadata for a single presence entry
 pub type PresenceMeta {
@@ -607,7 +607,7 @@ Messages use the Phoenix wire format for client compatibility:
 
 **Deliverable:** Working channels for single-node deployments
 
-**Test:** Port levee's DocumentChannel to gleam_channels
+**Test:** Port levee's DocumentChannel to beryl
 
 ### Phase 2: Presence
 
@@ -656,9 +656,9 @@ import gleam/dict.{type Dict}
 import gleam/dynamic.{type Dynamic}
 import gleam/json.{type Json}
 import gleam/option.{type Option, None, Some}
-import gleam_channels.{type Channels}
-import gleam_channels/channel.{type Channel, type HandleResult, type JoinResult}
-import gleam_channels/socket.{type Socket}
+import beryl.{type Channels}
+import beryl/channel.{type Channel, type HandleResult, type JoinResult}
+import beryl/socket.{type Socket}
 import levee/auth/jwt
 import levee/documents/session
 import levee/protocol/message
@@ -793,7 +793,7 @@ fn handle_submit_op(
           case session.submit_ops(assigns.session, assigns.client_id, submit.batches) {
             Ok(_) -> channel.NoReply(socket)
             Error(nacks) -> {
-              gleam_channels.push(socket, "nack", encode_nacks(nacks))
+              beryl.push(socket, "nack", encode_nacks(nacks))
               channel.NoReply(socket)
             }
           }
@@ -809,15 +809,15 @@ fn handle_info(
 ) -> HandleResult(DocumentAssigns) {
   case message {
     OpBroadcast(ops) -> {
-      gleam_channels.push(socket, "op", encode_ops(ops))
+      beryl.push(socket, "op", encode_ops(ops))
       channel.NoReply(socket)
     }
     SignalBroadcast(signals) -> {
-      gleam_channels.push(socket, "signal", encode_signals(signals))
+      beryl.push(socket, "signal", encode_signals(signals))
       channel.NoReply(socket)
     }
     SessionClosed(reason) -> {
-      gleam_channels.push(socket, "session_closed", json.object([
+      beryl.push(socket, "session_closed", json.object([
         #("reason", json.string(reason)),
       ]))
       channel.Stop(channel.Shutdown)
@@ -843,7 +843,7 @@ fn push_nack(socket: Socket(a), code: Int, type_: String, msg: String) -> Nil
 ## Dependencies
 
 ```toml
-# gleam_channels/gleam.toml
+# beryl/gleam.toml
 
 [dependencies]
 gleam_stdlib = ">= 0.44.0"
@@ -864,7 +864,7 @@ gleeunit = ">= 1.0.0"
 
 | Question | Decision |
 |----------|----------|
-| **Naming** | `gleam_channels` for discoverability |
+| **Naming** | `beryl` for discoverability |
 | **Message format** | Phoenix format for phoenix.js compatibility |
 | **Distributed PubSub** | Wrap `pg` (Erlang process groups) |
 | **Presence CRDT** | Start simple (last-write-wins), add CRDT in Phase 4 |

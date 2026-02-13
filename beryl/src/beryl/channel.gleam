@@ -39,7 +39,7 @@
 
 import gleam/json.{type Json}
 import gleam/option.{type Option}
-import gleam_channels/socket.{type Socket}
+import beryl/socket.{type Socket}
 
 /// Result of joining a channel
 pub type JoinResult(assigns) {

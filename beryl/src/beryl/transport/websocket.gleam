@@ -1,7 +1,7 @@
-//// WebSocket Transport - Wisp integration for gleam_channels
+//// WebSocket Transport - Wisp integration for beryl
 ////
 //// This module provides the bridge between Wisp's WebSocket handling
-//// and the gleam_channels coordinator. It handles:
+//// and the beryl coordinator. It handles:
 //// - WebSocket connection lifecycle
 //// - Phoenix wire protocol parsing
 //// - Routing messages to/from the coordinator
@@ -11,8 +11,8 @@ import gleam/crypto
 import gleam/erlang/process.{type Subject}
 import gleam/option.{type Option, None}
 import gleam/result
-import gleam_channels/coordinator.{type Message as CoordinatorMessage}
-import gleam_channels/wire
+import beryl/coordinator.{type Message as CoordinatorMessage}
+import beryl/wire
 import wisp
 import wisp/websocket
 

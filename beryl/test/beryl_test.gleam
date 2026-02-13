@@ -2,10 +2,10 @@ import gleam/json
 import gleam/option
 import gleam/set
 import gleam/string
-import gleam_channels
-import gleam_channels/socket
-import gleam_channels/topic
-import gleam_channels/wire
+import beryl
+import beryl/socket
+import beryl/topic
+import beryl/wire
 import gleeunit
 import gleeunit/should
 
@@ -100,7 +100,7 @@ pub fn validate_topic_test() {
 // Config tests
 
 pub fn default_config_test() {
-  let config = gleam_channels.default_config()
+  let config = beryl.default_config()
 
   config.heartbeat_interval_ms
   |> should.equal(30_000)
