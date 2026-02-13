@@ -25,6 +25,10 @@
 //// }
 //// ```
 
+import beryl/channel.{type Channel}
+import beryl/coordinator
+import beryl/socket.{type Socket}
+import beryl/topic
 import gleam/dict
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
@@ -32,10 +36,6 @@ import gleam/erlang/process.{type Subject}
 import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
-import beryl/channel.{type Channel}
-import beryl/coordinator
-import beryl/socket.{type Socket}
-import beryl/topic
 
 // Re-export types from coordinator for convenience
 pub type ChannelHandler =

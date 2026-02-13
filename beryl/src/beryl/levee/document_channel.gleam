@@ -18,7 +18,6 @@ import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/json
 import gleam/option.{None, Some}
-import gleam/result
 import gleam/string
 
 /// Channel state - pre-connect or post-connect
@@ -196,22 +195,34 @@ fn handle_connect_document(
       NoReplyErased(assigns: ctx.assigns)
     }
     Pending(tenant_id: tenant_id, document_id: document_id) -> {
-      // Decode required fields
+      // Decode fields - use optional_field so missing keys return None
+      // instead of failing the entire decoder
       let field_decoder = {
-        use msg_tenant_id <- decode.subfield(
-          ["tenantId"],
+        use msg_tenant_id <- decode.optional_field(
+          "tenantId",
+          None,
           decode.optional(decode.string),
         )
-        use msg_doc_id <- decode.subfield(
-          ["id"],
+        use msg_doc_id <- decode.optional_field(
+          "id",
+          None,
           decode.optional(decode.string),
         )
-        use token <- decode.subfield(["token"], decode.optional(decode.string))
-        use client <- decode.subfield(
-          ["client"],
+        use token <- decode.optional_field(
+          "token",
+          None,
+          decode.optional(decode.string),
+        )
+        use client <- decode.optional_field(
+          "client",
+          None,
           decode.optional(decode.dynamic),
         )
-        use mode <- decode.subfield(["mode"], decode.optional(decode.string))
+        use mode <- decode.optional_field(
+          "mode",
+          None,
+          decode.optional(decode.string),
+        )
         decode.success(#(msg_tenant_id, msg_doc_id, token, client, mode))
       }
 
@@ -734,19 +745,30 @@ fn decode_result(value: Dynamic) -> Result(Dynamic, Dynamic) {
   }
 }
 
-/// Decode {:ok, {client_id, response}} tuple
+/// Decode {:ok, client_id, response} 3-element tuple
+/// Session.client_join returns {:reply, {:ok, client_id, response}, state}
+/// so the GenServer.call result is {:ok, client_id, response}
 fn decode_ok_tuple3(value: Dynamic) -> Result(#(String, Dynamic), Nil) {
-  case decode_result(value) {
-    Error(_) -> Error(Nil)
-    Ok(inner) -> {
-      let tuple_decoder = {
-        use client_id <- decode.subfield([0], decode.string)
-        use response <- decode.subfield([1], decode.dynamic)
-        decode.success(#(client_id, response))
+  let decoder = {
+    use tag <- decode.subfield([0], decode.dynamic)
+    use client_id <- decode.subfield([1], decode.string)
+    use response <- decode.subfield([2], decode.dynamic)
+    decode.success(#(tag, client_id, response))
+  }
+
+  case decode.run(value, decoder) {
+    Ok(#(tag, client_id, response)) -> {
+      case dynamic.classify(tag) {
+        "Atom" -> {
+          case atom_to_string(tag) {
+            "ok" -> Ok(#(client_id, response))
+            _ -> Error(Nil)
+          }
+        }
+        _ -> Error(Nil)
       }
-      decode.run(inner, tuple_decoder)
-      |> result.replace_error(Nil)
     }
+    Error(_) -> Error(Nil)
   }
 }
 

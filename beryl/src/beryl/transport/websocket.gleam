@@ -6,14 +6,14 @@
 //// - Phoenix wire protocol parsing
 //// - Routing messages to/from the coordinator
 
+import beryl/coordinator.{type Message as CoordinatorMessage}
+import beryl/wire
 import gleam/bit_array
 import gleam/crypto
 import gleam/dynamic.{type Dynamic}
 import gleam/erlang/process.{type Subject}
 import gleam/option.{type Option, None}
 import gleam/result
-import beryl/coordinator.{type Message as CoordinatorMessage}
-import beryl/wire
 import wisp
 import wisp/websocket
 

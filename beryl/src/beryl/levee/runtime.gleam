@@ -48,14 +48,8 @@ pub fn notify_connected(
 /// Notify coordinator that a WebSocket connection was closed.
 ///
 /// Called from Elixir SocketHandler.terminate/2.
-pub fn notify_disconnected(
-  channels: beryl.Channels,
-  socket_id: String,
-) -> Nil {
-  process.send(
-    channels.coordinator,
-    coordinator.SocketDisconnected(socket_id),
-  )
+pub fn notify_disconnected(channels: beryl.Channels, socket_id: String) -> Nil {
+  process.send(channels.coordinator, coordinator.SocketDisconnected(socket_id))
 }
 
 /// Handle a raw wire protocol message from a WebSocket client.

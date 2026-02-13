@@ -61,22 +61,24 @@ defmodule LeveeWeb.SocketHandler do
     {summary_events, regular_ops} =
       Enum.split_with(ops, fn op -> op["type"] in ["summaryAck", "summaryNack"] end)
 
+    # Send regular ops first, then summary events (summaryAck/summaryNack)
+    # so clients process the sequenced ops before the ack
     frames =
-      Enum.map(summary_events, fn event ->
-        {:text, encode_push(op_message["documentId"] || "", event["type"], event)}
-      end) ++
-        if regular_ops != [] do
-          [
-            {:text,
-             encode_push(
-               op_message["documentId"] || "",
-               "op",
-               %{op_message | "op" => regular_ops}
-             )}
-          ]
-        else
-          []
-        end
+      if regular_ops != [] do
+        [
+          {:text,
+           encode_push(
+             op_message["documentId"] || "",
+             "op",
+             %{op_message | "op" => regular_ops}
+           )}
+        ]
+      else
+        []
+      end ++
+        Enum.map(summary_events, fn event ->
+          {:text, encode_push(op_message["documentId"] || "", event["type"], event)}
+        end)
 
     case frames do
       [] -> {:ok, state}

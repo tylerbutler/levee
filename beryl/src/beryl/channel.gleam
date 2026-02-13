@@ -37,9 +37,9 @@
 ////   channel.JoinOk(reply: None, socket: socket)
 //// })
 
+import beryl/socket.{type Socket}
 import gleam/json.{type Json}
 import gleam/option.{type Option}
-import beryl/socket.{type Socket}
 
 /// Result of joining a channel
 pub type JoinResult(assigns) {

@@ -6,6 +6,9 @@
 //// - Topic subscriptions (topic -> set of socket_ids)
 //// - Message routing and broadcasting
 
+import beryl/channel.{type StopReason}
+import beryl/topic.{type TopicPattern}
+import beryl/wire
 import gleam/dict.{type Dict}
 import gleam/dynamic.{type Dynamic}
 import gleam/erlang/process.{type Subject}
@@ -15,9 +18,6 @@ import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import gleam/result
 import gleam/set.{type Set}
-import beryl/channel.{type StopReason}
-import beryl/topic.{type TopicPattern}
-import beryl/wire
 
 /// Type-erased channel handler for storage
 /// The actual typed Channel is converted to this for the registry
