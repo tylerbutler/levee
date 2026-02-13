@@ -61,10 +61,12 @@ defmodule Levee.Application do
     :ok
   end
 
+  # Project root captured at compile time for reliable path resolution
+  @app_root Path.expand("../..", __DIR__)
+
   # Load Gleam compiled BEAM files into the code path
   defp load_gleam_modules do
-    priv_dir = :code.priv_dir(:levee) |> to_string()
-    app_root = Path.join([priv_dir, ".."])
+    app_root = @app_root
 
     # Try multiple possible locations for Gleam build output:
     # 1. Development: relative to app root (mix compile)
@@ -72,17 +74,22 @@ defmodule Levee.Application do
     base_paths = [
       Path.join([app_root, "levee_protocol", "build", "dev", "erlang"]),
       Path.join([app_root, "levee_auth", "build", "dev", "erlang"]),
+      Path.join([app_root, "beryl", "build", "dev", "erlang"]),
       "/app/levee_protocol/build/dev/erlang",
-      "/app/levee_auth/build/dev/erlang"
+      "/app/levee_auth/build/dev/erlang",
+      "/app/beryl/build/dev/erlang"
     ]
 
     gleam_modules = [
       "levee_protocol",
       "levee_auth",
+      "beryl",
       "gleam_stdlib",
       "gleam_crypto",
       "gleam_json",
       "gleam_time",
+      "gleam_erlang",
+      "gleam_otp",
       "youid"
     ]
 

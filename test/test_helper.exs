@@ -11,7 +11,11 @@ gleam_paths = [
   Path.join([app_root, "levee_auth", "build", "dev", "erlang", "gleam_crypto", "ebin"]),
   Path.join([app_root, "levee_auth", "build", "dev", "erlang", "gleam_json", "ebin"]),
   Path.join([app_root, "levee_auth", "build", "dev", "erlang", "gleam_time", "ebin"]),
-  Path.join([app_root, "levee_auth", "build", "dev", "erlang", "youid", "ebin"])
+  Path.join([app_root, "levee_auth", "build", "dev", "erlang", "youid", "ebin"]),
+  # beryl paths
+  Path.join([app_root, "beryl", "build", "dev", "erlang", "beryl", "ebin"]),
+  Path.join([app_root, "beryl", "build", "dev", "erlang", "gleam_otp", "ebin"]),
+  Path.join([app_root, "beryl", "build", "dev", "erlang", "gleam_erlang", "ebin"])
 ]
 
 Enum.each(gleam_paths, fn path ->

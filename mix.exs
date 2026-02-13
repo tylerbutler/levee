@@ -52,7 +52,9 @@ defmodule Levee.MixProject do
       {:cors_plug, "~> 3.0"},
       # Database
       {:ecto_sql, "~> 3.12"},
-      {:postgrex, "~> 0.19"}
+      {:postgrex, "~> 0.19"},
+      # WebSocket test client
+      {:websockex, "~> 0.4", only: :test}
     ]
   end
 
@@ -72,7 +74,7 @@ defmodule Levee.MixProject do
   end
 
   defp gleam_build(_args) do
-    gleam_projects = ["levee_protocol", "levee_auth"]
+    gleam_projects = ["levee_protocol", "levee_auth", "beryl"]
 
     Enum.each(gleam_projects, fn gleam_path ->
       if File.dir?(gleam_path) do
