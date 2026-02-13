@@ -1,10 +1,8 @@
 defmodule LeveeWeb.SummaryChannelTest do
-  use LeveeWeb.ChannelCase
+  use LeveeWeb.WebSocketCase
 
   alias Levee.Auth.JWT
   alias Levee.Auth.TenantSecrets
-  alias LeveeWeb.UserSocket
-  alias LeveeWeb.DocumentChannel
 
   @tenant_id "test-tenant-summary"
 
@@ -18,46 +16,64 @@ defmodule LeveeWeb.SummaryChannelTest do
     document_id = "doc-#{System.unique_integer([:positive])}"
     topic = "document:#{@tenant_id}:#{document_id}"
 
-    {:ok, _, socket} =
-      UserSocket
-      |> socket("user_id", %{})
-      |> subscribe_and_join(DocumentChannel, topic)
+    # Connect WebSocket and join topic
+    ws = ws_connect()
+    join_ref = ws_join(ws, topic)
 
     # Generate JWT token for tests with summary:write scope
     {:ok, token} = JWT.generate_test_token(@tenant_id, document_id, "test-user")
 
     on_exit(fn -> TenantSecrets.unregister_tenant(@tenant_id) end)
 
-    {:ok, socket: socket, document_id: document_id, topic: topic, token: token}
+    {:ok, ws: ws, join_ref: join_ref, document_id: document_id, topic: topic, token: token}
+  end
+
+  # Helper: send connect_document and assert success
+  defp do_connect_document(ws, join_ref, topic, tenant_id, document_id, token, opts \\ []) do
+    mode = Keyword.get(opts, :mode, "write")
+    user_id = Keyword.get(opts, :user_id, "test-user")
+    scopes = Keyword.get(opts, :scopes, ["doc:read", "doc:write", "summary:write"])
+
+    connect_msg = %{
+      "tenantId" => tenant_id,
+      "id" => document_id,
+      "token" => token,
+      "client" => %{
+        "user" => %{"id" => user_id},
+        "mode" => mode,
+        "details" => %{"capabilities" => %{"interactive" => true}},
+        "permission" => scopes,
+        "scopes" => scopes
+      },
+      "mode" => mode,
+      "versions" => ["^0.1.0"]
+    }
+
+    ref = make_ref_string()
+    ws_push(ws, join_ref, ref, topic, "connect_document", connect_msg)
+    assert_ws_push("connect_document_success")
   end
 
   describe "summary ops through channel" do
-    setup %{socket: socket, document_id: document_id, token: token} do
-      # Connect to document first
-      connect_msg = %{
-        "tenantId" => @tenant_id,
-        "id" => document_id,
-        "token" => token,
-        "client" => %{
-          "user" => %{"id" => "test-user"},
-          "mode" => "write",
-          "details" => %{"capabilities" => %{"interactive" => true}},
-          "permission" => ["doc:read", "doc:write", "summary:write"],
-          "scopes" => ["doc:read", "doc:write", "summary:write"]
-        },
-        "mode" => "write",
-        "versions" => ["^0.1.0"]
-      }
-
-      push(socket, "connect_document", connect_msg)
-      assert_push "connect_document_success", %{"clientId" => client_id}
-
-      {:ok, client_id: client_id}
+    setup %{
+      ws: ws,
+      join_ref: join_ref,
+      topic: topic,
+      document_id: document_id,
+      token: token
+    } do
+      response = do_connect_document(ws, join_ref, topic, @tenant_id, document_id, token)
+      {:ok, client_id: response["clientId"]}
     end
 
-    test "channel pushes summaryAck as separate event", %{socket: socket, client_id: client_id} do
+    test "channel pushes summaryAck as separate event", %{
+      ws: ws,
+      join_ref: join_ref,
+      topic: topic,
+      client_id: client_id
+    } do
       # Clear any pending messages
-      flush_push_messages()
+      flush_ws_messages()
 
       summary_handle = "channel-test-summary-#{System.unique_integer([:positive])}"
 
@@ -73,13 +89,15 @@ defmodule LeveeWeb.SummaryChannelTest do
         }
       }
 
-      push(socket, "submitOp", %{
+      ref = make_ref_string()
+
+      ws_push(ws, join_ref, ref, topic, "submitOp", %{
         "clientId" => client_id,
         "messageBatches" => [[summarize_op]]
       })
 
       # Should receive the summarize op in regular ops
-      assert_push "op", op_message
+      op_message = assert_ws_push("op")
       ops = op_message["op"]
 
       # The regular ops should include the sequenced summarize but NOT the summaryAck
@@ -87,42 +105,29 @@ defmodule LeveeWeb.SummaryChannelTest do
       refute Enum.any?(ops, fn op -> op["type"] == "summaryAck" end)
 
       # summaryAck should be pushed as a separate event
-      assert_push "summaryAck", ack_message
+      ack_message = assert_ws_push("summaryAck")
       assert ack_message["type"] == "summaryAck"
       assert ack_message["contents"]["handle"] == summary_handle
     end
 
     test "connect_document_success includes summaryContext after summary", %{
-      socket: _socket,
-      document_id: document_id,
+      ws: _ws,
+      join_ref: _join_ref,
       topic: topic,
+      document_id: document_id,
       token: token,
       client_id: _client_id
     } do
-      # First submit a summary using the existing connection
-      # We need to get a fresh socket since we used the one from setup
-      {:ok, _, socket2} =
-        UserSocket
-        |> socket("user_id_2", %{})
-        |> subscribe_and_join(DocumentChannel, topic)
+      # Connect a second client and submit a summary
+      ws2 = ws_connect()
+      join_ref2 = ws_join(ws2, topic)
 
-      connect_msg2 = %{
-        "tenantId" => @tenant_id,
-        "id" => document_id,
-        "token" => token,
-        "client" => %{
-          "user" => %{"id" => "test-user-2"},
-          "mode" => "write",
-          "details" => %{"capabilities" => %{"interactive" => true}},
-          "permission" => ["doc:read", "doc:write", "summary:write"],
-          "scopes" => ["doc:read", "doc:write", "summary:write"]
-        },
-        "mode" => "write",
-        "versions" => ["^0.1.0"]
-      }
+      response2 =
+        do_connect_document(ws2, join_ref2, topic, @tenant_id, document_id, token,
+          user_id: "test-user-2"
+        )
 
-      push(socket2, "connect_document", connect_msg2)
-      assert_push "connect_document_success", %{"clientId" => client2_id}
+      client2_id = response2["clientId"]
 
       # Now client2 submits a summary
       summary_handle = "context-test-#{System.unique_integer([:positive])}"
@@ -139,45 +144,38 @@ defmodule LeveeWeb.SummaryChannelTest do
         }
       }
 
-      push(socket2, "submitOp", %{
+      ref = make_ref_string()
+
+      ws_push(ws2, join_ref2, ref, topic, "submitOp", %{
         "clientId" => client2_id,
         "messageBatches" => [[summarize_op]]
       })
 
       # Wait for summary to be processed
-      assert_push "summaryAck", _ack
+      assert_ws_push("summaryAck")
 
       # Now connect a third client and verify summaryContext is included
-      {:ok, _, socket3} =
-        UserSocket
-        |> socket("user_id_3", %{})
-        |> subscribe_and_join(DocumentChannel, topic)
+      ws3 = ws_connect()
+      join_ref3 = ws_join(ws3, topic)
 
-      connect_msg3 = %{
-        "tenantId" => @tenant_id,
-        "id" => document_id,
-        "token" => token,
-        "client" => %{
-          "user" => %{"id" => "test-user-3"},
-          "mode" => "write",
-          "details" => %{"capabilities" => %{"interactive" => true}},
-          "permission" => ["doc:read", "doc:write"],
-          "scopes" => ["doc:read", "doc:write"]
-        },
-        "mode" => "write",
-        "versions" => ["^0.1.0"]
-      }
-
-      push(socket3, "connect_document", connect_msg3)
-      assert_push "connect_document_success", response
+      response3 =
+        do_connect_document(ws3, join_ref3, topic, @tenant_id, document_id, token,
+          user_id: "test-user-3",
+          scopes: ["doc:read", "doc:write"]
+        )
 
       # Response should include summaryContext
-      assert Map.has_key?(response, "summaryContext")
-      assert response["summaryContext"]["handle"] == summary_handle
+      assert Map.has_key?(response3, "summaryContext")
+      assert response3["summaryContext"]["handle"] == summary_handle
     end
 
-    test "invalid summarize op returns nack", %{socket: socket, client_id: client_id} do
-      flush_push_messages()
+    test "invalid summarize op returns nack", %{
+      ws: ws,
+      join_ref: join_ref,
+      topic: topic,
+      client_id: client_id
+    } do
+      flush_ws_messages()
 
       # Submit invalid summarize op (missing required fields)
       invalid_summarize = %{
@@ -190,26 +188,19 @@ defmodule LeveeWeb.SummaryChannelTest do
           }
       }
 
-      push(socket, "submitOp", %{
+      ref = make_ref_string()
+
+      ws_push(ws, join_ref, ref, topic, "submitOp", %{
         "clientId" => client_id,
         "messageBatches" => [[invalid_summarize]]
       })
 
       # Should receive a nack
-      assert_push "nack", nack_response
+      nack_response = assert_ws_push("nack")
       assert is_list(nack_response["nacks"])
       nack = List.first(nack_response["nacks"])
       assert nack["content"]["code"] == 400
       assert nack["content"]["message"] =~ "summarize"
-    end
-  end
-
-  # Helper to clear pending push messages
-  defp flush_push_messages do
-    receive do
-      %Phoenix.Socket.Message{} -> flush_push_messages()
-    after
-      50 -> :ok
     end
   end
 end

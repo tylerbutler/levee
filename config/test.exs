@@ -19,7 +19,7 @@ config :levee, Levee.Repo,
 config :levee, LeveeWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
   secret_key_base: "8PZb5iIoVUTFLp1GGZj4pAWbgKopNS9JYOoUw1ajc+bSQkAONOB7+2R99ZyPlPws",
-  server: false
+  server: true
 
 # Print only warnings and errors during test
 config :logger, level: :warning
