@@ -4,15 +4,1021 @@
 
 **Goal:** Extract beryl into a standalone, generic Gleam channels library with Presence (CRDT), PubSub (pg), and Channel Groups — removing all levee-specific code from beryl itself.
 
-**Architecture:** Beryl is currently ~90% generic channels infrastructure and ~10% levee-specific document protocol. We'll move levee-specific code into levee proper (new `levee_channels` Gleam package), then add Presence, PubSub, and Groups as new beryl modules. The coordinator actor gains hooks for presence and pubsub integration.
+**Architecture:** Beryl is currently ~90% generic channels infrastructure and ~10% levee-specific document protocol. We'll move levee-specific code into levee proper (new `levee_channels` Gleam package), then add Presence, PubSub, and Groups as new beryl modules. We start with the CRDT as a pure, well-tested data structure before wrapping it in an actor.
 
 **Tech Stack:** Gleam (targeting Erlang/BEAM), OTP actors, Erlang `pg` module for distributed PubSub, CRDT-based presence tracking
+
+**Reference:** The CRDT design is based on [Phoenix.Tracker.State](https://github.com/phoenixframework/phoenix_pubsub/blob/main/lib/phoenix/tracker/state.ex) — a causal-context CRDT with delta tracking. See also the [DockYard blog post](https://dockyard.com/blog/2016/03/25/what-makes-phoenix-presence-special-sneak-peek) on what makes Phoenix Presence special.
+
+---
+
+## Phase 0: Pure CRDT Data Structure
+
+Build the core CRDT as a pure module with no actors, no IO, no side effects — just data in, data out. This is the hard part and must be rock-solid before we wrap it in anything.
+
+### Background: How the CRDT Works
+
+The presence CRDT is a **causal-context add-wins set**:
+
+- **Replicas**: Each node has a unique name and a monotonic clock
+- **Context**: `Dict(replica, clock)` — a vector clock tracking the latest known state per replica
+- **Clouds**: `Dict(replica, Set(clock))` — tags seen but not yet compacted into context (handles out-of-order delivery)
+- **Values**: `Dict(tag, Entry)` where `tag = #(replica, clock)` — the actual tracked presences
+- **Entries**: `#(topic, key, pid_or_id, meta)` — what's being tracked
+
+**Key operations:**
+- `join` — add an entry, increment local clock, tag it
+- `leave` — remove an entry by tag
+- `merge` — combine remote state with local: accept new tags, observe removals, advance context
+- `compact` — compress clouds into context when they form contiguous sequences
+- `extract` — produce a minimal state (delta) for sending to a specific remote replica
+
+**Conflict resolution:** Add-wins via causal context. If a tag is "in" the remote's causal context but absent from their values, the remote has observed and removed it. If a tag is NOT in the remote's context, the remote hasn't seen it yet, so we keep it.
+
+### Task 1: Create beryl/presence/state.gleam with core types
+
+**Files:**
+- Create: `beryl/src/beryl/presence/state.gleam`
+
+**Step 1: Define the types**
+
+```gleam
+//// Presence State - Pure CRDT for distributed presence tracking
+////
+//// A causal-context add-wins observed-remove set, inspired by Phoenix.Tracker.State.
+//// This module is a pure data structure with no actors or side effects.
+////
+//// Each node (replica) tracks its own presences authoritatively. State is
+//// replicated by extracting deltas and merging them at remote replicas.
+//// Conflicts are resolved causally: adds win over concurrent removes.
+
+import gleam/dict.{type Dict}
+import gleam/dynamic.{type Dynamic}
+import gleam/json
+import gleam/option.{type Option}
+import gleam/set.{type Set}
+
+/// Unique identifier for a node in the cluster
+pub type Replica =
+  String
+
+/// Monotonically increasing counter per replica
+pub type Clock =
+  Int
+
+/// A tag uniquely identifies when and where an entry was created
+pub type Tag {
+  Tag(replica: Replica, clock: Clock)
+}
+
+/// A tracked presence entry
+pub type Entry {
+  Entry(
+    topic: String,
+    key: String,
+    /// Unique identifier for the tracked entity (e.g., socket ID, user ID)
+    pid: String,
+    /// Arbitrary metadata
+    meta: json.Json,
+  )
+}
+
+/// Replica status
+pub type ReplicaStatus {
+  Up
+  Down
+}
+
+/// The CRDT state
+pub type State {
+  State(
+    /// This node's replica name
+    replica: Replica,
+    /// Vector clock: replica -> latest compacted clock value
+    context: Dict(Replica, Clock),
+    /// Per-replica sets of observed-but-not-compacted clock values
+    clouds: Dict(Replica, Set(Clock)),
+    /// Tag -> Entry: all tracked presences
+    values: Dict(Tag, Entry),
+    /// Replica status tracking
+    replicas: Dict(Replica, ReplicaStatus),
+  )
+}
+
+/// A diff representing changes between two states
+pub type Diff {
+  Diff(
+    joins: Dict(String, List(#(String, String, json.Json))),
+    leaves: Dict(String, List(#(String, String, json.Json))),
+  )
+}
+```
+
+**Step 2: Verify it compiles**
+
+Run: `cd beryl && gleam check`
+Expected: Compiles with 0 errors
+
+**Step 3: Commit**
+
+```
+feat(beryl): add presence CRDT core types
+```
+
+### Task 2: Implement new, join, and leave
+
+**Files:**
+- Modify: `beryl/src/beryl/presence/state.gleam`
+
+**Step 1: Write failing tests**
+
+Create `beryl/test/presence_state_test.gleam`:
+```gleam
+import beryl/presence/state.{type State, Tag, Entry}
+import gleam/dict
+import gleam/json
+import gleam/list
+import gleam/option
+import gleeunit
+import gleeunit/should
+
+pub fn main() {
+  gleeunit.main()
+}
+
+// ── new ──────────────────────────────────────────────────────────────
+
+pub fn new_creates_empty_state_test() {
+  let s = state.new("node1")
+  state.online_list(s) |> should.equal([])
+  s.replica |> should.equal("node1")
+}
+
+// ── join ─────────────────────────────────────────────────────────────
+
+pub fn join_makes_user_online_test() {
+  let s = state.new("node1")
+  let s = state.join(s, "pid1", "room:lobby", "user:alice", json.object([
+    #("status", json.string("online")),
+  ]))
+
+  let entries = state.get_by_topic(s, "room:lobby")
+  list.length(entries) |> should.equal(1)
+  let assert [#(_pid, "user:alice", _meta)] = entries
+}
+
+pub fn join_increments_clock_test() {
+  let s = state.new("node1")
+  let s = state.join(s, "pid1", "room:lobby", "alice", json.object([]))
+  let s = state.join(s, "pid2", "room:lobby", "bob", json.object([]))
+
+  let entries = state.get_by_topic(s, "room:lobby")
+  list.length(entries) |> should.equal(2)
+}
+
+pub fn join_multiple_topics_test() {
+  let s = state.new("node1")
+  let s = state.join(s, "pid1", "room:lobby", "alice", json.object([]))
+  let s = state.join(s, "pid1", "room:private", "alice", json.object([]))
+
+  state.get_by_topic(s, "room:lobby") |> list.length |> should.equal(1)
+  state.get_by_topic(s, "room:private") |> list.length |> should.equal(1)
+}
+
+// ── leave ────────────────────────────────────────────────────────────
+
+pub fn leave_removes_user_test() {
+  let s = state.new("node1")
+  let s = state.join(s, "pid1", "room:lobby", "alice", json.object([]))
+  let s = state.leave(s, "pid1", "room:lobby", "alice")
+
+  state.get_by_topic(s, "room:lobby") |> should.equal([])
+}
+
+pub fn leave_nonexistent_is_noop_test() {
+  let s = state.new("node1")
+  let s = state.leave(s, "pid1", "room:lobby", "alice")
+  state.online_list(s) |> should.equal([])
+}
+
+pub fn leave_all_by_pid_test() {
+  let s = state.new("node1")
+  let s = state.join(s, "pid1", "room:lobby", "alice", json.object([]))
+  let s = state.join(s, "pid1", "room:private", "alice", json.object([]))
+  let s = state.join(s, "pid2", "room:lobby", "bob", json.object([]))
+
+  let s = state.leave_by_pid(s, "pid1")
+
+  // pid1's entries gone, pid2's entry remains
+  state.online_list(s) |> list.length |> should.equal(1)
+  state.get_by_topic(s, "room:private") |> should.equal([])
+}
+```
+
+**Step 2: Run tests to verify they fail**
+
+Run: `cd beryl && gleam test`
+Expected: Compile errors (functions not yet implemented)
+
+**Step 3: Implement new, join, leave, leave_by_pid, online_list, get_by_topic**
+
+```gleam
+/// Create a new empty state for this replica
+pub fn new(replica: Replica) -> State {
+  State(
+    replica: replica,
+    context: dict.new(),
+    clouds: dict.new(),
+    values: dict.new(),
+    replicas: dict.from_list([#(replica, Up)]),
+  )
+}
+
+/// Add a tracked presence. Increments the local clock.
+pub fn join(
+  state: State,
+  pid: String,
+  topic: String,
+  key: String,
+  meta: json.Json,
+) -> State {
+  let clock = next_clock(state, state.replica)
+  let tag = Tag(replica: state.replica, clock: clock)
+  let entry = Entry(topic: topic, key: key, pid: pid, meta: meta)
+  let new_context = dict.insert(state.context, state.replica, clock)
+  let new_values = dict.insert(state.values, tag, entry)
+  State(..state, context: new_context, values: new_values)
+}
+
+/// Remove a specific presence by pid, topic, and key
+pub fn leave(
+  state: State,
+  pid: String,
+  topic: String,
+  key: String,
+) -> State {
+  let new_values =
+    dict.filter(state.values, fn(_, entry) {
+      !(entry.pid == pid && entry.topic == topic && entry.key == key)
+    })
+  State(..state, values: new_values)
+}
+
+/// Remove all presences for a pid
+pub fn leave_by_pid(state: State, pid: String) -> State {
+  let new_values =
+    dict.filter(state.values, fn(_, entry) { entry.pid != pid })
+  State(..state, values: new_values)
+}
+
+/// List all online presences across all topics (from non-down replicas)
+pub fn online_list(state: State) -> List(#(String, String, String, json.Json)) {
+  state.values
+  |> dict.to_list()
+  |> list.filter(fn(kv) {
+    let #(tag, _) = kv
+    is_replica_up(state, tag.replica)
+  })
+  |> list.map(fn(kv) {
+    let #(_, entry) = kv
+    #(entry.pid, entry.topic, entry.key, entry.meta)
+  })
+}
+
+/// Get all presences for a topic (from non-down replicas)
+pub fn get_by_topic(
+  state: State,
+  topic: String,
+) -> List(#(String, String, json.Json)) {
+  state.values
+  |> dict.to_list()
+  |> list.filter(fn(kv) {
+    let #(tag, entry) = kv
+    entry.topic == topic && is_replica_up(state, tag.replica)
+  })
+  |> list.map(fn(kv) {
+    let #(_, entry) = kv
+    #(entry.pid, entry.key, entry.meta)
+  })
+}
+
+/// Get presences for a specific key within a topic
+pub fn get_by_key(
+  state: State,
+  topic: String,
+  key: String,
+) -> List(#(String, json.Json)) {
+  state.values
+  |> dict.to_list()
+  |> list.filter(fn(kv) {
+    let #(tag, entry) = kv
+    entry.topic == topic && entry.key == key && is_replica_up(state, tag.replica)
+  })
+  |> list.map(fn(kv) {
+    let #(_, entry) = kv
+    #(entry.pid, entry.meta)
+  })
+}
+
+// Internal helpers
+
+fn next_clock(state: State, replica: Replica) -> Clock {
+  case dict.get(state.context, replica) {
+    Ok(c) -> c + 1
+    Error(_) -> 1
+  }
+}
+
+fn is_replica_up(state: State, replica: Replica) -> Bool {
+  case dict.get(state.replicas, replica) {
+    Ok(Up) -> True
+    Ok(Down) -> False
+    Error(_) -> True  // Unknown replicas assumed up (first contact)
+  }
+}
+```
+
+**Step 4: Run tests**
+
+Run: `cd beryl && gleam test`
+Expected: All tests pass
+
+**Step 5: Commit**
+
+```
+feat(beryl): implement presence CRDT new, join, leave operations
+```
+
+### Task 3: Implement merge
+
+This is the core CRDT operation — combining remote state with local state.
+
+**Files:**
+- Modify: `beryl/src/beryl/presence/state.gleam`
+- Modify: `beryl/test/presence_state_test.gleam`
+
+**Step 1: Write failing tests**
+
+Add to `beryl/test/presence_state_test.gleam`:
+```gleam
+// ── merge ────────────────────────────────────────────────────────────
+
+pub fn merge_adds_remote_entries_test() {
+  // Node A has alice, Node B has bob
+  let a = state.new("node_a")
+  let a = state.join(a, "pid1", "room:lobby", "alice", json.object([]))
+
+  let b = state.new("node_b")
+  let b = state.join(b, "pid2", "room:lobby", "bob", json.object([]))
+
+  // Merge B into A
+  let #(merged, _diff) = state.merge(a, b)
+
+  // A should now see both alice and bob
+  state.get_by_topic(merged, "room:lobby") |> list.length |> should.equal(2)
+}
+
+pub fn merge_is_idempotent_test() {
+  let a = state.new("node_a")
+  let a = state.join(a, "pid1", "room:lobby", "alice", json.object([]))
+
+  let b = state.new("node_b")
+  let b = state.join(b, "pid2", "room:lobby", "bob", json.object([]))
+
+  // Merge twice should not duplicate
+  let #(merged, _) = state.merge(a, b)
+  let #(merged2, _) = state.merge(merged, b)
+
+  state.get_by_topic(merged2, "room:lobby") |> list.length |> should.equal(2)
+}
+
+pub fn merge_observes_remote_removals_test() {
+  // Node A and B both know about alice
+  let a = state.new("node_a")
+  let a = state.join(a, "pid1", "room:lobby", "alice", json.object([]))
+
+  // B merges A's state to learn about alice
+  let b = state.new("node_b")
+  let #(b, _) = state.merge(b, a)
+
+  // A removes alice locally
+  let a = state.leave(a, "pid1", "room:lobby", "alice")
+
+  // B merges A again — should observe the removal
+  let #(merged, _) = state.merge(b, a)
+  state.get_by_topic(merged, "room:lobby") |> should.equal([])
+}
+
+pub fn merge_add_wins_over_concurrent_remove_test() {
+  // A has alice, B learns about alice
+  let a = state.new("node_a")
+  let a = state.join(a, "pid1", "room:lobby", "alice", json.object([
+    #("v", json.int(1)),
+  ]))
+
+  let b = state.new("node_b")
+  let #(b, _) = state.merge(b, a)
+
+  // Concurrently: A removes alice, B re-adds alice (simulated via leave_join)
+  let a = state.leave(a, "pid1", "room:lobby", "alice")
+  let b = state.join(b, "pid1", "room:lobby", "alice", json.object([
+    #("v", json.int(2)),
+  ]))
+
+  // When A merges B, alice should be present (add wins)
+  let #(merged, _) = state.merge(a, b)
+  state.get_by_topic(merged, "room:lobby") |> list.length |> should.equal(1)
+}
+
+pub fn merge_returns_diff_with_joins_test() {
+  let a = state.new("node_a")
+  let b = state.new("node_b")
+  let b = state.join(b, "pid1", "room:lobby", "bob", json.object([]))
+
+  let #(_merged, diff) = state.merge(a, b)
+
+  // Diff should show bob as a join
+  case dict.get(diff.joins, "room:lobby") {
+    Ok(joins) -> list.length(joins) |> should.equal(1)
+    Error(_) -> should.fail()
+  }
+}
+
+pub fn merge_returns_diff_with_leaves_test() {
+  // A knows about bob (from previous merge with B)
+  let a = state.new("node_a")
+  let b = state.new("node_b")
+  let b = state.join(b, "pid1", "room:lobby", "bob", json.object([]))
+
+  let #(a, _) = state.merge(a, b)
+
+  // B removes bob
+  let b = state.leave(b, "pid1", "room:lobby", "bob")
+
+  // Merge again — diff should show bob as a leave
+  let #(_merged, diff) = state.merge(a, b)
+  case dict.get(diff.leaves, "room:lobby") {
+    Ok(leaves) -> list.length(leaves) |> should.equal(1)
+    Error(_) -> should.fail()
+  }
+}
+
+pub fn merge_three_nodes_test() {
+  // Three nodes, each with one user
+  let a = state.new("node_a")
+  let a = state.join(a, "p1", "room:lobby", "alice", json.object([]))
+
+  let b = state.new("node_b")
+  let b = state.join(b, "p2", "room:lobby", "bob", json.object([]))
+
+  let c = state.new("node_c")
+  let c = state.join(c, "p3", "room:lobby", "carol", json.object([]))
+
+  // Merge all into A via two hops
+  let #(a, _) = state.merge(a, b)
+  let #(a, _) = state.merge(a, c)
+
+  state.get_by_topic(a, "room:lobby") |> list.length |> should.equal(3)
+}
+```
+
+**Step 2: Run tests to verify they fail**
+
+Run: `cd beryl && gleam test`
+Expected: Compile errors (merge not implemented)
+
+**Step 3: Implement merge**
+
+The merge algorithm:
+1. Find entries in remote that are NOT in our causal context → these are joins
+2. Find entries in our state that ARE in remote's causal context but NOT in remote's values → these are observed removals
+3. Apply joins and removals, advance our context
+4. Return the diff
+
+```gleam
+/// Merge remote state into local state.
+/// Returns the new merged state and a diff of what changed.
+pub fn merge(local: State, remote: State) -> #(State, Diff) {
+  // 1. Find new entries from remote (tags we haven't seen)
+  let joins =
+    dict.to_list(remote.values)
+    |> list.filter(fn(kv) {
+      let #(tag, _) = kv
+      !tag_is_in(local.context, local.clouds, tag)
+    })
+
+  // 2. Find entries we should remove (in remote's causal context but not in remote's values)
+  let removes =
+    dict.to_list(local.values)
+    |> list.filter(fn(kv) {
+      let #(tag, _) = kv
+      tag.replica != local.replica
+      && tag_is_in(remote.context, remote.clouds, tag)
+      && !dict.has_key(remote.values, tag)
+    })
+
+  // 3. Apply changes
+  let new_values =
+    list.fold(removes, local.values, fn(vals, kv) {
+      let #(tag, _) = kv
+      dict.delete(vals, tag)
+    })
+  let new_values =
+    list.fold(joins, new_values, fn(vals, kv) {
+      let #(tag, entry) = kv
+      dict.insert(vals, tag, entry)
+    })
+
+  // 4. Advance context: take max of local and remote for each replica
+  let new_context = merge_contexts(local.context, remote.context)
+
+  // 5. Merge clouds
+  let new_clouds = merge_clouds(local.clouds, remote.clouds)
+
+  // 6. Build diff
+  let join_diff = entries_to_topic_diff(list.map(joins, fn(kv) { kv.1 }))
+  let leave_diff = entries_to_topic_diff(list.map(removes, fn(kv) { kv.1 }))
+  let diff = Diff(joins: join_diff, leaves: leave_diff)
+
+  let new_state = State(
+    ..local,
+    context: new_context,
+    clouds: new_clouds,
+    values: new_values,
+  )
+
+  #(compact(new_state), diff)
+}
+
+/// Check if a tag is "in" a causal context (either compacted or in clouds)
+fn tag_is_in(
+  context: Dict(Replica, Clock),
+  clouds: Dict(Replica, Set(Clock)),
+  tag: Tag,
+) -> Bool {
+  case dict.get(context, tag.replica) {
+    Ok(clock) if clock >= tag.clock -> True
+    _ -> {
+      case dict.get(clouds, tag.replica) {
+        Ok(cloud) -> set.contains(cloud, tag.clock)
+        Error(_) -> False
+      }
+    }
+  }
+}
+
+/// Merge two vector clocks (take max per replica)
+fn merge_contexts(
+  a: Dict(Replica, Clock),
+  b: Dict(Replica, Clock),
+) -> Dict(Replica, Clock) {
+  dict.combine(a, b, fn(ca, cb) {
+    case ca > cb {
+      True -> ca
+      False -> cb
+    }
+  })
+}
+
+/// Merge cloud sets
+fn merge_clouds(
+  a: Dict(Replica, Set(Clock)),
+  b: Dict(Replica, Set(Clock)),
+) -> Dict(Replica, Set(Clock)) {
+  dict.combine(a, b, fn(sa, sb) { set.union(sa, sb) })
+}
+
+/// Compact clouds into context where possible
+///
+/// If context[replica] + 1 is in the cloud, advance context and remove from cloud.
+/// Repeat until no more compaction possible.
+pub fn compact(state: State) -> State {
+  let #(new_context, new_clouds) =
+    dict.fold(state.clouds, #(state.context, state.clouds), fn(acc, replica, cloud) {
+      let #(ctx, clouds) = acc
+      let base = case dict.get(ctx, replica) {
+        Ok(c) -> c
+        Error(_) -> 0
+      }
+      let #(new_base, remaining) = compact_cloud(base, cloud)
+      let new_ctx = case new_base > base {
+        True -> dict.insert(ctx, replica, new_base)
+        False -> ctx
+      }
+      let new_clouds = case set.size(remaining) {
+        0 -> dict.delete(clouds, replica)
+        _ -> dict.insert(clouds, replica, remaining)
+      }
+      #(new_ctx, new_clouds)
+    })
+
+  State(..state, context: new_context, clouds: new_clouds)
+}
+
+/// Compact a single cloud: advance base clock through contiguous values
+fn compact_cloud(base: Clock, cloud: Set(Clock)) -> #(Clock, Set(Clock)) {
+  case set.contains(cloud, base + 1) {
+    True -> compact_cloud(base + 1, set.delete(cloud, base + 1))
+    False -> #(base, cloud)
+  }
+}
+
+/// Group entries by topic for diff reporting
+fn entries_to_topic_diff(
+  entries: List(Entry),
+) -> Dict(String, List(#(String, String, json.Json))) {
+  list.fold(entries, dict.new(), fn(acc, entry) {
+    let existing = case dict.get(acc, entry.topic) {
+      Ok(l) -> l
+      Error(_) -> []
+    }
+    dict.insert(acc, entry.topic, [#(entry.key, entry.pid, entry.meta), ..existing])
+  })
+}
+```
+
+**Step 4: Run tests**
+
+Run: `cd beryl && gleam test`
+Expected: All merge tests pass
+
+**Step 5: Commit**
+
+```
+feat(beryl): implement presence CRDT merge with causal context
+```
+
+### Task 4: Implement replica_up, replica_down, remove_down_replicas
+
+**Files:**
+- Modify: `beryl/src/beryl/presence/state.gleam`
+- Modify: `beryl/test/presence_state_test.gleam`
+
+**Step 1: Write failing tests**
+
+```gleam
+// ── replica lifecycle ────────────────────────────────────────────────
+
+pub fn replica_down_hides_entries_test() {
+  let a = state.new("node_a")
+  let b = state.new("node_b")
+  let b = state.join(b, "pid1", "room:lobby", "bob", json.object([]))
+
+  let #(a, _) = state.merge(a, b)
+
+  // Mark node_b as down
+  let #(a, leaves) = state.replica_down(a, "node_b")
+
+  // bob should no longer appear in queries
+  state.get_by_topic(a, "room:lobby") |> should.equal([])
+
+  // Diff should contain bob as a leave
+  case dict.get(leaves.leaves, "room:lobby") {
+    Ok(l) -> list.length(l) |> should.equal(1)
+    Error(_) -> should.fail()
+  }
+}
+
+pub fn replica_up_restores_entries_test() {
+  let a = state.new("node_a")
+  let b = state.new("node_b")
+  let b = state.join(b, "pid1", "room:lobby", "bob", json.object([]))
+
+  let #(a, _) = state.merge(a, b)
+  let #(a, _) = state.replica_down(a, "node_b")
+  let #(a, joins) = state.replica_up(a, "node_b")
+
+  // bob should reappear
+  state.get_by_topic(a, "room:lobby") |> list.length |> should.equal(1)
+
+  // Diff should contain bob as a join
+  case dict.get(joins.joins, "room:lobby") {
+    Ok(j) -> list.length(j) |> should.equal(1)
+    Error(_) -> should.fail()
+  }
+}
+
+pub fn remove_down_replicas_permanently_deletes_test() {
+  let a = state.new("node_a")
+  let b = state.new("node_b")
+  let b = state.join(b, "pid1", "room:lobby", "bob", json.object([]))
+
+  let #(a, _) = state.merge(a, b)
+  let #(a, _) = state.replica_down(a, "node_b")
+  let a = state.remove_down_replicas(a, "node_b")
+
+  // Even after replica_up, bob is gone permanently
+  let #(a, _) = state.replica_up(a, "node_b")
+  state.get_by_topic(a, "room:lobby") |> should.equal([])
+}
+
+pub fn basic_netsplit_test() {
+  // A and B each have users
+  let a = state.new("node_a")
+  let a = state.join(a, "p1", "room:lobby", "alice", json.object([]))
+
+  let b = state.new("node_b")
+  let b = state.join(b, "p2", "room:lobby", "bob", json.object([]))
+
+  // Merge to sync
+  let #(a, _) = state.merge(a, b)
+  let #(b, _) = state.merge(b, a)
+
+  // Netsplit: A marks B as down
+  let #(a, _) = state.replica_down(a, "node_b")
+  state.get_by_topic(a, "room:lobby") |> list.length |> should.equal(1)  // only alice
+
+  // Heal: A marks B as up
+  let #(a, _) = state.replica_up(a, "node_b")
+  state.get_by_topic(a, "room:lobby") |> list.length |> should.equal(2)  // alice + bob
+}
+```
+
+**Step 2: Implement replica_down, replica_up, remove_down_replicas**
+
+```gleam
+/// Mark a replica as down. Returns entries that are now invisible (leaves).
+pub fn replica_down(state: State, replica: Replica) -> #(State, Diff) {
+  let new_replicas = dict.insert(state.replicas, replica, Down)
+  let new_state = State(..state, replicas: new_replicas)
+
+  // Compute what just "left" — all entries from this replica
+  let hidden =
+    dict.to_list(state.values)
+    |> list.filter(fn(kv) { { kv.0 }.replica == replica })
+    |> list.map(fn(kv) { kv.1 })
+
+  let diff = Diff(joins: dict.new(), leaves: entries_to_topic_diff(hidden))
+  #(new_state, diff)
+}
+
+/// Mark a replica as up. Returns entries that are now visible again (joins).
+pub fn replica_up(state: State, replica: Replica) -> #(State, Diff) {
+  let new_replicas = dict.insert(state.replicas, replica, Up)
+  let new_state = State(..state, replicas: new_replicas)
+
+  // Compute what just "joined" — all entries from this replica
+  let restored =
+    dict.to_list(state.values)
+    |> list.filter(fn(kv) { { kv.0 }.replica == replica })
+    |> list.map(fn(kv) { kv.1 })
+
+  let diff = Diff(joins: entries_to_topic_diff(restored), leaves: dict.new())
+  #(new_state, diff)
+}
+
+/// Permanently remove all entries and context for a downed replica
+pub fn remove_down_replicas(state: State, replica: Replica) -> State {
+  let new_values =
+    dict.filter(state.values, fn(tag, _) { tag.replica != replica })
+  let new_context = dict.delete(state.context, replica)
+  let new_clouds = dict.delete(state.clouds, replica)
+  let new_replicas = dict.delete(state.replicas, replica)
+  State(..state, values: new_values, context: new_context, clouds: new_clouds, replicas: new_replicas)
+}
+```
+
+**Step 3: Run tests**
+
+Run: `cd beryl && gleam test`
+Expected: All tests pass
+
+**Step 4: Commit**
+
+```
+feat(beryl): implement presence CRDT replica lifecycle (up/down/remove)
+```
+
+### Task 5: Implement extract (delta generation)
+
+**Files:**
+- Modify: `beryl/src/beryl/presence/state.gleam`
+- Modify: `beryl/test/presence_state_test.gleam`
+
+**Step 1: Write failing tests**
+
+```gleam
+// ── extract (delta) ──────────────────────────────────────────────────
+
+pub fn extract_produces_delta_for_new_replica_test() {
+  let a = state.new("node_a")
+  let a = state.join(a, "p1", "room:lobby", "alice", json.object([]))
+  let a = state.join(a, "p2", "room:lobby", "bob", json.object([]))
+
+  let b = state.new("node_b")
+
+  // Extract what B needs from A (everything, since B has empty context)
+  let delta = state.extract(a, b.replica, b.context)
+
+  // Delta should contain both entries
+  dict.size(delta.values) |> should.equal(2)
+}
+
+pub fn extract_produces_empty_delta_for_synced_replica_test() {
+  let a = state.new("node_a")
+  let a = state.join(a, "p1", "room:lobby", "alice", json.object([]))
+
+  let b = state.new("node_b")
+  let #(b, _) = state.merge(b, a)
+
+  // Extract what B needs — should be nothing since B is synced
+  let delta = state.extract(a, b.replica, b.context)
+  dict.size(delta.values) |> should.equal(0)
+}
+
+pub fn extract_only_sends_new_entries_test() {
+  let a = state.new("node_a")
+  let a = state.join(a, "p1", "room:lobby", "alice", json.object([]))
+
+  let b = state.new("node_b")
+  let #(b, _) = state.merge(b, a)
+
+  // A adds a new entry
+  let a = state.join(a, "p2", "room:lobby", "bob", json.object([]))
+
+  // Extract should only contain bob (alice already synced)
+  let delta = state.extract(a, b.replica, b.context)
+  dict.size(delta.values) |> should.equal(1)
+}
+```
+
+**Step 2: Implement extract**
+
+```gleam
+/// Extract a minimal state (delta) containing only entries the remote
+/// hasn't seen yet, based on the remote's known context.
+///
+/// The returned state contains:
+/// - Only values with tags NOT in remote_context
+/// - The local context (so remote can advance)
+/// - The local clouds
+pub fn extract(
+  state: State,
+  _remote_replica: Replica,
+  remote_context: Dict(Replica, Clock),
+) -> State {
+  let remote_clouds = dict.new()  // Remote clouds unknown, assume empty
+  let new_values =
+    dict.filter(state.values, fn(tag, _) {
+      !tag_is_in(remote_context, remote_clouds, tag)
+    })
+
+  State(
+    ..state,
+    values: new_values,
+  )
+}
+```
+
+**Step 3: Run tests**
+
+Run: `cd beryl && gleam test`
+Expected: All tests pass
+
+**Step 4: Commit**
+
+```
+feat(beryl): implement presence CRDT delta extraction
+```
+
+### Task 6: Implement clocks helper and edge case tests
+
+**Files:**
+- Modify: `beryl/src/beryl/presence/state.gleam`
+- Modify: `beryl/test/presence_state_test.gleam`
+
+**Step 1: Write edge case tests**
+
+```gleam
+// ── edge cases ───────────────────────────────────────────────────────
+
+pub fn clocks_returns_vector_clock_test() {
+  let a = state.new("node_a")
+  let a = state.join(a, "p1", "room:1", "k1", json.object([]))
+  let a = state.join(a, "p2", "room:1", "k2", json.object([]))
+
+  let clocks = state.clocks(a)
+  case dict.get(clocks, "node_a") {
+    Ok(2) -> Nil  // Two joins = clock at 2
+    _ -> should.fail()
+  }
+}
+
+pub fn compact_reduces_clouds_test() {
+  // Manually construct a state with clouds that can be compacted
+  let a = state.new("node_a")
+  let a = state.join(a, "p1", "room:1", "k1", json.object([]))  // clock 1
+  let a = state.join(a, "p2", "room:1", "k2", json.object([]))  // clock 2
+
+  // After compaction, clouds for node_a should be empty
+  // (context[node_a] should be 2, covering clocks 1 and 2)
+  let compacted = state.compact(a)
+  case dict.get(compacted.clouds, "node_a") {
+    Ok(cloud) -> set.size(cloud) |> should.equal(0)
+    Error(_) -> Nil  // Cloud deleted entirely, also fine
+  }
+}
+
+pub fn merge_with_empty_state_test() {
+  let a = state.new("node_a")
+  let a = state.join(a, "p1", "room:1", "k1", json.object([]))
+
+  let empty = state.new("node_b")
+
+  // Merging empty into non-empty should be a no-op
+  let #(merged, diff) = state.merge(a, empty)
+  state.get_by_topic(merged, "room:1") |> list.length |> should.equal(1)
+  dict.size(diff.joins) |> should.equal(0)
+  dict.size(diff.leaves) |> should.equal(0)
+}
+
+pub fn get_by_key_multiple_pids_test() {
+  let a = state.new("node_a")
+  let a = state.join(a, "pid1", "room:lobby", "user:alice", json.object([
+    #("device", json.string("desktop")),
+  ]))
+  let a = state.join(a, "pid2", "room:lobby", "user:alice", json.object([
+    #("device", json.string("mobile")),
+  ]))
+
+  let results = state.get_by_key(a, "room:lobby", "user:alice")
+  list.length(results) |> should.equal(2)
+}
+
+pub fn leave_only_removes_matching_entry_test() {
+  let a = state.new("node_a")
+  let a = state.join(a, "pid1", "room:lobby", "alice", json.object([]))
+  let a = state.join(a, "pid1", "room:lobby", "bob", json.object([]))
+  let a = state.leave(a, "pid1", "room:lobby", "alice")
+
+  state.get_by_topic(a, "room:lobby") |> list.length |> should.equal(1)
+}
+
+pub fn joins_propagate_through_intermediate_node_test() {
+  // A -> B -> C chain: A's join should reach C via B
+  let a = state.new("node_a")
+  let a = state.join(a, "p1", "room:lobby", "alice", json.object([]))
+
+  let b = state.new("node_b")
+  let #(b, _) = state.merge(b, a)
+
+  let c = state.new("node_c")
+  let #(c, _) = state.merge(c, b)
+
+  // C should see alice
+  state.get_by_topic(c, "room:lobby") |> list.length |> should.equal(1)
+}
+
+pub fn removes_propagate_through_intermediate_node_test() {
+  // All three nodes sync, then A removes, propagate via B to C
+  let a = state.new("node_a")
+  let a = state.join(a, "p1", "room:lobby", "alice", json.object([]))
+
+  let b = state.new("node_b")
+  let #(b, _) = state.merge(b, a)
+
+  let c = state.new("node_c")
+  let #(c, _) = state.merge(c, b)
+
+  // A removes alice
+  let a = state.leave(a, "p1", "room:lobby", "alice")
+
+  // Propagate: A -> B -> C
+  let #(b, _) = state.merge(b, a)
+  let #(c, _) = state.merge(c, b)
+
+  state.get_by_topic(c, "room:lobby") |> should.equal([])
+}
+```
+
+**Step 2: Add clocks function**
+
+```gleam
+/// Get the current vector clock
+pub fn clocks(state: State) -> Dict(Replica, Clock) {
+  state.context
+}
+```
+
+**Step 3: Run tests**
+
+Run: `cd beryl && gleam test`
+Expected: All tests pass
+
+**Step 4: Commit**
+
+```
+feat(beryl): add CRDT edge case tests and clocks helper
+
+Covers: multi-node propagation, idempotent merges, netsplit/heal,
+multiple PIDs per key, and cloud compaction.
+```
 
 ---
 
 ## Phase 1: Extract Levee-Specific Code
 
-### Task 1: Create levee_channels Gleam package
+### Task 7: Create levee_channels Gleam package
 
 **Files:**
 - Create: `levee_channels/gleam.toml`
@@ -47,10 +1053,6 @@ gleeunit = ">= 1.0.0 and < 2.0.0"
 `levee_channels/src/levee_channels.gleam`:
 ```gleam
 //// Levee Channels - Document protocol handlers for beryl
-////
-//// Provides Fluid Framework protocol support on top of beryl's
-//// generic channel infrastructure.
-
 pub const version = "0.1.0"
 ```
 
@@ -74,37 +1076,24 @@ Expected: Compiles with 0 errors
 feat(levee_channels): create package for levee-specific channel handlers
 ```
 
-### Task 2: Move document_channel.gleam to levee_channels
+### Task 8: Move document_channel and runtime to levee_channels
 
 **Files:**
 - Move: `beryl/src/beryl/levee/document_channel.gleam` → `levee_channels/src/levee_channels/document_channel.gleam`
+- Move: `beryl/src/beryl/levee/runtime.gleam` → `levee_channels/src/levee_channels/runtime.gleam`
 - Move: `beryl/src/levee_document_ffi.erl` → `levee_channels/src/levee_document_ffi.erl`
 - Move: `beryl/src/levee_document_ffi_helpers.erl` → `levee_channels/src/levee_document_ffi_helpers.erl`
+- Create: `levee_channels/src/levee_channels_ffi.erl` (identity function)
 
-**Step 1: Copy files to new location**
+**Step 1: Copy files and create FFI**
 
 ```bash
 mkdir -p levee_channels/src/levee_channels
 cp beryl/src/beryl/levee/document_channel.gleam levee_channels/src/levee_channels/document_channel.gleam
+cp beryl/src/beryl/levee/runtime.gleam levee_channels/src/levee_channels/runtime.gleam
 cp beryl/src/levee_document_ffi.erl levee_channels/src/levee_document_ffi.erl
 cp beryl/src/levee_document_ffi_helpers.erl levee_channels/src/levee_document_ffi_helpers.erl
 ```
-
-**Step 2: Update imports in document_channel.gleam**
-
-Change all `beryl/` imports to use the beryl dependency:
-```gleam
-// These imports stay the same - beryl is now a dependency
-import beryl/channel
-import beryl/coordinator.{
-  type ChannelHandler, type HandleResultErased, type JoinResultErased,
-  type SocketContext, ChannelHandler, JoinErrorErased, JoinOkErased,
-  NoReplyErased,
-}
-import beryl/topic
-```
-
-The `beryl_ffi` identity function is still in beryl. Document channel uses it for type coercion. Add a local FFI wrapper:
 
 Create `levee_channels/src/levee_channels_ffi.erl`:
 ```erlang
@@ -114,82 +1103,36 @@ Create `levee_channels/src/levee_channels_ffi.erl`:
 identity(X) -> X.
 ```
 
-Update `document_channel.gleam` to use `levee_channels_ffi` instead of `beryl_ffi`:
-```gleam
-@external(erlang, "levee_channels_ffi", "identity")
-fn to_dynamic(value: a) -> Dynamic
+**Step 2: Update imports in document_channel.gleam**
 
-@external(erlang, "levee_channels_ffi", "identity")
-fn unsafe_coerce_assigns(value: Dynamic) -> DocumentAssigns
-```
+- Change `@external(erlang, "beryl_ffi", "identity")` to `@external(erlang, "levee_channels_ffi", "identity")`
+- Keep `beryl/` imports as-is (beryl is a dependency)
 
-**Step 3: Verify levee_channels compiles**
+**Step 3: Update imports in runtime.gleam**
 
-Run: `cd levee_channels && gleam check`
-Expected: Compiles with 0 errors
+- Change `import beryl/levee/document_channel` to `import levee_channels/document_channel`
 
-**Step 4: Commit**
-
-```
-refactor(levee_channels): move document_channel from beryl to levee_channels
-```
-
-### Task 3: Move runtime.gleam to levee_channels
-
-**Files:**
-- Move: `beryl/src/beryl/levee/runtime.gleam` → `levee_channels/src/levee_channels/runtime.gleam`
-
-**Step 1: Copy and update imports**
-
-```bash
-cp beryl/src/beryl/levee/runtime.gleam levee_channels/src/levee_channels/runtime.gleam
-```
-
-Update `runtime.gleam`:
-```gleam
-//// Runtime - Gleam-side bridge for Elixir WebSocket handler
-import beryl
-import beryl/coordinator
-import levee_channels/document_channel
-import gleam/dynamic.{type Dynamic}
-import gleam/erlang/process
-
-pub fn start() -> Result(beryl.Channels, beryl.StartError) {
-  case beryl.start(beryl.default_config()) {
-    Error(e) -> Error(e)
-    Ok(channels) -> {
-      let handler = document_channel.new()
-      let _ =
-        process.call(channels.coordinator, 5000, fn(reply) {
-          coordinator.RegisterChannel("document:*", handler, reply)
-        })
-      Ok(channels)
-    }
-  }
-}
-
-// ... rest of functions unchanged
-```
-
-**Step 2: Verify levee_channels compiles**
+**Step 4: Verify levee_channels compiles**
 
 Run: `cd levee_channels && gleam check`
-Expected: Compiles with 0 errors
+Expected: 0 errors
 
-**Step 3: Commit**
+**Step 5: Commit**
 
 ```
-refactor(levee_channels): move runtime.gleam from beryl to levee_channels
+refactor(levee_channels): move document_channel and runtime from beryl
 ```
 
-### Task 4: Remove levee-specific code from beryl
+### Task 9: Remove levee-specific code from beryl and update Elixir integration
 
 **Files:**
-- Delete: `beryl/src/beryl/levee/` directory (document_channel.gleam, runtime.gleam)
+- Delete: `beryl/src/beryl/levee/` (entire directory)
 - Delete: `beryl/src/levee_document_ffi.erl`
 - Delete: `beryl/src/levee_document_ffi_helpers.erl`
+- Modify: `lib/levee/channels.ex` — Change `:beryl@levee@runtime` to `:levee_channels@runtime`
+- Modify: `lib/levee_web/socket_handler.ex` — Same module reference change
 
-**Step 1: Remove files**
+**Step 1: Remove files from beryl**
 
 ```bash
 rm -rf beryl/src/beryl/levee/
@@ -197,109 +1140,43 @@ rm -f beryl/src/levee_document_ffi.erl
 rm -f beryl/src/levee_document_ffi_helpers.erl
 ```
 
-**Step 2: Verify beryl still compiles clean**
+**Step 2: Verify beryl compiles clean**
 
-Run: `cd beryl && gleam check`
-Expected: Compiles with 0 errors, no references to levee
+Run: `cd beryl && gleam check && gleam test`
+Expected: All existing tests pass, no levee references
 
-**Step 3: Verify beryl tests pass**
+**Step 3: Update Elixir modules**
 
-Run: `cd beryl && gleam test`
-Expected: All tests pass (topic, wire, socket, config tests)
+In `lib/levee/channels.ex`: change `@compile {:no_warn_undefined, [:beryl@levee@runtime]}` and all calls to use `:levee_channels@runtime`
 
-**Step 4: Commit**
+In `lib/levee_web/socket_handler.ex`: same change
 
-```
-refactor(beryl): remove levee-specific code, beryl is now a pure generic library
-```
+**Step 4: Update build pipeline** (mix.exs/justfile) to include `levee_channels` in Gleam builds
 
-### Task 5: Update Elixir integration to use levee_channels
-
-**Files:**
-- Modify: `lib/levee/channels.ex` — Change Gleam module reference
-- Modify: `lib/levee_web/socket_handler.ex` — Change Gleam module reference
-- Modify: `mix.exs` — Add levee_channels to Gleam build paths
-- Modify: `justfile` — Update build commands if needed
-
-**Step 1: Update Levee.Channels GenServer**
-
-In `lib/levee/channels.ex`, change the Gleam module atom:
-```elixir
-# Old: :beryl@levee@runtime
-# New: :levee_channels@runtime
-@compile {:no_warn_undefined, [:levee_channels@runtime]}
-
-def init(_opts) do
-  case :levee_channels@runtime.start() do
-    # ...
-  end
-end
-```
-
-**Step 2: Update SocketHandler**
-
-In `lib/levee_web/socket_handler.ex`:
-```elixir
-# Old: :beryl@levee@runtime
-# New: :levee_channels@runtime
-@compile {:no_warn_undefined, [:levee_channels@runtime]}
-
-def init(state) do
-  # ...
-  :levee_channels@runtime.notify_connected(channels, socket_id, send_fn, me)
-  # ...
-end
-
-def handle_in({text, [opcode: :text]}, state) do
-  :levee_channels@runtime.handle_raw_message(state.channels, state.socket_id, text)
-  {:ok, state}
-end
-
-def terminate(_reason, %{channels: channels, socket_id: socket_id}) do
-  :levee_channels@runtime.notify_disconnected(channels, socket_id)
-  :ok
-end
-```
-
-**Step 3: Update mix.exs build paths**
-
-Add `levee_channels` to the Gleam build pipeline. Check `mix.exs` and `justfile` for where Gleam packages are built and ensure `levee_channels` is included alongside `beryl`, `levee_protocol`, and `levee_auth`.
-
-**Step 4: Full test run**
+**Step 5: Full test run**
 
 Run: `just build && just test`
-Expected: All 138 tests pass
+Expected: All 138+ tests pass
 
-**Step 5: Commit**
+**Step 6: Verify clean separation**
 
-```
-refactor: update Elixir integration to use levee_channels package
-```
-
-### Task 6: Verify clean separation with grep
-
-**Step 1: Verify beryl has no levee references**
-
-Run: `rg -i "levee|document|fluid|jwt|session" beryl/src/ --type gleam`
-Expected: No matches (beryl is levee-free)
-
-Run: `rg -i "levee|document" beryl/src/ --type erlang`
+Run: `rg -i "levee|document" beryl/src/ --type gleam --type erlang`
 Expected: No matches
 
-**Step 2: Verify levee_channels has all needed levee code**
+**Step 7: Commit**
 
-Run: `rg "document_channel|levee_document_ffi" levee_channels/src/`
-Expected: Matches in document_channel.gleam and ffi files
+```
+refactor: extract levee-specific code from beryl, update Elixir integration
 
-**Step 3: Commit if any cleanup needed, otherwise move on**
+beryl is now a pure generic channels library. All levee-specific
+code (DocumentChannel, runtime, FFIs) lives in levee_channels.
+```
 
 ---
 
 ## Phase 2: PubSub via Erlang pg
 
-PubSub needs to come before Presence because Presence uses PubSub for CRDT gossip.
-
-### Task 7: Create beryl/pubsub.gleam
+### Task 10: Create beryl/pubsub.gleam
 
 **Files:**
 - Create: `beryl/src/beryl/pubsub.gleam`
@@ -310,341 +1187,56 @@ PubSub needs to come before Presence because Presence uses PubSub for CRDT gossi
 `beryl/src/beryl/pubsub_ffi.erl`:
 ```erlang
 -module(beryl_pubsub_ffi).
--export([
-    start_pg_scope/1,
-    join_group/3,
-    leave_group/3,
-    get_members/2,
-    get_local_members/2
-]).
+-export([start_pg_scope/1, join_group/3, leave_group/3,
+         get_members/2, get_local_members/2, send_to_pid/2]).
 
-%% Start a pg scope (call once at startup)
-start_pg_scope(Scope) ->
-    pg:start(Scope).
-
-%% Join a process to a group (topic)
-join_group(Scope, Group, Pid) ->
-    pg:join(Scope, Group, Pid).
-
-%% Leave a group
-leave_group(Scope, Group, Pid) ->
-    pg:leave(Scope, Group, Pid).
-
-%% Get all members of a group (across all nodes)
-get_members(Scope, Group) ->
-    pg:get_members(Scope, Group).
-
-%% Get local members of a group (this node only)
-get_local_members(Scope, Group) ->
-    pg:get_local_members(Scope, Group).
+start_pg_scope(Scope) -> pg:start(Scope).
+join_group(Scope, Group, Pid) -> pg:join(Scope, Group, Pid).
+leave_group(Scope, Group, Pid) -> pg:leave(Scope, Group, Pid).
+get_members(Scope, Group) -> pg:get_members(Scope, Group).
+get_local_members(Scope, Group) -> pg:get_local_members(Scope, Group).
+send_to_pid(Pid, Msg) -> Pid ! Msg, nil.
 ```
 
-**Step 2: Write the Gleam pubsub module**
+**Step 2: Write the Gleam module**
 
-`beryl/src/beryl/pubsub.gleam`:
+See full implementation in the earlier plan draft. Key API:
+- `start(config)` / `default_config()` / `config_with_scope(name)`
+- `subscribe(ps, topic)` / `unsubscribe(ps, topic)`
+- `broadcast(ps, topic, event, payload)` / `broadcast_from(ps, from, topic, event, payload)`
+- `local_broadcast(ps, topic, event, payload)`
+- `subscribers(ps, topic)` / `subscriber_count(ps, topic)`
+
+**Step 3: Write tests**
+
 ```gleam
-//// PubSub - Distributed publish/subscribe via Erlang pg
-////
-//// Provides distributed message delivery across BEAM nodes using
-//// OTP's built-in process groups. Each topic maps to a pg group,
-//// allowing broadcasts to reach all subscribers on all connected nodes.
-////
-//// ## Example
-////
-//// ```gleam
-//// let assert Ok(ps) = pubsub.start(pubsub.default_config())
-//// pubsub.subscribe(ps, "room:lobby")
-//// pubsub.broadcast(ps, "room:lobby", "new_msg", json.string("hello"))
-//// ```
-
-import gleam/dynamic.{type Dynamic}
-import gleam/erlang/process.{type Pid}
-import gleam/json
-import gleam/list
-
-/// PubSub configuration
-pub type Config {
-  Config(
-    /// Name for the pg scope (allows multiple independent pubsub systems)
-    scope: Dynamic,
-  )
-}
-
-/// PubSub handle
-pub type PubSub {
-  PubSub(scope: Dynamic)
-}
-
-/// Errors when starting PubSub
-pub type StartError {
-  PgStartFailed
-}
-
-/// Message delivered to subscribers
-pub type Broadcast {
-  Broadcast(topic: String, event: String, payload: json.Json)
-}
-
-// FFI declarations
-@external(erlang, "beryl_pubsub_ffi", "start_pg_scope")
-fn pg_start(scope: Dynamic) -> Dynamic
-
-@external(erlang, "beryl_pubsub_ffi", "join_group")
-fn pg_join(scope: Dynamic, group: String, pid: Pid) -> Dynamic
-
-@external(erlang, "beryl_pubsub_ffi", "leave_group")
-fn pg_leave(scope: Dynamic, group: String, pid: Pid) -> Dynamic
-
-@external(erlang, "beryl_pubsub_ffi", "get_members")
-fn pg_get_members(scope: Dynamic, group: String) -> List(Pid)
-
-@external(erlang, "beryl_pubsub_ffi", "get_local_members")
-fn pg_get_local_members(scope: Dynamic, group: String) -> List(Pid)
-
-/// Erlang atom creation for scope name
-@external(erlang, "erlang", "binary_to_atom")
-fn binary_to_atom(name: String) -> Dynamic
-
-/// Default configuration
-pub fn default_config() -> Config {
-  Config(scope: binary_to_atom("beryl_pubsub"))
-}
-
-/// Create a config with a custom scope name
-pub fn config_with_scope(name: String) -> Config {
-  Config(scope: binary_to_atom(name))
-}
-
-/// Start the PubSub system
-///
-/// Initializes an Erlang pg scope. Call once at application startup.
-pub fn start(config: Config) -> Result(PubSub, StartError) {
-  let _ = pg_start(config.scope)
-  Ok(PubSub(scope: config.scope))
-}
-
-/// Subscribe the current process to a topic
-///
-/// The calling process will receive `Broadcast` messages when
-/// messages are published to this topic.
-pub fn subscribe(pubsub: PubSub, topic: String) -> Nil {
-  pg_join(pubsub.scope, topic, process.self())
-  Nil
-}
-
-/// Unsubscribe the current process from a topic
-pub fn unsubscribe(pubsub: PubSub, topic: String) -> Nil {
-  pg_leave(pubsub.scope, topic, process.self())
-  Nil
-}
-
-/// Broadcast a message to all subscribers of a topic (all nodes)
-pub fn broadcast(
-  pubsub: PubSub,
-  topic: String,
-  event: String,
-  payload: json.Json,
-) -> Nil {
-  let msg = Broadcast(topic: topic, event: event, payload: payload)
-  let members = pg_get_members(pubsub.scope, topic)
-  list.each(members, fn(pid) { process.send_pid(pid, msg) })
-}
-
-/// Broadcast to all subscribers except one process
-pub fn broadcast_from(
-  pubsub: PubSub,
-  from: Pid,
-  topic: String,
-  event: String,
-  payload: json.Json,
-) -> Nil {
-  let msg = Broadcast(topic: topic, event: event, payload: payload)
-  let members = pg_get_members(pubsub.scope, topic)
-  list.each(members, fn(pid) {
-    case pid == from {
-      True -> Nil
-      False -> process.send_pid(pid, msg)
-    }
-  })
-}
-
-/// Broadcast only to subscribers on the local node
-pub fn local_broadcast(
-  pubsub: PubSub,
-  topic: String,
-  event: String,
-  payload: json.Json,
-) -> Nil {
-  let msg = Broadcast(topic: topic, event: event, payload: payload)
-  let members = pg_get_local_members(pubsub.scope, topic)
-  list.each(members, fn(pid) { process.send_pid(pid, msg) })
-}
-
-/// Get all subscriber PIDs for a topic (across all nodes)
-pub fn subscribers(pubsub: PubSub, topic: String) -> List(Pid) {
-  pg_get_members(pubsub.scope, topic)
-}
-
-/// Get subscriber count for a topic
-pub fn subscriber_count(pubsub: PubSub, topic: String) -> Int {
-  list.length(pg_get_members(pubsub.scope, topic))
-}
+pub fn pubsub_start_test() { ... }
+pub fn pubsub_subscribe_and_count_test() { ... }
+pub fn pubsub_unsubscribe_test() { ... }
 ```
 
-**Step 3: Add a send_pid helper if needed**
+**Step 4: Verify and commit**
 
-Check if `gleam/erlang/process` has `send_pid`. If not, add FFI:
-
-`beryl/src/beryl/pubsub_ffi.erl` (add):
-```erlang
--export([send_to_pid/2]).
-
-send_to_pid(Pid, Msg) ->
-    Pid ! Msg,
-    nil.
-```
-
-And in pubsub.gleam, use this if `process.send_pid` doesn't exist:
-```gleam
-@external(erlang, "beryl_pubsub_ffi", "send_to_pid")
-fn send_to_pid(pid: Pid, msg: a) -> Nil
-```
-
-**Step 4: Verify it compiles**
-
-Run: `cd beryl && gleam check`
-Expected: Compiles with 0 errors
-
-**Step 5: Commit**
+Run: `cd beryl && gleam test`
+Expected: All tests pass
 
 ```
 feat(beryl): add PubSub module using Erlang pg for distributed messaging
 ```
 
-### Task 8: Write PubSub tests
+### Task 11: Integrate PubSub with beryl config
 
 **Files:**
-- Modify: `beryl/test/beryl_test.gleam` — Add pubsub tests
+- Modify: `beryl/src/beryl.gleam` — Add optional PubSub to Config/Channels, `with_pubsub()` builder
 
-**Step 1: Write failing tests**
+**Step 1: Update types and start()**
 
-Add to `beryl/test/beryl_test.gleam`:
-```gleam
-import beryl/pubsub
+Add `pubsub: Option(PubSub)` to Config and Channels. Add `with_pubsub(config, pubsub)` builder. Update `broadcast()` to also push through PubSub when available.
 
-// PubSub tests
-
-pub fn pubsub_start_test() {
-  let assert Ok(_ps) = pubsub.start(pubsub.default_config())
-}
-
-pub fn pubsub_subscribe_and_count_test() {
-  let assert Ok(ps) = pubsub.start(pubsub.config_with_scope("test_sub"))
-  pubsub.subscribe(ps, "test:topic")
-  pubsub.subscriber_count(ps, "test:topic")
-  |> should.equal(1)
-}
-
-pub fn pubsub_unsubscribe_test() {
-  let assert Ok(ps) = pubsub.start(pubsub.config_with_scope("test_unsub"))
-  pubsub.subscribe(ps, "test:unsub")
-  pubsub.subscriber_count(ps, "test:unsub") |> should.equal(1)
-  pubsub.unsubscribe(ps, "test:unsub")
-  pubsub.subscriber_count(ps, "test:unsub") |> should.equal(0)
-}
-```
-
-**Step 2: Run tests**
+**Step 2: Run all tests**
 
 Run: `cd beryl && gleam test`
-Expected: All tests pass (new + existing)
-
-**Step 3: Commit**
-
-```
-test(beryl): add PubSub unit tests
-```
-
-### Task 9: Integrate PubSub with coordinator
-
-**Files:**
-- Modify: `beryl/src/beryl.gleam` — Add optional PubSub to Channels
-- Modify: `beryl/src/beryl/coordinator.gleam` — Subscribe/unsubscribe topics via PubSub
-
-**Step 1: Add PubSub to Config and Channels**
-
-In `beryl/src/beryl.gleam`, update types:
-```gleam
-import beryl/pubsub.{type PubSub}
-import gleam/option.{type Option, None, Some}
-
-pub type Config {
-  Config(
-    heartbeat_interval_ms: Int,
-    heartbeat_timeout_ms: Int,
-    max_connections_per_ip: Int,
-    /// Optional PubSub for distributed broadcasts
-    pubsub: Option(PubSub),
-  )
-}
-
-pub fn default_config() -> Config {
-  Config(
-    heartbeat_interval_ms: 30_000,
-    heartbeat_timeout_ms: 60_000,
-    max_connections_per_ip: 0,
-    pubsub: None,
-  )
-}
-
-pub fn with_pubsub(config: Config, pubsub: PubSub) -> Config {
-  Config(..config, pubsub: Some(pubsub))
-}
-
-pub type Channels {
-  Channels(
-    coordinator: Subject(coordinator.Message),
-    config: Config,
-    pubsub: Option(PubSub),
-  )
-}
-```
-
-Update `start()`:
-```gleam
-pub fn start(config: Config) -> Result(Channels, StartError) {
-  case coordinator.start() {
-    Error(_) -> Error(CoordinatorStartFailed)
-    Ok(coord) -> Ok(Channels(coordinator: coord, config: config, pubsub: config.pubsub))
-  }
-}
-```
-
-Update `broadcast()` to use PubSub when available:
-```gleam
-pub fn broadcast(
-  channels: Channels,
-  topic_name: String,
-  event: String,
-  payload: json.Json,
-) -> Nil {
-  // Always send to local coordinator
-  process.send(
-    channels.coordinator,
-    coordinator.Broadcast(topic_name, event, payload, None),
-  )
-  // If PubSub enabled, also broadcast to other nodes
-  case channels.pubsub {
-    Some(ps) -> pubsub.broadcast(ps, topic_name, event, payload)
-    None -> Nil
-  }
-}
-```
-
-**Step 2: Verify it compiles and tests pass**
-
-Run: `cd beryl && gleam test`
-Expected: All tests pass
+Expected: All pass (PubSub is optional, defaults to None)
 
 **Step 3: Commit**
 
@@ -654,671 +1246,85 @@ feat(beryl): integrate PubSub with coordinator for distributed broadcasts
 
 ---
 
-## Phase 3: Presence (CRDT-based)
+## Phase 3: Channel Groups
 
-### Task 10: Create beryl/presence.gleam with types
-
-**Files:**
-- Create: `beryl/src/beryl/presence.gleam`
-- Create: `beryl/src/beryl/presence_ffi.erl`
-
-**Step 1: Define core types and API**
-
-`beryl/src/beryl/presence.gleam`:
-```gleam
-//// Presence - CRDT-based distributed presence tracking
-////
-//// Tracks which users/entities are present on each topic using a
-//// state-based CRDT (inspired by Phoenix.Presence). Each node tracks
-//// its own presences authoritatively and replicates state via PubSub.
-////
-//// Presences are identified by a key (e.g., user ID) and carry
-//// arbitrary metadata. Multiple presences can exist for the same key
-//// (e.g., a user with multiple tabs open).
-////
-//// ## Example
-////
-//// ```gleam
-//// let assert Ok(presence) = presence.start(presence.default_config(pubsub))
-//// presence.track(presence, "room:lobby", "user:alice", json.object([
-////   #("status", json.string("online")),
-//// ]))
-//// let users = presence.list(presence, "room:lobby")
-//// ```
-
-import beryl/pubsub.{type PubSub}
-import gleam/dict.{type Dict}
-import gleam/dynamic.{type Dynamic}
-import gleam/erlang/process.{type Subject}
-import gleam/json
-import gleam/option.{type Option}
-
-/// Configuration for the presence system
-pub type Config {
-  Config(
-    /// PubSub for cross-node replication
-    pubsub: PubSub,
-    /// How often to broadcast full state for consistency (ms, default: 30000)
-    sync_interval_ms: Int,
-  )
-}
-
-/// Presence system handle
-pub type Presence {
-  Presence(actor: Subject(PresenceMessage))
-}
-
-/// Errors when starting presence
-pub type PresenceStartError {
-  PresenceActorStartFailed
-}
-
-/// A single presence entry (one "connection" of a key)
-pub type PresenceMeta {
-  PresenceMeta(
-    /// Unique reference for this specific presence instance
-    ref: String,
-    /// Arbitrary metadata (status, device info, etc.)
-    meta: json.Json,
-    /// Node that owns this presence
-    node: Dynamic,
-  )
-}
-
-/// All presences for a single key
-pub type PresenceEntry {
-  PresenceEntry(key: String, metas: List(PresenceMeta))
-}
-
-/// Diff between two presence states
-pub type PresenceDiff {
-  PresenceDiff(joins: List(PresenceEntry), leaves: List(PresenceEntry))
-}
-
-/// Internal actor messages
-pub type PresenceMessage {
-  Track(topic: String, key: String, meta: json.Json, reply: Subject(Result(String, Nil)))
-  Untrack(topic: String, key: String, ref: Option(String))
-  List(topic: String, reply: Subject(List(PresenceEntry)))
-  GetByKey(topic: String, key: String, reply: Subject(Option(PresenceEntry)))
-  // Cross-node replication
-  RemoteState(node: Dynamic, topic: String, state: Dict(String, List(PresenceMeta)))
-  NodeDown(node: Dynamic)
-}
-
-/// Default configuration
-pub fn default_config(pubsub: PubSub) -> Config {
-  Config(pubsub: pubsub, sync_interval_ms: 30_000)
-}
-
-/// Start the presence tracking system
-pub fn start(config: Config) -> Result(Presence, PresenceStartError) {
-  // Implementation in Task 11
-  todo as "presence.start"
-}
-
-/// Track a presence on a topic
-///
-/// Returns a unique ref for this presence instance that can be used
-/// to untrack a specific presence (e.g., when one of multiple tabs closes).
-pub fn track(
-  presence: Presence,
-  topic: String,
-  key: String,
-  meta: json.Json,
-) -> Result(String, Nil) {
-  process.call(presence.actor, 5000, fn(reply) {
-    Track(topic, key, meta, reply)
-  })
-}
-
-/// Untrack a presence
-///
-/// If ref is None, removes all presences for the key on this topic.
-/// If ref is Some(ref), removes only the specific presence instance.
-pub fn untrack(
-  presence: Presence,
-  topic: String,
-  key: String,
-  ref: Option(String),
-) -> Nil {
-  process.send(presence.actor, Untrack(topic, key, ref))
-}
-
-/// List all presences on a topic
-pub fn list(
-  presence: Presence,
-  topic: String,
-) -> List(PresenceEntry) {
-  process.call(presence.actor, 5000, fn(reply) {
-    List(topic, reply)
-  })
-}
-
-/// Get presences for a specific key on a topic
-pub fn get_by_key(
-  presence: Presence,
-  topic: String,
-  key: String,
-) -> Option(PresenceEntry) {
-  process.call(presence.actor, 5000, fn(reply) {
-    GetByKey(topic, key, reply)
-  })
-}
-```
-
-**Step 2: Verify it compiles (with todo stubs)**
-
-Run: `cd beryl && gleam check`
-Expected: Compiles (todo is valid Gleam)
-
-**Step 3: Commit**
-
-```
-feat(beryl): add presence module types and API surface
-```
-
-### Task 11: Implement presence actor with CRDT state
-
-**Files:**
-- Modify: `beryl/src/beryl/presence.gleam` — Implement the actor
-
-**Step 1: Implement start() and actor loop**
-
-Replace the `todo` in `start()` with a real actor implementation. The CRDT approach:
-
-- Each node maintains a `Dict(node, Dict(topic, Dict(key, List(PresenceMeta))))` — the "clock" is node-specific; each node is authoritative over its own entries
-- On track/untrack: update local state, compute diff, broadcast diff to PubSub
-- On remote state: merge by replacing that node's entries entirely (last-write-wins per node)
-- On node down: remove all entries for that node, broadcast diff
-
-Key implementation details:
-- Use `process.send_after` for periodic sync interval
-- Generate unique refs via `crypto.strong_random_bytes`
-- Push `"presence_state"` and `"presence_diff"` events to channel subscribers
-
-**Step 2: Write the implementation**
-
-This is the most complex task. The actor state:
-```gleam
-type State {
-  State(
-    /// node -> topic -> key -> List(PresenceMeta)
-    presences: Dict(Dynamic, Dict(String, Dict(String, List(PresenceMeta)))),
-    /// Our node identity
-    local_node: Dynamic,
-    /// PubSub for replication
-    pubsub: PubSub,
-  )
-}
-```
-
-Core CRDT operations:
-- `merge_state(local, remote_node, remote_state)` — Replace remote node's entries
-- `compute_diff(old_state, new_state)` — Determine joins/leaves
-- `flatten_for_topic(state, topic)` — Aggregate all nodes' entries for a topic
-
-**Step 3: Run tests (from Task 12)**
-
-**Step 4: Commit**
-
-```
-feat(beryl): implement CRDT-based presence actor
-```
-
-### Task 12: Write presence tests
-
-**Files:**
-- Modify: `beryl/test/beryl_test.gleam` — Add presence tests
-
-**Step 1: Write tests**
-
-```gleam
-import beryl/presence
-import beryl/pubsub
-
-// Presence tests
-
-pub fn presence_track_and_list_test() {
-  let assert Ok(ps) = pubsub.start(pubsub.config_with_scope("test_pres"))
-  let assert Ok(pres) = presence.start(presence.default_config(ps))
-
-  let assert Ok(_ref) = presence.track(pres, "room:lobby", "user:alice", json.object([
-    #("status", json.string("online")),
-  ]))
-
-  let entries = presence.list(pres, "room:lobby")
-  list.length(entries) |> should.equal(1)
-}
-
-pub fn presence_untrack_test() {
-  let assert Ok(ps) = pubsub.start(pubsub.config_with_scope("test_pres_ut"))
-  let assert Ok(pres) = presence.start(presence.default_config(ps))
-
-  let assert Ok(ref) = presence.track(pres, "room:lobby", "user:bob", json.object([]))
-  presence.untrack(pres, "room:lobby", "user:bob", option.Some(ref))
-
-  // Give actor time to process
-  process.sleep(50)
-
-  let entries = presence.list(pres, "room:lobby")
-  list.length(entries) |> should.equal(0)
-}
-
-pub fn presence_multiple_metas_test() {
-  let assert Ok(ps) = pubsub.start(pubsub.config_with_scope("test_pres_mm"))
-  let assert Ok(pres) = presence.start(presence.default_config(ps))
-
-  // Same user, two "tabs"
-  let assert Ok(_) = presence.track(pres, "room:lobby", "user:alice", json.object([
-    #("device", json.string("desktop")),
-  ]))
-  let assert Ok(_) = presence.track(pres, "room:lobby", "user:alice", json.object([
-    #("device", json.string("mobile")),
-  ]))
-
-  let entries = presence.list(pres, "room:lobby")
-  list.length(entries) |> should.equal(1)  // One key
-  let assert [entry] = entries
-  list.length(entry.metas) |> should.equal(2)  // Two metas
-}
-
-pub fn presence_get_by_key_test() {
-  let assert Ok(ps) = pubsub.start(pubsub.config_with_scope("test_pres_gbk"))
-  let assert Ok(pres) = presence.start(presence.default_config(ps))
-
-  let assert Ok(_) = presence.track(pres, "room:lobby", "user:alice", json.object([]))
-
-  let result = presence.get_by_key(pres, "room:lobby", "user:alice")
-  result |> should.be_some
-
-  let result = presence.get_by_key(pres, "room:lobby", "user:missing")
-  result |> should.equal(option.None)
-}
-
-pub fn presence_empty_topic_test() {
-  let assert Ok(ps) = pubsub.start(pubsub.config_with_scope("test_pres_empty"))
-  let assert Ok(pres) = presence.start(presence.default_config(ps))
-
-  let entries = presence.list(pres, "room:empty")
-  list.length(entries) |> should.equal(0)
-}
-```
-
-**Step 2: Run tests**
-
-Run: `cd beryl && gleam test`
-Expected: All tests pass
-
-**Step 3: Commit**
-
-```
-test(beryl): add presence tracking tests
-```
-
----
-
-## Phase 4: Channel Groups
-
-### Task 13: Create beryl/group.gleam
+### Task 12: Create beryl/group.gleam with tests
 
 **Files:**
 - Create: `beryl/src/beryl/group.gleam`
 
-**Step 1: Write the group module**
+**Step 1: Implement the full group module**
 
-`beryl/src/beryl/group.gleam`:
+See full implementation in earlier plan draft. Key API:
+- `start()` → `Groups`
+- `create(groups, name)` / `delete(groups, name)`
+- `add(groups, group_name, topic)` / `remove(groups, group_name, topic)`
+- `topics(groups, group_name)` / `list_groups(groups)`
+- `broadcast(groups, channels, group_name, event, payload)`
+
+**Step 2: Write tests**
+
 ```gleam
-//// Channel Groups - Aggregate multiple topics
-////
-//// Groups allow broadcasting to multiple related topics at once.
-//// Useful for organizational hierarchies, user notification channels, etc.
-////
-//// ## Example
-////
-//// ```gleam
-//// let assert Ok(groups) = group.start()
-//// group.add(groups, "org:acme", "room:lobby")
-//// group.add(groups, "org:acme", "room:engineering")
-//// group.broadcast(groups, channels, "org:acme", "announcement", payload)
-//// ```
-
-import beryl
-import gleam/dict.{type Dict}
-import gleam/erlang/process.{type Subject}
-import gleam/json
-import gleam/list
-import gleam/option.{type Option, None, Some}
-import gleam/otp/actor
-import gleam/result
-import gleam/set.{type Set}
-
-/// Group registry handle
-pub type Groups {
-  Groups(actor: Subject(GroupMessage))
-}
-
-/// Errors when starting groups
-pub type GroupStartError {
-  GroupActorStartFailed
-}
-
-/// Internal messages
-pub type GroupMessage {
-  Create(name: String, reply: Subject(Result(Nil, GroupError)))
-  Delete(name: String)
-  Add(group_name: String, topic: String, reply: Subject(Result(Nil, GroupError)))
-  Remove(group_name: String, topic: String)
-  GetTopics(group_name: String, reply: Subject(Option(Set(String))))
-  ListGroups(reply: Subject(List(String)))
-  BroadcastGroup(
-    group_name: String,
-    channels: beryl.Channels,
-    event: String,
-    payload: json.Json,
-  )
-}
-
-/// Group errors
-pub type GroupError {
-  GroupNotFound(String)
-  GroupAlreadyExists(String)
-}
-
-/// Internal state
-type State {
-  State(groups: Dict(String, Set(String)))
-}
-
-/// Start the group registry
-pub fn start() -> Result(Groups, GroupStartError) {
-  let initial = State(groups: dict.new())
-  case
-    actor.new(initial)
-    |> actor.on_message(handle_message)
-    |> actor.start
-  {
-    Error(_) -> Error(GroupActorStartFailed)
-    Ok(started) -> Ok(Groups(actor: started.data))
-  }
-}
-
-/// Create a new group
-pub fn create(groups: Groups, name: String) -> Result(Nil, GroupError) {
-  process.call(groups.actor, 5000, fn(reply) { Create(name, reply) })
-}
-
-/// Delete a group
-pub fn delete(groups: Groups, name: String) -> Nil {
-  process.send(groups.actor, Delete(name))
-}
-
-/// Add a topic to a group
-pub fn add(
-  groups: Groups,
-  group_name: String,
-  topic: String,
-) -> Result(Nil, GroupError) {
-  process.call(groups.actor, 5000, fn(reply) { Add(group_name, topic, reply) })
-}
-
-/// Remove a topic from a group
-pub fn remove(groups: Groups, group_name: String, topic: String) -> Nil {
-  process.send(groups.actor, Remove(group_name, topic))
-}
-
-/// Get all topics in a group
-pub fn topics(groups: Groups, group_name: String) -> Option(Set(String)) {
-  process.call(groups.actor, 5000, fn(reply) { GetTopics(group_name, reply) })
-}
-
-/// List all group names
-pub fn list_groups(groups: Groups) -> List(String) {
-  process.call(groups.actor, 5000, fn(reply) { ListGroups(reply) })
-}
-
-/// Broadcast to all topics in a group
-pub fn broadcast(
-  groups: Groups,
-  channels: beryl.Channels,
-  group_name: String,
-  event: String,
-  payload: json.Json,
-) -> Nil {
-  process.send(
-    groups.actor,
-    BroadcastGroup(group_name, channels, event, payload),
-  )
-}
-
-// Actor message handler
-fn handle_message(
-  state: State,
-  message: GroupMessage,
-) -> actor.Next(State, GroupMessage) {
-  case message {
-    Create(name, reply) -> {
-      case dict.has_key(state.groups, name) {
-        True -> {
-          process.send(reply, Error(GroupAlreadyExists(name)))
-          actor.continue(state)
-        }
-        False -> {
-          let new_groups = dict.insert(state.groups, name, set.new())
-          process.send(reply, Ok(Nil))
-          actor.continue(State(groups: new_groups))
-        }
-      }
-    }
-
-    Delete(name) -> {
-      let new_groups = dict.delete(state.groups, name)
-      actor.continue(State(groups: new_groups))
-    }
-
-    Add(group_name, topic, reply) -> {
-      case dict.get(state.groups, group_name) {
-        Error(_) -> {
-          process.send(reply, Error(GroupNotFound(group_name)))
-          actor.continue(state)
-        }
-        Ok(topics) -> {
-          let new_topics = set.insert(topics, topic)
-          let new_groups = dict.insert(state.groups, group_name, new_topics)
-          process.send(reply, Ok(Nil))
-          actor.continue(State(groups: new_groups))
-        }
-      }
-    }
-
-    Remove(group_name, topic) -> {
-      case dict.get(state.groups, group_name) {
-        Error(_) -> actor.continue(state)
-        Ok(topics) -> {
-          let new_topics = set.delete(topics, topic)
-          let new_groups = dict.insert(state.groups, group_name, new_topics)
-          actor.continue(State(groups: new_groups))
-        }
-      }
-    }
-
-    GetTopics(group_name, reply) -> {
-      case dict.get(state.groups, group_name) {
-        Error(_) -> {
-          process.send(reply, None)
-          actor.continue(state)
-        }
-        Ok(topics) -> {
-          process.send(reply, Some(topics))
-          actor.continue(state)
-        }
-      }
-    }
-
-    ListGroups(reply) -> {
-      process.send(reply, dict.keys(state.groups))
-      actor.continue(state)
-    }
-
-    BroadcastGroup(group_name, channels, event, payload) -> {
-      case dict.get(state.groups, group_name) {
-        Error(_) -> actor.continue(state)
-        Ok(topics) -> {
-          set.to_list(topics)
-          |> list.each(fn(topic) {
-            beryl.broadcast(channels, topic, event, payload)
-          })
-          actor.continue(state)
-        }
-      }
-    }
-  }
-}
+pub fn group_create_and_list_test() { ... }
+pub fn group_add_topics_test() { ... }
+pub fn group_remove_topic_test() { ... }
+pub fn group_not_found_test() { ... }
+pub fn group_already_exists_test() { ... }
+pub fn group_delete_test() { ... }
 ```
 
-**Step 2: Verify it compiles**
-
-Run: `cd beryl && gleam check`
-Expected: Compiles with 0 errors
-
-**Step 3: Commit**
+**Step 3: Verify and commit**
 
 ```
 feat(beryl): add channel groups for multi-topic broadcasting
 ```
 
-### Task 14: Write group tests
+---
+
+## Phase 4: Presence Actor (wraps CRDT)
+
+### Task 13: Create beryl/presence.gleam wrapping state.gleam in an actor
 
 **Files:**
-- Modify: `beryl/test/beryl_test.gleam` — Add group tests
+- Create: `beryl/src/beryl/presence.gleam`
 
-**Step 1: Write tests**
+Now that `beryl/presence/state.gleam` is solid, wrap it in an OTP actor that:
+- Handles `track`/`untrack` calls by calling `state.join`/`state.leave`
+- Periodically broadcasts state via PubSub for cross-node replication
+- Receives remote state and calls `state.merge`
+- Pushes `"presence_state"` and `"presence_diff"` events to channel subscribers
 
-```gleam
-import beryl/group
+**Step 1: Implement actor**
 
-// Group tests
+Key API:
+- `start(config)` — Start presence actor with PubSub for replication
+- `track(presence, topic, key, meta)` → `Result(String, Nil)`
+- `untrack(presence, topic, key, ref)`
+- `list(presence, topic)` → `List(PresenceEntry)`
+- `get_by_key(presence, topic, key)` → `Option(PresenceEntry)`
 
-pub fn group_create_and_list_test() {
-  let assert Ok(groups) = group.start()
-  let assert Ok(Nil) = group.create(groups, "org:acme")
-
-  group.list_groups(groups)
-  |> list.length
-  |> should.equal(1)
-}
-
-pub fn group_add_topics_test() {
-  let assert Ok(groups) = group.start()
-  let assert Ok(Nil) = group.create(groups, "org:acme")
-  let assert Ok(Nil) = group.add(groups, "org:acme", "room:lobby")
-  let assert Ok(Nil) = group.add(groups, "org:acme", "room:eng")
-
-  let assert option.Some(topics) = group.topics(groups, "org:acme")
-  set.size(topics) |> should.equal(2)
-  set.contains(topics, "room:lobby") |> should.be_true
-  set.contains(topics, "room:eng") |> should.be_true
-}
-
-pub fn group_remove_topic_test() {
-  let assert Ok(groups) = group.start()
-  let assert Ok(Nil) = group.create(groups, "org:acme")
-  let assert Ok(Nil) = group.add(groups, "org:acme", "room:lobby")
-  let assert Ok(Nil) = group.add(groups, "org:acme", "room:eng")
-
-  group.remove(groups, "org:acme", "room:lobby")
-
-  let assert option.Some(topics) = group.topics(groups, "org:acme")
-  set.size(topics) |> should.equal(1)
-  set.contains(topics, "room:eng") |> should.be_true
-}
-
-pub fn group_not_found_test() {
-  let assert Ok(groups) = group.start()
-  let assert Error(group.GroupNotFound(_)) = group.add(groups, "missing", "room:1")
-}
-
-pub fn group_already_exists_test() {
-  let assert Ok(groups) = group.start()
-  let assert Ok(Nil) = group.create(groups, "org:acme")
-  let assert Error(group.GroupAlreadyExists(_)) = group.create(groups, "org:acme")
-}
-
-pub fn group_delete_test() {
-  let assert Ok(groups) = group.start()
-  let assert Ok(Nil) = group.create(groups, "org:temp")
-  group.delete(groups, "org:temp")
-  group.topics(groups, "org:temp") |> should.equal(option.None)
-}
-
-pub fn group_topics_nonexistent_test() {
-  let assert Ok(groups) = group.start()
-  group.topics(groups, "nope") |> should.equal(option.None)
-}
-```
-
-**Step 2: Run tests**
-
-Run: `cd beryl && gleam test`
-Expected: All tests pass
+**Step 2: Write integration tests**
 
 **Step 3: Commit**
 
 ```
-test(beryl): add channel group tests
+feat(beryl): add presence actor wrapping CRDT state module
 ```
 
 ---
 
-## Phase 5: Integration & Documentation
+## Phase 5: Documentation & Integration
 
-### Task 15: Update beryl.gleam public API to re-export new modules
+### Task 14: Update beryl.gleam docs and full integration test
 
 **Files:**
-- Modify: `beryl/src/beryl.gleam` — Add convenience re-exports and docs
+- Modify: `beryl/src/beryl.gleam` — Update module docs
 
-**Step 1: Update module doc and add re-exports**
+**Step 1: Update docs to mention all features**
 
-Update the module-level documentation in `beryl.gleam` to mention all features:
+**Step 2: Full build and test**
 
-```gleam
-//// Beryl - Type-safe real-time communication for Gleam
-////
-//// A library for building real-time applications with:
-//// - **Channels** - Topic-based message handlers with typed assigns
-//// - **Presence** - CRDT-based distributed presence tracking
-//// - **PubSub** - Distributed messaging via Erlang pg
-//// - **Groups** - Multi-topic broadcasting
-//// - **Transport** - WebSocket transport (Wisp integration)
-////
-//// ## Quick Start
-////
-//// ```gleam
-//// import beryl
-//// import beryl/channel
-//// import beryl/pubsub
-//// import beryl/presence
-////
-//// pub fn main() {
-////   // Start PubSub for distributed messaging
-////   let assert Ok(ps) = pubsub.start(pubsub.default_config())
-////
-////   // Start channels with PubSub
-////   let config = beryl.default_config() |> beryl.with_pubsub(ps)
-////   let assert Ok(channels) = beryl.start(config)
-////
-////   // Start presence tracking
-////   let assert Ok(pres) = presence.start(presence.default_config(ps))
-////
-////   // Register a channel handler
-////   let _ = beryl.register(channels, "room:*", room_channel.new())
-//// }
-//// ```
-```
-
-**Step 2: Verify everything compiles and tests pass**
-
-Run: `cd beryl && gleam test`
+Run: `just build && just test`
 Expected: All tests pass
 
 **Step 3: Commit**
@@ -1327,40 +1333,19 @@ Expected: All tests pass
 docs(beryl): update module documentation with full feature set
 ```
 
-### Task 16: Full integration test
-
-**Files:**
-- No new files — just verify the full build
-
-**Step 1: Build everything**
-
-Run: `just build`
-Expected: All Gleam packages (beryl, levee_protocol, levee_auth, levee_channels) compile
-
-**Step 2: Run all tests**
-
-Run: `just test`
-Expected: All Elixir + Gleam tests pass (138+ tests)
-
-**Step 3: Run beryl tests specifically**
-
-Run: `cd beryl && gleam test`
-Expected: All beryl tests pass (topic, wire, socket, config, pubsub, presence, group)
-
-**Step 4: Final commit if any fixups needed**
-
 ---
 
 ## Summary
 
 | Task | Description | Phase |
 |------|-------------|-------|
-| 1-6 | Extract levee-specific code into `levee_channels` package | Phase 1: Extraction |
-| 7-9 | PubSub module using Erlang pg, integrated with coordinator | Phase 2: PubSub |
-| 10-12 | CRDT-based Presence tracking with tests | Phase 3: Presence |
-| 13-14 | Channel Groups for multi-topic broadcasting | Phase 4: Groups |
-| 15-16 | Documentation update and full integration test | Phase 5: Integration |
+| 1-6 | **Pure CRDT data structure** with comprehensive tests | Phase 0: CRDT |
+| 7-9 | Extract levee-specific code into `levee_channels` | Phase 1: Extraction |
+| 10-11 | PubSub module using Erlang pg | Phase 2: PubSub |
+| 12 | Channel Groups | Phase 3: Groups |
+| 13 | Presence actor wrapping CRDT | Phase 4: Presence Actor |
+| 14 | Documentation and integration | Phase 5: Docs |
 
-**Estimated total: 16 tasks**
+**Phase 0 is the critical path** — 6 tasks building a pure, well-tested CRDT before any integration. The test suite covers: basic ops, merge semantics, idempotency, add-wins conflict resolution, netsplit/heal, multi-hop propagation, delta extraction, and cloud compaction.
 
 Rate limiting is deferred to a separate effort using the library extracted from birch.
