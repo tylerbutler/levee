@@ -27,13 +27,14 @@
 
 import beryl/channel.{type Channel}
 import beryl/coordinator
+import beryl/pubsub.{type PubSub}
 import beryl/socket.{type Socket}
 import beryl/topic
 import beryl/wire
 import gleam/dynamic.{type Dynamic}
 import gleam/erlang/process.{type Subject}
 import gleam/json
-import gleam/option.{None, Some}
+import gleam/option.{type Option, None, Some}
 
 // Re-export types from coordinator for convenience
 pub type ChannelHandler =
@@ -51,6 +52,8 @@ pub type Config {
     heartbeat_timeout_ms: Int,
     /// Max connections per IP (0 = unlimited)
     max_connections_per_ip: Int,
+    /// Optional PubSub for distributed broadcasts across nodes
+    pubsub: Option(PubSub),
   )
 }
 
@@ -60,7 +63,13 @@ pub fn default_config() -> Config {
     heartbeat_interval_ms: 30_000,
     heartbeat_timeout_ms: 60_000,
     max_connections_per_ip: 0,
+    pubsub: None,
   )
+}
+
+/// Add PubSub to a configuration for distributed broadcasts
+pub fn with_pubsub(config: Config, ps: PubSub) -> Config {
+  Config(..config, pubsub: Some(ps))
 }
 
 /// Channels system handle
@@ -73,6 +82,8 @@ pub type Channels {
     coordinator: Subject(coordinator.Message),
     /// Configuration
     config: Config,
+    /// Optional PubSub for distributed messaging
+    pubsub: Option(PubSub),
   )
 }
 
@@ -97,7 +108,8 @@ pub type StartError {
 pub fn start(config: Config) -> Result(Channels, StartError) {
   case coordinator.start() {
     Error(_) -> Error(CoordinatorStartFailed)
-    Ok(coord) -> Ok(Channels(coordinator: coord, config: config))
+    Ok(coord) ->
+      Ok(Channels(coordinator: coord, config: config, pubsub: config.pubsub))
   }
 }
 
@@ -156,10 +168,16 @@ pub fn broadcast(
   event: String,
   payload: json.Json,
 ) -> Nil {
+  // Local broadcast via coordinator
   process.send(
     channels.coordinator,
     coordinator.Broadcast(topic_name, event, payload, None),
   )
+  // Distributed broadcast via PubSub (if configured)
+  case channels.pubsub {
+    Some(ps) -> pubsub.broadcast(ps, topic_name, event, payload)
+    None -> Nil
+  }
 }
 
 /// Broadcast a message to all subscribers except one socket
@@ -185,10 +203,18 @@ pub fn broadcast_from(
   event: String,
   payload: json.Json,
 ) -> Nil {
+  // Local broadcast via coordinator (excluding sender)
   process.send(
     channels.coordinator,
     coordinator.Broadcast(topic_name, event, payload, Some(except_socket_id)),
   )
+  // Distributed broadcast via PubSub (if configured)
+  // Note: PubSub broadcast_from excludes by pid, not socket_id.
+  // For cross-node, we broadcast to all since the sender is on a different node.
+  case channels.pubsub {
+    Some(ps) -> pubsub.broadcast(ps, topic_name, event, payload)
+    None -> Nil
+  }
 }
 
 /// Push a message to a specific socket via its context
