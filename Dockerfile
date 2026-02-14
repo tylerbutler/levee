@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Gleam (required for levee_protocol)
-ARG GLEAM_VERSION=1.9.1
+ARG GLEAM_VERSION=1.14.0
 RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "aarch64" ]; then \
       GLEAM_ARCH="aarch64-unknown-linux-musl"; \

@@ -111,4 +111,16 @@ defmodule LeveeWeb.Router do
     post "/refs", GitController, :create_ref
     patch "/refs/*ref", GitController, :update_ref
   end
+
+  # Admin UI - SPA catch-all (serves index.html for all /admin/* paths)
+  pipeline :browser do
+    plug :accepts, ["html"]
+  end
+
+  scope "/admin", LeveeWeb do
+    pipe_through :browser
+
+    get "/", AdminController, :index
+    get "/*path", AdminController, :index
+  end
 end

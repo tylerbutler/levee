@@ -15,13 +15,13 @@ pub type Route {
 /// Parse a URI into a Route
 pub fn parse(uri: Uri) -> Route {
   case uri.path_segments(uri.path) {
-    [] -> Login
-    [""] -> Login
-    ["login"] -> Login
-    ["register"] -> Register
-    ["dashboard"] -> Dashboard
-    ["tenants"] -> Tenants
-    ["tenants", id] -> TenantDetail(id)
+    ["admin"] -> Login
+    ["admin", ""] -> Login
+    ["admin", "login"] -> Login
+    ["admin", "register"] -> Register
+    ["admin", "dashboard"] -> Dashboard
+    ["admin", "tenants"] -> Tenants
+    ["admin", "tenants", id] -> TenantDetail(id)
     _ -> NotFound
   }
 }
@@ -29,11 +29,11 @@ pub fn parse(uri: Uri) -> Route {
 /// Convert a Route to a path string
 pub fn to_path(route: Route) -> String {
   case route {
-    Login -> "/login"
-    Register -> "/register"
-    Dashboard -> "/dashboard"
-    Tenants -> "/tenants"
-    TenantDetail(id) -> "/tenants/" <> id
-    NotFound -> "/404"
+    Login -> "/admin/login"
+    Register -> "/admin/register"
+    Dashboard -> "/admin/dashboard"
+    Tenants -> "/admin/tenants"
+    TenantDetail(id) -> "/admin/tenants/" <> id
+    NotFound -> "/admin/404"
   }
 }

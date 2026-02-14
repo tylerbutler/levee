@@ -185,7 +185,7 @@ pub fn view(model: Model) -> Element(Msg) {
       ]),
       p([class("auth-footer")], [
         text("Already have an account? "),
-        a([attribute.href("/login")], [text("Sign in")]),
+        a([attribute.href("/admin/login")], [text("Sign in")]),
       ]),
     ]),
   ])

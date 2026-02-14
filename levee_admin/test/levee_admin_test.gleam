@@ -12,31 +12,31 @@ pub fn main() {
 // Router tests
 
 pub fn parse_login_route_test() {
-  let uri = uri_from_path("/login")
+  let uri = uri_from_path("/admin/login")
   router.parse(uri)
   |> should.equal(router.Login)
 }
 
 pub fn parse_register_route_test() {
-  let uri = uri_from_path("/register")
+  let uri = uri_from_path("/admin/register")
   router.parse(uri)
   |> should.equal(router.Register)
 }
 
 pub fn parse_dashboard_route_test() {
-  let uri = uri_from_path("/dashboard")
+  let uri = uri_from_path("/admin/dashboard")
   router.parse(uri)
   |> should.equal(router.Dashboard)
 }
 
 pub fn parse_tenants_route_test() {
-  let uri = uri_from_path("/tenants")
+  let uri = uri_from_path("/admin/tenants")
   router.parse(uri)
   |> should.equal(router.Tenants)
 }
 
 pub fn parse_tenant_detail_route_test() {
-  let uri = uri_from_path("/tenants/abc123")
+  let uri = uri_from_path("/admin/tenants/abc123")
   router.parse(uri)
   |> should.equal(router.TenantDetail("abc123"))
 }
@@ -47,25 +47,25 @@ pub fn parse_unknown_route_test() {
   |> should.equal(router.NotFound)
 }
 
-pub fn parse_root_route_test() {
-  let uri = uri_from_path("/")
+pub fn parse_root_admin_route_test() {
+  let uri = uri_from_path("/admin")
   router.parse(uri)
   |> should.equal(router.Login)
 }
 
 pub fn to_path_login_test() {
   router.to_path(router.Login)
-  |> should.equal("/login")
+  |> should.equal("/admin/login")
 }
 
 pub fn to_path_dashboard_test() {
   router.to_path(router.Dashboard)
-  |> should.equal("/dashboard")
+  |> should.equal("/admin/dashboard")
 }
 
 pub fn to_path_tenant_detail_test() {
   router.to_path(router.TenantDetail("tenant-123"))
-  |> should.equal("/tenants/tenant-123")
+  |> should.equal("/admin/tenants/tenant-123")
 }
 
 // Helper to create a URI from a path

@@ -149,7 +149,7 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           route: router.Dashboard,
           login: login.init(),
         )
-      #(model, modem.push("/dashboard", None, None))
+      #(model, modem.push("/admin/dashboard", None, None))
     }
 
     LoginResponse(Error(_error)) -> {
@@ -173,7 +173,7 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           route: router.Dashboard,
           register: register.init(),
         )
-      #(model, modem.push("/dashboard", None, None))
+      #(model, modem.push("/admin/dashboard", None, None))
     }
 
     RegisterResponse(Error(_error)) -> {
@@ -185,7 +185,7 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     Logout -> {
       let model =
         Model(..model, user: None, session_token: None, route: router.Login)
-      #(model, modem.push("/login", None, None))
+      #(model, modem.push("/admin/login", None, None))
     }
   }
 }
@@ -265,7 +265,7 @@ fn view_not_found() -> Element(Msg) {
   div([class("page not-found")], [
     h1([], [text("404 - Not Found")]),
     p([], [text("The page you're looking for doesn't exist.")]),
-    html.a([attribute.href("/login")], [text("Go to Login")]),
+    html.a([attribute.href("/admin/login")], [text("Go to Login")]),
   ])
 }
 
