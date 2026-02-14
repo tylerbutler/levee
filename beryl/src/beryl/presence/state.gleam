@@ -173,6 +173,164 @@ pub fn get_by_key(
   })
 }
 
+// ── Merge ───────────────────────────────────────────────────────────
+
+/// Merge remote state into local state.
+/// Returns the new merged state and a diff of what changed.
+pub fn merge(local: State, remote: State) -> #(State, Diff) {
+  // 1. Find new entries from remote (tags we haven't seen)
+  let joins =
+    dict.to_list(remote.values)
+    |> list.filter(fn(kv) {
+      let #(tag, _) = kv
+      case tag_is_in(local.context, local.clouds, tag) {
+        True -> False
+        False -> True
+      }
+    })
+
+  // 2. Find entries we should remove (in remote's causal context but not in remote's values)
+  let removes =
+    dict.to_list(local.values)
+    |> list.filter(fn(kv) {
+      let #(tag, _) = kv
+      tag.replica != local.replica
+      && tag_is_in(remote.context, remote.clouds, tag)
+      && {
+        case dict.has_key(remote.values, tag) {
+          True -> False
+          False -> True
+        }
+      }
+    })
+
+  // 3. Apply changes
+  let new_values =
+    list.fold(removes, local.values, fn(vals, kv) {
+      let #(tag, _) = kv
+      dict.delete(vals, tag)
+    })
+  let new_values =
+    list.fold(joins, new_values, fn(vals, kv) {
+      let #(tag, entry) = kv
+      dict.insert(vals, tag, entry)
+    })
+
+  // 4. Advance context: take max of local and remote for each replica
+  let new_context = merge_contexts(local.context, remote.context)
+
+  // 5. Merge clouds
+  let new_clouds = merge_clouds(local.clouds, remote.clouds)
+
+  // 6. Build diff
+  let join_diff = entries_to_topic_diff(list.map(joins, fn(kv) { kv.1 }))
+  let leave_diff = entries_to_topic_diff(list.map(removes, fn(kv) { kv.1 }))
+  let diff = Diff(joins: join_diff, leaves: leave_diff)
+
+  let new_state =
+    State(
+      ..local,
+      context: new_context,
+      clouds: new_clouds,
+      values: new_values,
+    )
+
+  #(compact(new_state), diff)
+}
+
+/// Check if a tag is "in" a causal context (either compacted or in clouds)
+fn tag_is_in(
+  context: Dict(Replica, Clock),
+  clouds: Dict(Replica, Set(Clock)),
+  tag: Tag,
+) -> Bool {
+  case dict.get(context, tag.replica) {
+    Ok(clock) if clock >= tag.clock -> True
+    _ -> {
+      case dict.get(clouds, tag.replica) {
+        Ok(cloud) -> set.contains(cloud, tag.clock)
+        Error(_) -> False
+      }
+    }
+  }
+}
+
+/// Merge two vector clocks (take max per replica)
+fn merge_contexts(
+  a: Dict(Replica, Clock),
+  b: Dict(Replica, Clock),
+) -> Dict(Replica, Clock) {
+  dict.combine(a, b, fn(ca, cb) {
+    case ca > cb {
+      True -> ca
+      False -> cb
+    }
+  })
+}
+
+/// Merge cloud sets
+fn merge_clouds(
+  a: Dict(Replica, Set(Clock)),
+  b: Dict(Replica, Set(Clock)),
+) -> Dict(Replica, Set(Clock)) {
+  dict.combine(a, b, fn(sa, sb) { set.union(sa, sb) })
+}
+
+/// Compact clouds into context where possible
+///
+/// If context[replica] + 1 is in the cloud, advance context and remove from cloud.
+/// Repeat until no more compaction possible.
+pub fn compact(state: State) -> State {
+  let #(new_context, new_clouds) =
+    dict.fold(
+      state.clouds,
+      #(state.context, state.clouds),
+      fn(acc, replica, cloud) {
+        let #(ctx, clouds) = acc
+        let base = case dict.get(ctx, replica) {
+          Ok(c) -> c
+          Error(_) -> 0
+        }
+        let #(new_base, remaining) = compact_cloud(base, cloud)
+        let new_ctx = case new_base > base {
+          True -> dict.insert(ctx, replica, new_base)
+          False -> ctx
+        }
+        let new_clouds = case set.size(remaining) {
+          0 -> dict.delete(clouds, replica)
+          _ -> dict.insert(clouds, replica, remaining)
+        }
+        #(new_ctx, new_clouds)
+      },
+    )
+
+  State(..state, context: new_context, clouds: new_clouds)
+}
+
+/// Compact a single cloud: advance base clock through contiguous values
+fn compact_cloud(base: Clock, cloud: Set(Clock)) -> #(Clock, Set(Clock)) {
+  case set.contains(cloud, base + 1) {
+    True -> compact_cloud(base + 1, set.delete(cloud, base + 1))
+    False -> #(base, cloud)
+  }
+}
+
+/// Group entries by topic for diff reporting
+fn entries_to_topic_diff(
+  entries: List(Entry),
+) -> Dict(String, List(#(String, String, json.Json))) {
+  list.fold(entries, dict.new(), fn(acc, entry) {
+    let existing = case dict.get(acc, entry.topic) {
+      Ok(l) -> l
+      Error(_) -> []
+    }
+    dict.insert(acc, entry.topic, [
+      #(entry.key, entry.pid, entry.meta),
+      ..existing
+    ])
+  })
+}
+
 // ── Internal helpers ────────────────────────────────────────────────
 
 fn next_clock(state: State, replica: Replica) -> Clock {
