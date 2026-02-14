@@ -98,6 +98,7 @@ defmodule Levee.Application do
       "youid"
     ]
 
+    # Add all ebin paths to the code path
     for base <- base_paths, mod <- gleam_modules do
       path = Path.join([base, mod, "ebin"]) |> Path.expand()
 
@@ -106,22 +107,28 @@ defmodule Levee.Application do
       end
     end
 
-    # Explicitly load all Gleam modules to ensure they're available
-    # Gleam creates separate BEAM files for each submodule (e.g., levee_protocol@sequencing, gleam@dict)
-    for base <- base_paths, mod <- gleam_modules do
-      ebin_path = Path.join([base, mod, "ebin"]) |> Path.expand()
+    # Collect unique BEAM files across all paths, loading each module only once.
+    # Shared deps (gleam_stdlib, etc.) exist in multiple Gleam package builds;
+    # loading the same module twice causes :not_purged errors.
+    beam_files =
+      for base <- base_paths, mod <- gleam_modules, reduce: MapSet.new() do
+        acc ->
+          ebin_path = Path.join([base, mod, "ebin"]) |> Path.expand()
 
-      if File.dir?(ebin_path) do
-        ebin_path
-        |> File.ls!()
-        |> Enum.filter(&String.ends_with?(&1, ".beam"))
-        |> Enum.map(&String.trim_trailing(&1, ".beam"))
-        |> Enum.each(fn module_name ->
-          module_atom = String.to_atom(module_name)
-          :code.load_file(module_atom)
-        end)
+          if File.dir?(ebin_path) do
+            ebin_path
+            |> File.ls!()
+            |> Enum.filter(&String.ends_with?(&1, ".beam"))
+            |> Enum.map(&String.trim_trailing(&1, ".beam"))
+            |> Enum.reduce(acc, &MapSet.put(&2, &1))
+          else
+            acc
+          end
       end
-    end
+
+    Enum.each(beam_files, fn module_name ->
+      :code.load_file(String.to_atom(module_name))
+    end)
   end
 
   # Only start the Repo if database is configured and available
