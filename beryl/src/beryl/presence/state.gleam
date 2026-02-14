@@ -331,6 +331,54 @@ fn entries_to_topic_diff(
   })
 }
 
+// ── Replica lifecycle ────────────────────────────────────────────────
+
+/// Mark a replica as down. Returns entries that are now invisible (leaves).
+pub fn replica_down(state: State, replica: Replica) -> #(State, Diff) {
+  let new_replicas = dict.insert(state.replicas, replica, Down)
+  let new_state = State(..state, replicas: new_replicas)
+
+  // Compute what just "left" — all entries from this replica
+  let hidden =
+    dict.to_list(state.values)
+    |> list.filter(fn(kv) { { kv.0 }.replica == replica })
+    |> list.map(fn(kv) { kv.1 })
+
+  let diff = Diff(joins: dict.new(), leaves: entries_to_topic_diff(hidden))
+  #(new_state, diff)
+}
+
+/// Mark a replica as up. Returns entries that are now visible again (joins).
+pub fn replica_up(state: State, replica: Replica) -> #(State, Diff) {
+  let new_replicas = dict.insert(state.replicas, replica, Up)
+  let new_state = State(..state, replicas: new_replicas)
+
+  // Compute what just "joined" — all entries from this replica
+  let restored =
+    dict.to_list(state.values)
+    |> list.filter(fn(kv) { { kv.0 }.replica == replica })
+    |> list.map(fn(kv) { kv.1 })
+
+  let diff = Diff(joins: entries_to_topic_diff(restored), leaves: dict.new())
+  #(new_state, diff)
+}
+
+/// Permanently remove all entries and context for a downed replica
+pub fn remove_down_replicas(state: State, replica: Replica) -> State {
+  let new_values =
+    dict.filter(state.values, fn(tag, _) { tag.replica != replica })
+  let new_context = dict.delete(state.context, replica)
+  let new_clouds = dict.delete(state.clouds, replica)
+  let new_replicas = dict.delete(state.replicas, replica)
+  State(
+    ..state,
+    values: new_values,
+    context: new_context,
+    clouds: new_clouds,
+    replicas: new_replicas,
+  )
+}
+
 // ── Internal helpers ────────────────────────────────────────────────
 
 fn next_clock(state: State, replica: Replica) -> Clock {

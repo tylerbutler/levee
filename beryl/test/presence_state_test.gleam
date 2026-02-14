@@ -362,7 +362,7 @@ pub fn phoenix_joins_via_intermediate_node_test() {
   state.get_by_topic(b, "lobby") |> list.length |> should.equal(2)
 
   // C merges B — should get bob (which C hasn't seen yet)
-  let #(c, diff) = state.merge(c, b)
+  let #(_c, diff) = state.merge(c, b)
   case dict.get(diff.joins, "lobby") {
     Ok(joins) -> list.length(joins) |> should.equal(1)
     Error(_) -> should.fail()
@@ -370,6 +370,7 @@ pub fn phoenix_joins_via_intermediate_node_test() {
 }
 
 /// Phoenix test: "removes are observed via other node" (3-node with netsplit)
+/// Tests that removes propagate through an intermediate node even during netsplit
 pub fn phoenix_removes_via_intermediate_node_test() {
   let a = state.new("node_a")
   let b = state.new("node_b")
@@ -377,32 +378,30 @@ pub fn phoenix_removes_via_intermediate_node_test() {
 
   let a = state.join(a, "pid_alice", "lobby", "alice", json.object([]))
 
-  // C learns about alice
+  // All nodes learn about alice
+  let #(b, _) = state.merge(b, a)
   let #(c, _) = state.merge(c, a)
 
-  // Netsplit between A and C
+  // B adds bob
+  let b = state.join(b, "pid_bob", "lobby", "bob", json.object([]))
+
+  // A and C learn about bob
+  let #(a, _) = state.merge(a, b)
+  let #(c, _) = state.merge(c, b)
+  state.get_by_topic(c, "lobby") |> list.length |> should.equal(2)
+
+  // Netsplit between A and C (B can talk to both)
   let #(a, _) = state.replica_down(a, "node_c")
   let #(c, _) = state.replica_down(c, "node_a")
 
-  // A adds bob
-  let a = state.join(a, "pid_bob", "lobby", "bob", json.object([]))
+  // A removes alice
+  let a = state.leave(a, "pid_alice", "lobby", "alice")
 
-  // B learns from A (alice + bob)
+  // B observes remove via A
   let #(b, _) = state.merge(b, a)
 
-  // C learns bob via B
-  let #(c, _) = state.merge(c, b)
-  state.get_by_topic(c, "lobby") |> list.length |> should.equal(1)
-  // Note: alice is hidden on C because node_a is down
-
-  // A removes bob
-  let a = state.leave(a, "pid_bob", "lobby", "bob")
-
-  // B observes remove
-  let #(b, _) = state.merge(b, a)
-
-  // C observes remove via B
-  let #(c, diff) = state.merge(c, b)
+  // C observes remove via B (not directly from A due to netsplit)
+  let #(_c, diff) = state.merge(c, b)
   case dict.get(diff.leaves, "lobby") {
     Ok(leaves) -> list.length(leaves) |> should.equal(1)
     Error(_) -> should.fail()
