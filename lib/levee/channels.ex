@@ -9,7 +9,7 @@ defmodule Levee.Channels do
 
   use GenServer
   # Gleam modules are loaded at runtime from BEAM files
-  @compile {:no_warn_undefined, [:beryl@levee@runtime]}
+  @compile {:no_warn_undefined, [:levee_channels@runtime]}
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -22,7 +22,7 @@ defmodule Levee.Channels do
 
   @impl true
   def init(_opts) do
-    case :beryl@levee@runtime.start() do
+    case :levee_channels@runtime.start() do
       {:ok, channels} ->
         {:ok, %{channels: channels}}
 

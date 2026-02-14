@@ -20,6 +20,8 @@ build: build-gleam build-admin build-elixir
 build-gleam:
     cd levee_protocol && gleam build --target erlang
     cd levee_auth && gleam build --target erlang
+    cd beryl && gleam build --target erlang
+    cd levee_channels && gleam build --target erlang
     cd levee_admin && gleam build --target javascript
 
 # Build admin UI and copy to priv/static/admin
@@ -41,6 +43,7 @@ test: test-gleam test-elixir
 test-gleam:
     cd levee_protocol && gleam test
     cd levee_auth && gleam test
+    cd beryl && gleam test
     cd levee_admin && gleam test
 
 # Run Elixir tests

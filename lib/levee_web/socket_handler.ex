@@ -11,7 +11,7 @@ defmodule LeveeWeb.SocketHandler do
 
   @behaviour WebSock
   # Gleam modules are loaded at runtime from BEAM files, not at Elixir compile time
-  @compile {:no_warn_undefined, [:beryl@levee@runtime]}
+  @compile {:no_warn_undefined, [:levee_channels@runtime]}
 
   require Logger
 
@@ -29,7 +29,7 @@ defmodule LeveeWeb.SocketHandler do
     end
 
     # Register with beryl coordinator via Gleam runtime bridge
-    :beryl@levee@runtime.notify_connected(channels, socket_id, send_fn, me)
+    :levee_channels@runtime.notify_connected(channels, socket_id, send_fn, me)
 
     {:ok, %{socket_id: socket_id, channels: channels, session_pid: nil}}
   end
@@ -37,7 +37,7 @@ defmodule LeveeWeb.SocketHandler do
   @impl WebSock
   def handle_in({text, [opcode: :text]}, state) do
     # Route all wire protocol messages through the Gleam runtime bridge
-    :beryl@levee@runtime.handle_raw_message(state.channels, state.socket_id, text)
+    :levee_channels@runtime.handle_raw_message(state.channels, state.socket_id, text)
     {:ok, state}
   end
 
@@ -100,7 +100,7 @@ defmodule LeveeWeb.SocketHandler do
 
   @impl WebSock
   def terminate(_reason, %{channels: channels, socket_id: socket_id}) do
-    :beryl@levee@runtime.notify_disconnected(channels, socket_id)
+    :levee_channels@runtime.notify_disconnected(channels, socket_id)
     :ok
   end
 
