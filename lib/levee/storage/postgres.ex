@@ -108,9 +108,14 @@ defmodule Levee.Storage.Postgres do
 
   @impl Levee.Storage.Behaviour
   def get_deltas(tenant_id, document_id, opts \\ []) do
-    from_sn = Keyword.get(opts, :from, -1)
-    to_sn = Keyword.get(opts, :to, nil)
-    limit = min(Keyword.get(opts, :limit, @max_deltas_per_request), @max_deltas_per_request)
+    from_sn = to_integer(Keyword.get(opts, :from, -1), -1)
+    to_sn = to_optional_integer(Keyword.get(opts, :to, nil))
+
+    limit =
+      min(
+        to_integer(Keyword.get(opts, :limit, @max_deltas_per_request), @max_deltas_per_request),
+        @max_deltas_per_request
+      )
 
     query =
       from(d in Delta,
@@ -495,4 +500,11 @@ defmodule Levee.Storage.Postgres do
     :crypto.hash(:sha256, content)
     |> Base.encode16(case: :lower)
   end
+
+  defp to_integer(value, _default) when is_integer(value), do: value
+  defp to_integer(_value, default), do: default
+
+  defp to_optional_integer(nil), do: nil
+  defp to_optional_integer(value) when is_integer(value), do: value
+  defp to_optional_integer(_value), do: nil
 end

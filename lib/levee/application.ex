@@ -130,5 +130,23 @@ defmodule Levee.Application do
         end)
       end
     end
+
+    # Verify critical Gleam modules loaded successfully
+    required_modules = [:levee_protocol, :password_ffi]
+
+    Enum.each(required_modules, fn mod ->
+      case :code.ensure_loaded(mod) do
+        {:module, ^mod} ->
+          :ok
+
+        {:error, reason} ->
+          require Logger
+
+          Logger.error(
+            "Failed to load required Gleam module #{mod}: #{inspect(reason)}. " <>
+              "Run 'just build-gleam' to compile Gleam packages."
+          )
+      end
+    end)
   end
 end

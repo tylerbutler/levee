@@ -54,6 +54,7 @@ defmodule Levee.Repo.Migrations.CreateAuthTables do
     create(index(:sessions, [:user_id]))
     create(index(:sessions, [:tenant_id]))
     create(index(:sessions, [:expires_at]))
+    create(index(:sessions, [:user_id, :tenant_id, :expires_at]))
 
     # Invites table
     create table(:invites, primary_key: false) do

@@ -97,17 +97,12 @@ defmodule LeveeWeb.AuthController do
   Returns: {user}
   """
   def me(conn, _params) do
-    case get_current_user(conn) do
-      {:ok, user} ->
-        conn
-        |> put_status(:ok)
-        |> json(%{user: user_to_json(user)})
+    # current_user is set by SessionAuth plug
+    user = conn.assigns.current_user
 
-      :error ->
-        conn
-        |> put_status(:unauthorized)
-        |> json(%{error: %{code: "unauthorized", message: "Invalid or expired session"}})
-    end
+    conn
+    |> put_status(:ok)
+    |> json(%{user: user_to_json(user)})
   end
 
   @doc """
@@ -118,19 +113,13 @@ defmodule LeveeWeb.AuthController do
   Returns: {message: "logged out"}
   """
   def logout(conn, _params) do
-    case get_session_id(conn) do
-      {:ok, session_id} ->
-        SessionStore.delete_session(session_id)
+    # current_session is set by SessionAuth plug
+    session = conn.assigns.current_session
+    SessionStore.delete_session(session.id)
 
-        conn
-        |> put_status(:ok)
-        |> json(%{message: "logged out"})
-
-      :error ->
-        conn
-        |> put_status(:ok)
-        |> json(%{message: "logged out"})
-    end
+    conn
+    |> put_status(:ok)
+    |> json(%{message: "logged out"})
   end
 
   # Private helpers
@@ -142,23 +131,5 @@ defmodule LeveeWeb.AuthController do
       display_name: user.display_name,
       created_at: user.created_at
     }
-  end
-
-  defp get_session_id(conn) do
-    case get_req_header(conn, "authorization") do
-      ["Bearer " <> token] -> {:ok, token}
-      _ -> :error
-    end
-  end
-
-  defp get_current_user(conn) do
-    with {:ok, session_id} <- get_session_id(conn),
-         {:ok, session} <- SessionStore.get_session(session_id),
-         true <- GleamBridge.is_session_valid?(session),
-         {:ok, user} <- SessionStore.get_user(session.user_id) do
-      {:ok, user}
-    else
-      _ -> :error
-    end
   end
 end

@@ -760,12 +760,12 @@ defmodule Levee.Documents.Session do
     # We use from_checkpoint to update the SN since we're manually incrementing
     updated_sequence_state = Bridge.sequence_state_from_checkpoint(new_sn, msn)
 
-    # Re-register all clients with their current RSN
+    # Re-register all clients with the new SN as their join RSN
     # This is needed because from_checkpoint creates a fresh state
     final_sequence_state =
       Enum.reduce(Bridge.connected_clients(sequence_state), updated_sequence_state, fn cid, acc ->
-        # Use the current SN as the join RSN for existing clients
-        Bridge.client_join(acc, cid, current_sn)
+        # Use new_sn since from_checkpoint reset the state to this sequence number
+        Bridge.client_join(acc, cid, new_sn)
       end)
 
     # Add to history
