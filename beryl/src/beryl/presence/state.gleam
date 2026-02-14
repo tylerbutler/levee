@@ -352,6 +352,13 @@ pub fn extract(
   state
 }
 
+// ── Introspection ───────────────────────────────────────────────────
+
+/// Get the current vector clock
+pub fn clocks(state: State) -> Dict(Replica, Clock) {
+  state.context
+}
+
 // ── Replica lifecycle ────────────────────────────────────────────────
 
 /// Mark a replica as down. Returns entries that are now invisible (leaves).

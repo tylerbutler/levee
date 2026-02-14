@@ -2,6 +2,7 @@ import beryl/presence/state
 import gleam/dict
 import gleam/json
 import gleam/list
+import gleam/set
 import gleeunit
 import gleeunit/should
 
@@ -583,4 +584,155 @@ pub fn phoenix_remove_down_replicas_test() {
   // Even after replica_up, alice is gone permanently
   let #(s2, _) = state.replica_up(s2, "node1")
   state.online_list(s2) |> list.length |> should.equal(1)
+}
+
+// ── edge cases ───────────────────────────────────────────────────────
+
+pub fn clocks_returns_vector_clock_test() {
+  let a = state.new("node_a")
+  let a = state.join(a, "p1", "room:1", "k1", json.object([]))
+  let a = state.join(a, "p2", "room:1", "k2", json.object([]))
+
+  let clocks = state.clocks(a)
+  case dict.get(clocks, "node_a") {
+    Ok(2) -> Nil
+    _ -> should.fail()
+  }
+}
+
+pub fn compact_reduces_clouds_test() {
+  // After local joins, context should be fully compacted (no clouds)
+  let a = state.new("node_a")
+  let a = state.join(a, "p1", "room:1", "k1", json.object([]))
+  let a = state.join(a, "p2", "room:1", "k2", json.object([]))
+
+  let compacted = state.compact(a)
+  case dict.get(compacted.clouds, "node_a") {
+    Ok(cloud) -> set.size(cloud) |> should.equal(0)
+    Error(_) -> Nil
+  }
+}
+
+pub fn merge_with_empty_state_test() {
+  let a = state.new("node_a")
+  let a = state.join(a, "p1", "room:1", "k1", json.object([]))
+
+  let empty = state.new("node_b")
+
+  // Merging empty into non-empty should be a no-op
+  let #(merged, diff) = state.merge(a, empty)
+  state.get_by_topic(merged, "room:1") |> list.length |> should.equal(1)
+  dict.size(diff.joins) |> should.equal(0)
+  dict.size(diff.leaves) |> should.equal(0)
+}
+
+pub fn get_by_key_multiple_pids_test() {
+  let a = state.new("node_a")
+  let a =
+    state.join(a, "pid1", "room:lobby", "user:alice", json.object([
+      #("device", json.string("desktop")),
+    ]))
+  let a =
+    state.join(a, "pid2", "room:lobby", "user:alice", json.object([
+      #("device", json.string("mobile")),
+    ]))
+
+  let results = state.get_by_key(a, "room:lobby", "user:alice")
+  list.length(results) |> should.equal(2)
+}
+
+pub fn leave_only_removes_matching_entry_test() {
+  let a = state.new("node_a")
+  let a = state.join(a, "pid1", "room:lobby", "alice", json.object([]))
+  let a = state.join(a, "pid1", "room:lobby", "bob", json.object([]))
+  let a = state.leave(a, "pid1", "room:lobby", "alice")
+
+  state.get_by_topic(a, "room:lobby") |> list.length |> should.equal(1)
+}
+
+pub fn joins_propagate_through_intermediate_node_test() {
+  // A -> B -> C chain: A's join should reach C via B
+  let a = state.new("node_a")
+  let a = state.join(a, "p1", "room:lobby", "alice", json.object([]))
+
+  let b = state.new("node_b")
+  let #(b, _) = state.merge(b, a)
+
+  let c = state.new("node_c")
+  let #(c, _) = state.merge(c, b)
+
+  // C should see alice
+  state.get_by_topic(c, "room:lobby") |> list.length |> should.equal(1)
+}
+
+pub fn removes_propagate_through_intermediate_node_test() {
+  // All three nodes sync, then A removes, propagate via B to C
+  let a = state.new("node_a")
+  let a = state.join(a, "p1", "room:lobby", "alice", json.object([]))
+
+  let b = state.new("node_b")
+  let #(b, _) = state.merge(b, a)
+
+  let c = state.new("node_c")
+  let #(c, _) = state.merge(c, b)
+
+  // A removes alice
+  let a = state.leave(a, "p1", "room:lobby", "alice")
+
+  // Propagate: A -> B -> C
+  let #(b, _) = state.merge(b, a)
+  let #(c, _) = state.merge(c, b)
+
+  state.get_by_topic(c, "room:lobby") |> should.equal([])
+}
+
+/// Phoenix test: clocks advance correctly through merges
+pub fn phoenix_clocks_advance_through_merge_test() {
+  let a = state.new("node_a")
+  let b = state.new("node_b")
+
+  let a = state.join(a, "p1", "lobby", "alice", json.object([]))
+  let b = state.join(b, "p2", "lobby", "bob", json.object([]))
+
+  let #(b, _) = state.merge(b, a)
+
+  let clocks = state.clocks(b)
+  case dict.get(clocks, "node_a") {
+    Ok(1) -> Nil
+    _ -> should.fail()
+  }
+  case dict.get(clocks, "node_b") {
+    Ok(1) -> Nil
+    _ -> should.fail()
+  }
+
+  // A leaves then rejoins — clock advances to 2
+  let a = state.leave(a, "p1", "lobby", "alice")
+  // leave doesn't advance clock, but re-join does:
+  let a = state.join(a, "p1", "lobby", "alice", json.object([]))
+
+  let #(b, _) = state.merge(b, a)
+  case dict.get(state.clocks(b), "node_a") {
+    Ok(2) -> Nil
+    _ -> should.fail()
+  }
+}
+
+/// All clouds should be empty after merge (fully compacted)
+pub fn phoenix_clouds_empty_after_merge_test() {
+  let a = state.new("node_a")
+  let b = state.new("node_b")
+
+  let a = state.join(a, "p1", "lobby", "alice", json.object([]))
+  let b = state.join(b, "p2", "lobby", "bob", json.object([]))
+
+  let #(b, _) = state.merge(b, a)
+
+  // All clouds should be compacted away
+  dict.to_list(b.clouds)
+  |> list.all(fn(kv) {
+    let #(_, cloud) = kv
+    set.is_empty(cloud)
+  })
+  |> should.be_true
 }
