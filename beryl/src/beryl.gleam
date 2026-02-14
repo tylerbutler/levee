@@ -1,27 +1,51 @@
 //// Beryl - Type-safe real-time communication
 ////
-//// A library for building real-time applications with WebSocket channels,
-//// presence tracking, and pub/sub messaging.
+//// A standalone Gleam library for building real-time applications on the BEAM.
+//// Provides WebSocket channels, distributed presence tracking, pub/sub
+//// messaging, and channel groups.
+////
+//// ## Features
+////
+//// - **Channels** — Topic-based WebSocket messaging with pattern matching
+////   (`beryl`, `beryl/channel`, `beryl/coordinator`)
+//// - **PubSub** — Distributed publish/subscribe via Erlang `pg`
+////   (`beryl/pubsub`)
+//// - **Presence** — Distributed presence tracking backed by a causal-context
+////   CRDT (add-wins observed-remove set) (`beryl/presence`,
+////   `beryl/presence/state`)
+//// - **Groups** — Named collections of topics for multi-topic broadcasting
+////   (`beryl/group`)
 ////
 //// ## Quick Start
 ////
 //// ```gleam
 //// import beryl
 //// import beryl/channel
-//// import beryl/transport/websocket
+//// import beryl/pubsub
+//// import beryl/presence
+//// import beryl/group
 ////
 //// pub fn main() {
-////   // Start channels system
-////   let assert Ok(channels) = beryl.start(beryl.default_config())
+////   // Optional: start PubSub for distributed messaging
+////   let assert Ok(ps) = pubsub.start(pubsub.default_config())
+////
+////   // Start channels system (with or without PubSub)
+////   let config = beryl.default_config() |> beryl.with_pubsub(ps)
+////   let assert Ok(channels) = beryl.start(config)
 ////
 ////   // Register a channel handler
 ////   let _ = beryl.register(channels, "room:*", room_channel.new())
 ////
-////   // Use with wisp
-////   let handler = fn(req) {
-////     use <- websocket.upgrade(req, channels.coordinator, websocket.default_config("/socket"))
-////     // ... rest of routing
-////   }
+////   // Start presence tracking
+////   let assert Ok(p) = presence.start(presence.default_config("node1"))
+////
+////   // Start channel groups
+////   let assert Ok(groups) = group.start()
+////   let assert Ok(Nil) = group.create(groups, "team:eng")
+////   let assert Ok(Nil) = group.add(groups, "team:eng", "room:frontend")
+////
+////   // Broadcast to all topics in a group
+////   group.broadcast(groups, channels, "team:eng", "announce", payload)
 //// }
 //// ```
 
