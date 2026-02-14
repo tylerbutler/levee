@@ -331,6 +331,27 @@ fn entries_to_topic_diff(
   })
 }
 
+// ── Extract (delta) ─────────────────────────────────────────────────
+
+/// Extract state for sending to a remote replica.
+///
+/// Returns the full local state. The remote's merge handles
+/// deduplication of entries it already has. Absence of an entry
+/// combined with coverage in context = observed removal.
+///
+/// Note: Phoenix's extract filters to "known replicas" and requires
+/// replica_up() before sync. Our design allows direct merge without
+/// replica_up, so we send the full state. Delta optimization
+/// (sending only new entries) requires proper delta tracking and
+/// will be added in a future iteration.
+pub fn extract(
+  state: State,
+  _remote_replica: Replica,
+  _remote_context: Dict(Replica, Clock),
+) -> State {
+  state
+}
+
 // ── Replica lifecycle ────────────────────────────────────────────────
 
 /// Mark a replica as down. Returns entries that are now invisible (leaves).

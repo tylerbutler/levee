@@ -408,6 +408,99 @@ pub fn phoenix_removes_via_intermediate_node_test() {
   }
 }
 
+// ── extract (delta) ──────────────────────────────────────────────────
+
+pub fn extract_produces_delta_for_new_replica_test() {
+  let a = state.new("node_a")
+  let a = state.join(a, "p1", "room:lobby", "alice", json.object([]))
+  let a = state.join(a, "p2", "room:lobby", "bob", json.object([]))
+
+  let b = state.new("node_b")
+
+  // Extract what B needs from A (everything, since B has empty context)
+  let delta = state.extract(a, b.replica, b.context)
+
+  // Delta should contain both entries
+  dict.size(delta.values) |> should.equal(2)
+}
+
+pub fn extract_returns_full_state_test() {
+  let a = state.new("node_a")
+  let a = state.join(a, "p1", "room:lobby", "alice", json.object([]))
+
+  let b = state.new("node_b")
+  let #(b, _) = state.merge(b, a)
+
+  // Extract returns full state — merge handles deduplication
+  let extracted = state.extract(a, b.replica, b.context)
+  dict.size(extracted.values) |> should.equal(1)
+}
+
+pub fn extract_includes_all_entries_test() {
+  let a = state.new("node_a")
+  let a = state.join(a, "p1", "room:lobby", "alice", json.object([]))
+  let a = state.join(a, "p2", "room:lobby", "bob", json.object([]))
+
+  let b = state.new("node_b")
+  let #(b, _) = state.merge(b, a)
+
+  // A adds a third entry
+  let a = state.join(a, "p3", "room:lobby", "carol", json.object([]))
+
+  // Extract returns all 3 entries (full state)
+  let extracted = state.extract(a, b.replica, b.context)
+  dict.size(extracted.values) |> should.equal(3)
+}
+
+/// Phoenix test: extract-based merge workflow (mirrors Phoenix's merge(a, extract(b, ...)))
+pub fn phoenix_extract_merge_workflow_test() {
+  let a = state.new("node_a")
+  let b = state.new("node_b")
+
+  let a = state.join(a, "pid_alice", "lobby", "alice", json.object([]))
+  let b = state.join(b, "pid_bob", "lobby", "bob", json.object([]))
+
+  // Merge using extract (like Phoenix does)
+  let delta_b = state.extract(b, a.replica, a.context)
+  let #(a, diff) = state.merge(a, delta_b)
+  state.online_list(a) |> list.length |> should.equal(2)
+  case dict.get(diff.joins, "lobby") {
+    Ok(joins) -> list.length(joins) |> should.equal(1)
+    Error(_) -> should.fail()
+  }
+
+  // Second extract-merge is idempotent
+  let delta_b2 = state.extract(b, a.replica, a.context)
+  let #(a2, diff2) = state.merge(a, delta_b2)
+  dict.size(diff2.joins) |> should.equal(0)
+  dict.size(diff2.leaves) |> should.equal(0)
+  state.online_list(a2) |> list.length |> should.equal(2)
+}
+
+/// Phoenix test: extract-based remove observation
+pub fn phoenix_extract_observes_remove_test() {
+  let a = state.new("node_a")
+  let b = state.new("node_b")
+
+  let a = state.join(a, "pid_alice", "lobby", "alice", json.object([]))
+  let b = state.join(b, "pid_bob", "lobby", "bob", json.object([]))
+
+  // Sync both directions
+  let #(a, _) = state.merge(a, state.extract(b, a.replica, a.context))
+  let #(b, _) = state.merge(b, state.extract(a, b.replica, b.context))
+
+  // A removes alice
+  let a = state.leave(a, "pid_alice", "lobby", "alice")
+
+  // B merges A's extract — should observe alice's removal
+  let #(b, diff) = state.merge(b, state.extract(a, b.replica, b.context))
+  case dict.get(diff.leaves, "lobby") {
+    Ok(leaves) -> list.length(leaves) |> should.equal(1)
+    Error(_) -> should.fail()
+  }
+  state.online_list(b) |> list.length |> should.equal(1)
+}
+
 /// Phoenix test: "get_by_topic" with multiple replicas and down/up filtering
 pub fn phoenix_get_by_topic_with_replica_status_test() {
   let s1 = state.new("node1")
