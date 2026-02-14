@@ -6,10 +6,8 @@
 import beryl
 import beryl/coordinator
 import beryl/levee/document_channel
-import beryl/wire
 import gleam/dynamic.{type Dynamic}
 import gleam/erlang/process
-import gleam/option
 
 /// Start the beryl channels system and register the document channel handler.
 ///
@@ -61,51 +59,7 @@ pub fn handle_raw_message(
   socket_id: String,
   raw_text: String,
 ) -> Nil {
-  case wire.decode_message(raw_text) {
-    Error(_) -> Nil
-    Ok(msg) -> {
-      case msg.event {
-        "phx_join" -> {
-          let ref = option.unwrap(msg.ref, "")
-          process.send(
-            channels.coordinator,
-            coordinator.Join(
-              socket_id,
-              msg.topic,
-              msg.payload,
-              msg.join_ref,
-              ref,
-            ),
-          )
-        }
-        "phx_leave" -> {
-          process.send(
-            channels.coordinator,
-            coordinator.Leave(socket_id, msg.topic, msg.ref),
-          )
-        }
-        "heartbeat" -> {
-          let ref = option.unwrap(msg.ref, "")
-          process.send(
-            channels.coordinator,
-            coordinator.Heartbeat(socket_id, ref),
-          )
-        }
-        event -> {
-          process.send(
-            channels.coordinator,
-            coordinator.HandleIn(
-              socket_id,
-              msg.topic,
-              event,
-              msg.payload,
-              msg.ref,
-            ),
-          )
-        }
-      }
-    }
-  }
+  coordinator.route_message(channels.coordinator, socket_id, raw_text)
 }
 
 /// Get the coordinator subject from a Channels struct.

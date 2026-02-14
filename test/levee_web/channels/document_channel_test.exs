@@ -7,11 +7,7 @@ defmodule LeveeWeb.DocumentChannelTest do
   @tenant_id "test-tenant"
 
   setup do
-    # Register tenant for JWT auth
     TenantSecrets.register_tenant(@tenant_id, "test-secret-for-channel-tests")
-
-    # Ensure application is started
-    {:ok, _} = Application.ensure_all_started(:levee)
 
     document_id = "doc-#{System.unique_integer([:positive])}"
     topic = "document:#{@tenant_id}:#{document_id}"

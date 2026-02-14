@@ -282,53 +282,46 @@ fn do_connect(
   payload: Dynamic,
   ctx: SocketContext,
 ) -> HandleResultErased {
-  // Verify JWT
-  let verify_result = jwt_verify(token, tenant_id)
-
-  case decode_result(verify_result) {
-    Error(_) -> {
-      push_connect_error(ctx, 401, "Invalid authentication token")
+  // Validate JWT: verify, check expiration, check scopes
+  case validate_token(token, tenant_id, mode) {
+    Error(#(code, message)) -> {
+      push_connect_error(ctx, code, message)
       NoReplyErased(assigns: ctx.assigns)
     }
     Ok(claims) -> {
-      // Check expiration
+      do_connect_with_session(
+        tenant_id,
+        document_id,
+        mode,
+        claims,
+        payload,
+        ctx,
+      )
+    }
+  }
+}
+
+/// Validate a JWT token: verify signature, check expiration, and check scopes.
+/// Returns Ok(claims) on success, or Error(#(code, message)) on failure.
+fn validate_token(
+  token: String,
+  tenant_id: String,
+  mode: String,
+) -> Result(Dynamic, #(Int, String)) {
+  let verify_result = jwt_verify(token, tenant_id)
+
+  case decode_result(verify_result) {
+    Error(_) -> Error(#(401, "Invalid authentication token"))
+    Ok(claims) -> {
       case jwt_expired(claims) {
-        True -> {
-          push_connect_error(ctx, 401, "Token has expired")
-          NoReplyErased(assigns: ctx.assigns)
-        }
+        True -> Error(#(401, "Token has expired"))
         False -> {
-          // Check read scope
           case jwt_has_read_scope(claims) {
-            False -> {
-              push_connect_error(
-                ctx,
-                403,
-                "Token missing required scope: doc:read",
-              )
-              NoReplyErased(assigns: ctx.assigns)
-            }
+            False -> Error(#(403, "Token missing required scope: doc:read"))
             True -> {
-              // Check write scope for write mode
               case mode == "write" && !jwt_has_write_scope(claims) {
-                True -> {
-                  push_connect_error(
-                    ctx,
-                    403,
-                    "Write mode requires doc:write scope",
-                  )
-                  NoReplyErased(assigns: ctx.assigns)
-                }
-                False -> {
-                  do_connect_with_session(
-                    tenant_id,
-                    document_id,
-                    mode,
-                    claims,
-                    payload,
-                    ctx,
-                  )
-                }
+                True -> Error(#(403, "Write mode requires doc:write scope"))
+                False -> Ok(claims)
               }
             }
           }
@@ -410,99 +403,121 @@ fn handle_submit_op(
       claims: claims,
       ..,
     ) -> {
-      // Decode clientId and messageBatches
-      let op_decoder = {
-        use client_id <- decode.subfield(
-          ["clientId"],
-          decode.optional(decode.string),
+      case
+        validate_and_submit_op(
+          payload,
+          expected_client_id,
+          mode,
+          claims,
+          session_pid,
+          ctx,
         )
-        use batches <- decode.subfield(
-          ["messageBatches"],
-          decode.optional(decode.dynamic),
-        )
-        decode.success(#(client_id, batches))
+      {
+        Ok(Nil) -> NoReplyErased(assigns: ctx.assigns)
+        Error(Nil) -> NoReplyErased(assigns: ctx.assigns)
       }
+    }
+  }
+}
 
-      case decode.run(payload, op_decoder) {
-        Error(_) -> {
+/// Validate and submit an operation. Pushes nack on any validation failure.
+/// Returns Ok(Nil) on success, Error(Nil) on failure (nack already sent).
+fn validate_and_submit_op(
+  payload: Dynamic,
+  expected_client_id: String,
+  mode: String,
+  claims: Dynamic,
+  session_pid: Dynamic,
+  ctx: SocketContext,
+) -> Result(Nil, Nil) {
+  // Decode clientId and messageBatches
+  let op_decoder = {
+    use client_id <- decode.subfield(
+      ["clientId"],
+      decode.optional(decode.string),
+    )
+    use batches <- decode.subfield(
+      ["messageBatches"],
+      decode.optional(decode.dynamic),
+    )
+    decode.success(#(client_id, batches))
+  }
+
+  case decode.run(payload, op_decoder) {
+    Ok(#(Some(client_id), Some(batches))) -> {
+      // Validate client ID matches
+      case client_id != expected_client_id {
+        True -> {
           push_nack(
             ctx,
             400,
             "BadRequestError",
-            "Malformed submitOp: missing clientId or messageBatches",
+            "Client ID mismatch: expected "
+              <> expected_client_id
+              <> ", got "
+              <> client_id,
           )
-          NoReplyErased(assigns: ctx.assigns)
+          Error(Nil)
         }
-        Ok(#(Some(client_id), Some(batches))) -> {
-          case client_id != expected_client_id {
+        False ->
+          validate_write_and_submit(
+            mode,
+            claims,
+            session_pid,
+            client_id,
+            batches,
+            ctx,
+          )
+      }
+    }
+    _ -> {
+      push_nack(
+        ctx,
+        400,
+        "BadRequestError",
+        "Malformed submitOp: missing clientId or messageBatches",
+      )
+      Error(Nil)
+    }
+  }
+}
+
+/// Check write permissions and submit ops to session.
+fn validate_write_and_submit(
+  mode: String,
+  claims: Dynamic,
+  session_pid: Dynamic,
+  client_id: String,
+  batches: Dynamic,
+  ctx: SocketContext,
+) -> Result(Nil, Nil) {
+  case mode == "read" {
+    True -> {
+      push_nack(
+        ctx,
+        403,
+        "InvalidScopeError",
+        "Read-only clients cannot submit operations",
+      )
+      Error(Nil)
+    }
+    False -> {
+      case jwt_has_write_scope(claims) {
+        False -> {
+          push_nack(ctx, 403, "InvalidScopeError", "Missing doc:write scope")
+          Error(Nil)
+        }
+        True -> {
+          let submit_result =
+            session_submit_ops(session_pid, client_id, batches)
+          case is_error_result(submit_result) {
             True -> {
-              push_nack(
-                ctx,
-                400,
-                "BadRequestError",
-                "Client ID mismatch: expected "
-                  <> expected_client_id
-                  <> ", got "
-                  <> client_id,
-              )
-              NoReplyErased(assigns: ctx.assigns)
+              let nacks = extract_error_value(submit_result)
+              push_dynamic_to_ctx(ctx, "nack", make_nack_map("", nacks))
+              Error(Nil)
             }
-            False -> {
-              case mode == "read" {
-                True -> {
-                  push_nack(
-                    ctx,
-                    403,
-                    "InvalidScopeError",
-                    "Read-only clients cannot submit operations",
-                  )
-                  NoReplyErased(assigns: ctx.assigns)
-                }
-                False -> {
-                  case jwt_has_write_scope(claims) {
-                    False -> {
-                      push_nack(
-                        ctx,
-                        403,
-                        "InvalidScopeError",
-                        "Missing doc:write scope",
-                      )
-                      NoReplyErased(assigns: ctx.assigns)
-                    }
-                    True -> {
-                      // Submit ops to session
-                      let submit_result =
-                        session_submit_ops(session_pid, client_id, batches)
-                      // Check for nack response
-                      case is_error_result(submit_result) {
-                        True -> {
-                          let nacks = extract_error_value(submit_result)
-                          push_dynamic_to_ctx(
-                            ctx,
-                            "nack",
-                            make_nack_map("", nacks),
-                          )
-                          NoReplyErased(assigns: ctx.assigns)
-                        }
-                        False -> {
-                          NoReplyErased(assigns: ctx.assigns)
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
+            False -> Ok(Nil)
           }
-        }
-        _ -> {
-          push_nack(
-            ctx,
-            400,
-            "BadRequestError",
-            "Malformed submitOp: missing clientId or messageBatches",
-          )
-          NoReplyErased(assigns: ctx.assigns)
         }
       }
     }

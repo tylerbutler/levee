@@ -55,34 +55,30 @@ defmodule LeveeWeb.SocketHandler do
   end
 
   def handle_info({:op, op_message}, state) do
-    # Session sends op messages directly to this process
+    # Session sends op messages directly to this process.
+    # Split summary events (summaryAck/summaryNack) from regular ops so
+    # clients process sequenced ops before the ack.
     ops = op_message["op"] || []
+    doc_id = op_message["documentId"] || ""
 
     {summary_events, regular_ops} =
       Enum.split_with(ops, fn op -> op["type"] in ["summaryAck", "summaryNack"] end)
 
-    # Send regular ops first, then summary events (summaryAck/summaryNack)
-    # so clients process the sequenced ops before the ack
-    frames =
+    op_frames =
       if regular_ops != [] do
-        [
-          {:text,
-           encode_push(
-             op_message["documentId"] || "",
-             "op",
-             %{op_message | "op" => regular_ops}
-           )}
-        ]
+        [{:text, encode_push(doc_id, "op", %{op_message | "op" => regular_ops})}]
       else
         []
-      end ++
-        Enum.map(summary_events, fn event ->
-          {:text, encode_push(op_message["documentId"] || "", event["type"], event)}
-        end)
+      end
 
-    case frames do
+    summary_frames =
+      Enum.map(summary_events, fn event ->
+        {:text, encode_push(doc_id, event["type"], event)}
+      end)
+
+    case op_frames ++ summary_frames do
       [] -> {:ok, state}
-      _ -> {:push, frames, state}
+      frames -> {:push, frames, state}
     end
   end
 
@@ -91,31 +87,31 @@ defmodule LeveeWeb.SocketHandler do
     {:push, frame, state}
   end
 
-  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
-    if state[:session_pid] == pid do
-      Logger.warning("Session process died, closing WebSocket")
-      {:stop, :normal, state}
-    else
-      {:ok, state}
-    end
+  def handle_info({:DOWN, _ref, :process, pid, _reason}, %{session_pid: pid} = state) do
+    Logger.warning("Session process died, closing WebSocket")
+    {:stop, :normal, state}
+  end
+
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
+    {:ok, state}
   end
 
   def handle_info(_msg, state), do: {:ok, state}
 
   @impl WebSock
-  def terminate(_reason, state) do
-    if state[:channels] && state[:socket_id] do
-      :beryl@levee@runtime.notify_disconnected(state.channels, state.socket_id)
-    end
-
+  def terminate(_reason, %{channels: channels, socket_id: socket_id}) do
+    :beryl@levee@runtime.notify_disconnected(channels, socket_id)
     :ok
   end
+
+  def terminate(_reason, _state), do: :ok
 
   defp generate_socket_id do
     :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
   end
 
-  # Encode a server push as wire protocol: [null, null, topic, event, payload]
+  # Encode a server push as Phoenix wire protocol: [null, null, topic, event, payload]
+  # Equivalent to beryl/wire.push/3 but uses Jason for Elixir map encoding
   defp encode_push(topic, event, payload) do
     Jason.encode!([nil, nil, topic, event, payload])
   end

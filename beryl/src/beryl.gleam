@@ -29,12 +29,10 @@ import beryl/channel.{type Channel}
 import beryl/coordinator
 import beryl/socket.{type Socket}
 import beryl/topic
-import gleam/dict
+import beryl/wire
 import gleam/dynamic.{type Dynamic}
-import gleam/dynamic/decode
 import gleam/erlang/process.{type Subject}
 import gleam/json
-import gleam/list
 import gleam/option.{None, Some}
 
 // Re-export types from coordinator for convenience
@@ -257,7 +255,7 @@ fn erase_channel_types(
       let typed_socket = create_socket_from_context(ctx)
 
       // Decode Dynamic payload to Json for the handler
-      let json_payload = dynamic_to_json(payload)
+      let json_payload = wire.dynamic_to_json(payload)
 
       // Call the typed join handler (unsafe coerce socket to expected type)
       case
@@ -287,7 +285,7 @@ fn erase_channel_types(
       let typed_socket = create_socket_with_assigns(ctx)
 
       // Decode Dynamic payload to Json for the handler
-      let json_payload = dynamic_to_json(payload)
+      let json_payload = wire.dynamic_to_json(payload)
 
       // Call the typed handle_in handler (unsafe coerce socket to expected type)
       case
@@ -379,63 +377,3 @@ fn unsafe_coerce_to_dynamic(value: a) -> Dynamic
 /// Unsafe coercion of socket types - only use for type erasure
 @external(erlang, "beryl_ffi", "identity")
 fn unsafe_coerce_socket(socket: Socket(a)) -> Socket(b)
-
-/// Convert Dynamic to Json (best effort)
-fn dynamic_to_json(value: Dynamic) -> json.Json {
-  // Try string first
-  case decode.run(value, decode.string) {
-    Ok(s) -> json.string(s)
-    Error(_) -> try_decode_int(value)
-  }
-}
-
-fn try_decode_int(value: Dynamic) -> json.Json {
-  case decode.run(value, decode.int) {
-    Ok(i) -> json.int(i)
-    Error(_) -> try_decode_float(value)
-  }
-}
-
-fn try_decode_float(value: Dynamic) -> json.Json {
-  case decode.run(value, decode.float) {
-    Ok(f) -> json.float(f)
-    Error(_) -> try_decode_bool(value)
-  }
-}
-
-fn try_decode_bool(value: Dynamic) -> json.Json {
-  case decode.run(value, decode.bool) {
-    Ok(b) -> json.bool(b)
-    Error(_) -> try_decode_complex(value)
-  }
-}
-
-fn try_decode_complex(value: Dynamic) -> json.Json {
-  // Check for nil/null
-  case dynamic.classify(value) {
-    "Nil" -> json.null()
-    "List" -> {
-      case decode.run(value, decode.list(decode.dynamic)) {
-        Ok(items) -> json.preprocessed_array(list.map(items, dynamic_to_json))
-        Error(_) -> json.null()
-      }
-    }
-    _ -> {
-      // Try to decode as a dict/map
-      let dict_decoder = decode.dict(decode.string, decode.dynamic)
-      case decode.run(value, dict_decoder) {
-        Ok(d) -> {
-          let pairs =
-            d
-            |> dict.to_list()
-            |> list.map(fn(pair) {
-              let #(k, v) = pair
-              #(k, dynamic_to_json(v))
-            })
-          json.object(pairs)
-        }
-        Error(_) -> json.null()
-      }
-    }
-  }
-}

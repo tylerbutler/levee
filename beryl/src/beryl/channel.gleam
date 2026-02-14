@@ -10,7 +10,7 @@
 ////   RoomAssigns(user_id: String, room_id: String)
 //// }
 ////
-//// pub fn new() -> Channel(RoomAssigns, RoomInfo) {
+//// pub fn new() -> Channel(RoomAssigns, Nil) {
 ////   channel.new(join)
 ////   |> channel.with_handle_in(handle_in)
 ////   |> channel.with_terminate(terminate)
@@ -21,21 +21,6 @@
 ////   channel.JoinOk(reply: None, socket: socket.set_assigns(socket, assigns))
 //// }
 //// ```
-////   ChatAssigns(username: String, room: String)
-//// }
-////
-//// pub type ChatInfo {
-////   UserJoined(username: String)
-////   UserLeft(username: String)
-//// }
-////
-//// pub fn new() -> Channel(ChatAssigns, ChatInfo) {
-////   channel.new(join)
-////   |> channel.with_handle_in(handle_in)
-////   |> channel.with_handle_info(handle_info)
-//// }
-////   channel.JoinOk(reply: None, socket: socket)
-//// })
 
 import beryl/socket.{type Socket}
 import gleam/json.{type Json}
@@ -76,12 +61,6 @@ pub type StopReason {
 /// Type parameters:
 /// - `assigns`: Socket state type for this channel
 /// - `info`: Type of messages from other processes (via handle_info)
-///
-/// ## Example
-///
-/// ```gleam
-/// pub type ChatAssigns {
-/// ```
 pub type Channel(assigns, info) {
   Channel(
     /// Called when a client attempts to join a topic
@@ -104,15 +83,9 @@ pub type Channel(assigns, info) {
   )
 }
 
-/// Create a new channel with just a join handler
+/// Create a new channel with just a join handler.
 ///
 /// Other handlers can be added using the `with_*` functions.
-///
-/// ## Example
-///
-/// ```gleam
-/// channel.new(fn(topic, payload, socket) {
-/// ```
 pub fn new(
   join: fn(String, Json, Socket(assigns)) -> JoinResult(assigns),
 ) -> Channel(assigns, info) {

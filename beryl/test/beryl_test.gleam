@@ -1,11 +1,11 @@
-import gleam/json
-import gleam/option
-import gleam/set
-import gleam/string
 import beryl
 import beryl/socket
 import beryl/topic
 import beryl/wire
+import gleam/json
+import gleam/option
+import gleam/set
+import gleam/string
 import gleeunit
 import gleeunit/should
 
@@ -136,7 +136,9 @@ pub fn decode_message_with_null_refs_test() {
 
 pub fn decode_message_both_refs_null_test() {
   let assert Ok(msg) =
-    wire.decode_message("[null,null,\"room:lobby\",\"new_msg\",{\"text\":\"hi\"}]")
+    wire.decode_message(
+      "[null,null,\"room:lobby\",\"new_msg\",{\"text\":\"hi\"}]",
+    )
 
   msg.join_ref |> should.equal(option.None)
   msg.ref |> should.equal(option.None)
@@ -176,7 +178,8 @@ pub fn encode_roundtrip_test() {
 }
 
 pub fn encode_with_object_payload_roundtrip_test() {
-  let original = "[null,\"ref1\",\"chat:general\",\"typing\",{\"user\":\"alice\"}]"
+  let original =
+    "[null,\"ref1\",\"chat:general\",\"typing\",{\"user\":\"alice\"}]"
   let assert Ok(msg) = wire.decode_message(original)
 
   let encoded = wire.encode(msg)

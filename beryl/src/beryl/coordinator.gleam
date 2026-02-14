@@ -590,3 +590,41 @@ fn update_assigns(
     }
   }
 }
+
+/// Route a raw wire protocol message to the coordinator.
+///
+/// Decodes the JSON text and sends the appropriate coordinator message.
+/// Silently ignores messages that fail to decode.
+pub fn route_message(
+  coord: Subject(Message),
+  socket_id: String,
+  raw_text: String,
+) -> Nil {
+  case wire.decode_message(raw_text) {
+    Error(_) -> Nil
+    Ok(msg) -> {
+      case msg.event {
+        "phx_join" -> {
+          let ref = option.unwrap(msg.ref, "")
+          process.send(
+            coord,
+            Join(socket_id, msg.topic, msg.payload, msg.join_ref, ref),
+          )
+        }
+        "phx_leave" -> {
+          process.send(coord, Leave(socket_id, msg.topic, msg.ref))
+        }
+        "heartbeat" -> {
+          let ref = option.unwrap(msg.ref, "")
+          process.send(coord, Heartbeat(socket_id, ref))
+        }
+        event -> {
+          process.send(
+            coord,
+            HandleIn(socket_id, msg.topic, event, msg.payload, msg.ref),
+          )
+        }
+      }
+    }
+  }
+}

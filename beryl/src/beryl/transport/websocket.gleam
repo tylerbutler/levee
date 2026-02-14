@@ -7,13 +7,13 @@
 //// - Routing messages to/from the coordinator
 
 import beryl/coordinator.{type Message as CoordinatorMessage}
-import beryl/wire
 import gleam/bit_array
 import gleam/crypto
 import gleam/dynamic.{type Dynamic}
 import gleam/erlang/process.{type Subject}
 import gleam/option.{type Option, None}
 import gleam/result
+import gleam/string
 import wisp
 import wisp/websocket
 
@@ -63,7 +63,7 @@ pub fn upgrade(
   next: fn() -> wisp.Response,
 ) -> wisp.Response {
   // Check if path matches
-  let path = "/" <> wisp.path_segments(request) |> string_join("/")
+  let path = "/" <> string.join(wisp.path_segments(request), "/")
 
   case path == config.path {
     False -> next()
@@ -128,83 +128,12 @@ fn on_message(
 ) -> websocket.Next(ConnectionState) {
   case message {
     websocket.Text(text) -> {
-      handle_text_message(state, text)
+      coordinator.route_message(state.coordinator, state.socket_id, text)
       websocket.Continue(state)
     }
-    websocket.Binary(_) -> {
-      // Binary messages not supported in Phoenix protocol
-      websocket.Continue(state)
-    }
-    websocket.Closed -> {
-      websocket.Stop
-    }
-    websocket.Shutdown -> {
-      websocket.Stop
-    }
-    websocket.Custom(_) -> {
-      websocket.Continue(state)
-    }
-  }
-}
-
-/// Handle text messages (Phoenix wire protocol)
-fn handle_text_message(state: ConnectionState, text: String) -> Nil {
-  case wire.decode_message(text) {
-    Error(_) -> {
-      // Invalid message - ignore (could log in production)
-      Nil
-    }
-    Ok(msg) -> {
-      route_wire_message(state, msg)
-    }
-  }
-}
-
-/// Route parsed wire message to appropriate coordinator action
-fn route_wire_message(state: ConnectionState, msg: wire.WireMessage) -> Nil {
-  case msg.event {
-    "phx_join" -> {
-      let ref = option.unwrap(msg.ref, "")
-      process.send(
-        state.coordinator,
-        coordinator.Join(
-          state.socket_id,
-          msg.topic,
-          msg.payload,
-          msg.join_ref,
-          ref,
-        ),
-      )
-    }
-
-    "phx_leave" -> {
-      process.send(
-        state.coordinator,
-        coordinator.Leave(state.socket_id, msg.topic, msg.ref),
-      )
-    }
-
-    "heartbeat" -> {
-      let ref = option.unwrap(msg.ref, "")
-      process.send(
-        state.coordinator,
-        coordinator.Heartbeat(state.socket_id, ref),
-      )
-    }
-
-    // Regular channel event
-    _ -> {
-      process.send(
-        state.coordinator,
-        coordinator.HandleIn(
-          state.socket_id,
-          msg.topic,
-          msg.event,
-          msg.payload,
-          msg.ref,
-        ),
-      )
-    }
+    websocket.Binary(_) -> websocket.Continue(state)
+    websocket.Closed | websocket.Shutdown -> websocket.Stop
+    websocket.Custom(_) -> websocket.Continue(state)
   }
 }
 
@@ -218,29 +147,6 @@ fn on_close(state: ConnectionState) -> Nil {
 
 /// Generate a unique socket ID
 fn generate_socket_id() -> String {
-  let bytes = crypto.strong_random_bytes(16)
-  bytes_to_hex(bytes)
-}
-
-/// Convert bytes to hex string
-fn bytes_to_hex(bytes: BitArray) -> String {
-  bytes
+  crypto.strong_random_bytes(16)
   |> bit_array.base16_encode()
-}
-
-/// Helper to join path segments
-fn string_join(segments: List(String), separator: String) -> String {
-  case segments {
-    [] -> ""
-    [first, ..rest] -> {
-      list_fold(rest, first, fn(acc, segment) { acc <> separator <> segment })
-    }
-  }
-}
-
-fn list_fold(list: List(a), acc: b, f: fn(b, a) -> b) -> b {
-  case list {
-    [] -> acc
-    [first, ..rest] -> list_fold(rest, f(acc, first), f)
-  }
 }

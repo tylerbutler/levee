@@ -11,7 +11,6 @@
     session_update_client_rsn/3,
     session_get_ops_since/2,
     session_client_leave/2,
-    process_monitor/1,
     notify_handler_session/2
 ]).
 
@@ -52,10 +51,6 @@ session_get_ops_since(SessionPid, Sn) ->
 
 session_client_leave(SessionPid, ClientId) ->
     'Elixir.Levee.Documents.Session':client_leave(SessionPid, ClientId).
-
-%% Process monitoring
-process_monitor(Pid) ->
-    erlang:monitor(process, Pid).
 
 %% Notify the WebSocket handler of the session PID so it can monitor it
 notify_handler_session(HandlerPid, SessionPid) ->

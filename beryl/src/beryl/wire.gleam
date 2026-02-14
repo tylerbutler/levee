@@ -105,9 +105,11 @@ pub fn encode(msg: WireMessage) -> String {
   )
 }
 
-/// Convert a Dynamic value to Json for encoding
-/// This handles the common cases we'll encounter
-fn dynamic_to_json(value: Dynamic) -> json.Json {
+/// Convert a Dynamic value to Json for encoding.
+///
+/// Handles strings, ints, floats, bools, nil, lists, and string-keyed dicts.
+/// Falls back to `json.null()` for unrecognized types.
+pub fn dynamic_to_json(value: Dynamic) -> json.Json {
   // Try decoding as various types
   case decode.run(value, decode.string) {
     Ok(s) -> json.string(s)
