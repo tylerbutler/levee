@@ -7,11 +7,11 @@
 		"rootDir": "./src",
 		"outDir": "./esm",
 
-		"exactOptionalPropertyTypes": false,
+		"exactOptionalPropertyTypes": false
 	},
 	"references": [
 		{
-			"path": "../levee-driver",
-		},
-	],
+			"path": "../levee-driver"
+		}
+	]
 }

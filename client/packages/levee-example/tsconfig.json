@@ -8,11 +8,11 @@
 		"jsx": "react-jsx",
 		"lib": ["ES2022", "DOM", "DOM.Iterable"],
 		"exactOptionalPropertyTypes": false,
-		"noPropertyAccessFromIndexSignature": false,
+		"noPropertyAccessFromIndexSignature": false
 	},
 	"references": [
 		{
-			"path": "../levee-driver",
-		},
-	],
+			"path": "../levee-driver"
+		}
+	]
 }
