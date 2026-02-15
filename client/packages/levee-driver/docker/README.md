@@ -1,6 +1,6 @@
 # Levee Server Docker Setup
 
-This directory contains Docker configuration for running the Levee server locally for integration testing.
+Docker configuration for running the Levee server locally for integration testing.
 
 ## Quick Start (Published Image)
 
@@ -8,7 +8,7 @@ The simplest way to run the Levee server is using the published Docker image:
 
 ```bash
 # From the levee-driver package directory
-cd packages/levee-driver
+cd client/packages/levee-driver
 
 # Start the Levee server (pulls from ghcr.io/tylerbutler/levee:latest)
 pnpm test:integration:up
@@ -28,19 +28,19 @@ pnpm test:integration:down
 To test against a local development version of the Levee server:
 
 ```bash
-# Set path to your local levee checkout
-export LEVEE_SOURCE_PATH=/path/to/levee
+cd client/packages/levee-driver
 
-# Start the server (builds from source)
-pnpm test:integration:up:local
+# Start the server (builds from server/ directory)
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --wait --build
 
-# Run tests, view logs, stop (same as above)
-pnpm test:integration
-pnpm test:integration:logs
-pnpm test:integration:down
+# Run tests
+vitest run test/integration
+
+# Stop
+docker compose down -v
 ```
 
-**Note:** The local build requires the levee repo to have a `Dockerfile` at its root.
+The `docker-compose.local.yml` file uses a relative path to `../../../server` (the `server/` directory at the repo root) as the Docker build context.
 
 ## Server Endpoints
 
@@ -52,11 +52,8 @@ The server will be available at:
 
 ### Environment Variables
 
-The following environment variables can be used to configure the tests:
-
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LEVEE_SOURCE_PATH` | (none) | Path to local levee repo (for local builds) |
 | `LEVEE_HTTP_URL` | `http://localhost:4000` | HTTP API endpoint |
 | `LEVEE_SOCKET_URL` | `ws://localhost:4000/socket` | WebSocket endpoint |
 | `LEVEE_TENANT_KEY` | `dev-tenant-secret-key` | Tenant secret for token generation |
@@ -76,9 +73,8 @@ Common issues:
 
 ### Local build fails
 
-- Ensure `LEVEE_SOURCE_PATH` points to a valid levee checkout
-- Ensure the levee repo has a `Dockerfile` at its root
-- Check that your levee checkout is on a valid branch
+- Ensure you're running from the correct directory (`client/packages/levee-driver`)
+- Ensure the `server/` directory contains a valid Elixir project with `Dockerfile`
 
 ### Tests fail to connect
 
