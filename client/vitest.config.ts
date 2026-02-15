@@ -41,6 +41,9 @@ const config = defineConfig({
 
 			// Exclude test fixtures - these are test data, not actual tests
 			"**/fixtures/**",
+
+			// Exclude Playwright e2e tests (run separately)
+			"**/e2e/**",
 		],
 	},
 });
