@@ -26,7 +26,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
       - name: Setup BEAM
-        uses: tylerbutler/actions/setup-gleam@18a7bc720756064d533cf003fe0323a59a099911 # ratchet:tylerbutler/actions/setup-gleam@main
+        uses: tylerbutler/actions/setup-gleam@4dd5edb0cc1d941b6db7433504e406c001eea748 # ratchet:tylerbutler/actions/setup-gleam@main
         with:
           erlang-version: '28.3'
           gleam-version: '1.14.0'
@@ -70,7 +70,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
       - name: Setup BEAM
-        uses: tylerbutler/actions/setup-gleam@18a7bc720756064d533cf003fe0323a59a099911 # ratchet:tylerbutler/actions/setup-gleam@main
+        uses: tylerbutler/actions/setup-gleam@4dd5edb0cc1d941b6db7433504e406c001eea748 # ratchet:tylerbutler/actions/setup-gleam@main
         with:
           erlang-version: '28.3'
           gleam-version: '1.14.0'
@@ -114,7 +114,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
       - name: Setup Node.js
-        uses: tylerbutler/actions/setup-node@18a7bc720756064d533cf003fe0323a59a099911 # ratchet:tylerbutler/actions/setup-node@main
+        uses: tylerbutler/actions/setup-node@4dd5edb0cc1d941b6db7433504e406c001eea748 # ratchet:tylerbutler/actions/setup-node@main
         with:
           working-directory: client
           install-just: false
@@ -135,7 +135,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
       - name: Setup Node.js
-        uses: tylerbutler/actions/setup-node@18a7bc720756064d533cf003fe0323a59a099911 # ratchet:tylerbutler/actions/setup-node@main
+        uses: tylerbutler/actions/setup-node@4dd5edb0cc1d941b6db7433504e406c001eea748 # ratchet:tylerbutler/actions/setup-node@main
         with:
           working-directory: client
           install-just: false
