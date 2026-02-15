@@ -3,11 +3,11 @@
 	"version": "0.0.1",
 	"private": true,
 	"description": "Presence tracker example using Levee client and Fluid Framework presence features",
-	"bugs": "https://github.com/tylerbutler/tools-monorepo/issues",
+	"bugs": "https://github.com/tylerbutler/levee/issues",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/tylerbutler/tools-monorepo.git",
-		"directory": "packages/levee-presence-tracker"
+		"url": "git+https://github.com/tylerbutler/levee.git",
+		"directory": "client/packages/levee-presence-tracker"
 	},
 	"license": "MIT",
 	"author": "Tyler Butler <tyler@tylerbutler.com>",
@@ -22,7 +22,6 @@
 		"lint": "biome lint .",
 		"lint:fix": "biome lint . --write",
 		"preview": "vite preview",
-		"release:license": "generate-license-file -c ../../.generatelicensefile.cjs",
 		"test:e2e": "playwright test",
 		"test:e2e:headed": "playwright test --headed",
 		"test:e2e:ui": "playwright test --ui"
@@ -51,17 +50,5 @@
 	},
 	"engines": {
 		"node": ">=18.0.0"
-	},
-	"nx": {
-		"targets": {
-			"build": {
-				"dependsOn": [
-					"^build",
-					"build:compile",
-					"build:vite"
-				]
-			},
-			"ci": {}
-		}
 	}
 }

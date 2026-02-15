@@ -3,11 +3,11 @@
 	"version": "0.0.1",
 	"private": true,
 	"description": "Fluid Framework DiceRoller example using Levee driver",
-	"bugs": "https://github.com/tylerbutler/tools-monorepo/issues",
+	"bugs": "https://github.com/tylerbutler/levee/issues",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/tylerbutler/tools-monorepo.git",
-		"directory": "packages/levee-example"
+		"url": "git+https://github.com/tylerbutler/levee.git",
+		"directory": "client/packages/levee-example"
 	},
 	"license": "MIT",
 	"author": "Tyler Butler <tyler@tylerbutler.com>",
@@ -22,7 +22,6 @@
 		"lint": "biome lint .",
 		"lint:fix": "biome lint . --write",
 		"preview": "vite preview",
-		"release:license": "generate-license-file -c ../../.generatelicensefile.cjs",
 		"test:coverage": "vitest run --coverage test/unit",
 		"test:integration": "start-server-and-test 'docker compose up' http://localhost:4000/health 'vitest run test/integration'",
 		"test:integration:down": "docker compose down -v",
@@ -63,18 +62,5 @@
 	},
 	"engines": {
 		"node": ">=18.0.0"
-	},
-	"nx": {
-		"targets": {
-			"build": {
-				"dependsOn": [
-					"^build",
-					"build:compile",
-					"build:vite"
-				]
-			},
-			"test": {},
-			"ci": {}
-		}
 	}
 }
