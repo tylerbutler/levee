@@ -37,6 +37,19 @@ if config_env() == :prod do
 
   host = System.get_env("PHX_HOST") || "example.com"
 
+  # Database configuration (Fly Postgres provides DATABASE_URL)
+  database_url =
+    System.get_env("DATABASE_URL") ||
+      raise """
+      environment variable DATABASE_URL is missing.
+      For example: ecto://USER:PASS@HOST/DATABASE
+      """
+
+  config :levee, Levee.Repo,
+    url: database_url,
+    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
+    socket_options: if(System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: [])
+
   config :levee, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
   config :levee, LeveeWeb.Endpoint,

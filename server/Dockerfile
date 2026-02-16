@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git build-essential curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Gleam (required for levee_protocol)
+# Install Gleam (required for levee_protocol, levee_auth, levee_admin)
 ARG GLEAM_VERSION=1.14.0
 RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "aarch64" ]; then \
@@ -32,15 +32,32 @@ RUN mix local.hex --force && \
 # Copy dependency files first for better caching
 COPY mix.exs mix.lock ./
 COPY levee_protocol/gleam.toml levee_protocol/manifest.toml levee_protocol/
+COPY levee_auth/gleam.toml levee_auth/manifest.toml levee_auth/
 
-# Install dependencies
+# Install Elixir dependencies
 RUN mix deps.get --only prod
 
-# Copy the rest of the source
+# Copy Gleam sources and build them
+COPY levee_protocol levee_protocol
+COPY levee_auth levee_auth
+
+# Copy levee_admin for SPA build
+COPY levee_admin levee_admin
+
+# Build levee_admin SPA (JavaScript target)
+RUN cd levee_admin && gleam build --target javascript
+
+# Copy the rest of the Elixir source
 COPY config config
 COPY lib lib
 COPY priv priv
-COPY levee_protocol levee_protocol
+COPY rel rel
+
+# Copy admin SPA output to priv/static/admin (after COPY priv to avoid overwrite)
+# The Gleam JS build outputs to build/dev/javascript/
+RUN mkdir -p priv/static/admin && \
+    cp -r levee_admin/build/dev/javascript/* priv/static/admin/ && \
+    cp levee_admin/index.html priv/static/admin/index.html
 
 # Compile the application
 RUN mix compile
@@ -65,8 +82,16 @@ WORKDIR /app
 COPY --from=builder /build/_build/prod/rel/levee ./
 
 # Copy Gleam compiled modules (required at runtime)
+# levee_protocol and its dependencies
 COPY --from=builder /build/levee_protocol/build/dev/erlang/levee_protocol/ebin ./levee_protocol/build/dev/erlang/levee_protocol/ebin
 COPY --from=builder /build/levee_protocol/build/dev/erlang/gleam_stdlib/ebin ./levee_protocol/build/dev/erlang/gleam_stdlib/ebin
+
+# levee_auth and its dependencies
+COPY --from=builder /build/levee_auth/build/dev/erlang/levee_auth/ebin ./levee_auth/build/dev/erlang/levee_auth/ebin
+COPY --from=builder /build/levee_auth/build/dev/erlang/gleam_crypto/ebin ./levee_auth/build/dev/erlang/gleam_crypto/ebin
+COPY --from=builder /build/levee_auth/build/dev/erlang/gleam_json/ebin ./levee_auth/build/dev/erlang/gleam_json/ebin
+COPY --from=builder /build/levee_auth/build/dev/erlang/gleam_time/ebin ./levee_auth/build/dev/erlang/gleam_time/ebin
+COPY --from=builder /build/levee_auth/build/dev/erlang/youid/ebin ./levee_auth/build/dev/erlang/youid/ebin
 
 # Set runtime environment
 ENV MIX_ENV=prod

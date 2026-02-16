@@ -9,6 +9,8 @@ deps
 
 # Gleam build artifacts (will be rebuilt)
 levee_protocol/build
+levee_auth/build
+levee_admin/build
 
 # Editor/IDE
 .vscode
