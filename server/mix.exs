@@ -46,8 +46,6 @@ defmodule Levee.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
-      # JWT authentication
-      {:jose, "~> 1.11"},
       # CORS support
       {:cors_plug, "~> 3.0"},
       # Database (optional PostgreSQL backend)
@@ -78,6 +76,9 @@ defmodule Levee.MixProject do
 
     Enum.each(gleam_projects, fn gleam_path ->
       if File.dir?(gleam_path) do
+        # Patch birl's deprecated result.then -> result.try if needed
+        patch_birl_compat(gleam_path)
+
         case System.cmd("gleam", ["build", "--target", "erlang"],
                cd: gleam_path,
                stderr_to_stdout: true
@@ -96,5 +97,26 @@ defmodule Levee.MixProject do
         end
       end
     end)
+  end
+
+  # birl v1.8.0 uses result.then which was removed in gleam_stdlib >= 0.68.
+  # Patch it to use result.try (the renamed equivalent) until birl releases a fix.
+  defp patch_birl_compat(gleam_path) do
+    birl_dir = Path.join([gleam_path, "build", "packages", "birl", "src"])
+
+    if File.dir?(birl_dir) do
+      for file <- ["birl.gleam", "birl/duration.gleam"] do
+        path = Path.join(birl_dir, file)
+
+        if File.exists?(path) do
+          content = File.read!(path)
+
+          if String.contains?(content, "result.then") do
+            patched = String.replace(content, "result.then", "result.try")
+            File.write!(path, patched)
+          end
+        end
+      end
+    end
   end
 end

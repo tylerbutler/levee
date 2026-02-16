@@ -1,24 +1,22 @@
-# Load Gleam compiled BEAM files into the code path before tests
+# Load Gleam compiled BEAM files into the code path before tests.
+# Dynamically discover all ebin dirs so new Gleam deps are picked up automatically.
 app_root = Path.expand("../", __DIR__)
 
-gleam_paths = [
-  # levee_protocol paths
-  Path.join([app_root, "levee_protocol", "build", "dev", "erlang", "levee_protocol", "ebin"]),
-  Path.join([app_root, "levee_protocol", "build", "dev", "erlang", "gleam_stdlib", "ebin"]),
-  # levee_auth paths
-  Path.join([app_root, "levee_auth", "build", "dev", "erlang", "levee_auth", "ebin"]),
-  Path.join([app_root, "levee_auth", "build", "dev", "erlang", "gleam_stdlib", "ebin"]),
-  Path.join([app_root, "levee_auth", "build", "dev", "erlang", "gleam_crypto", "ebin"]),
-  Path.join([app_root, "levee_auth", "build", "dev", "erlang", "gleam_json", "ebin"]),
-  Path.join([app_root, "levee_auth", "build", "dev", "erlang", "gleam_time", "ebin"]),
-  Path.join([app_root, "levee_auth", "build", "dev", "erlang", "youid", "ebin"])
-]
+for gleam_pkg <- ["levee_protocol", "levee_auth"] do
+  erlang_dir = Path.join([app_root, gleam_pkg, "build", "dev", "erlang"])
 
-Enum.each(gleam_paths, fn path ->
-  if File.dir?(path) do
-    :code.add_patha(String.to_charlist(path))
+  if File.dir?(erlang_dir) do
+    erlang_dir
+    |> File.ls!()
+    |> Enum.each(fn pkg_name ->
+      ebin_path = Path.join([erlang_dir, pkg_name, "ebin"])
+
+      if File.dir?(ebin_path) do
+        :code.add_patha(String.to_charlist(ebin_path))
+      end
+    end)
   end
-end)
+end
 
 # Set up database sandbox mode if using PostgreSQL backend
 if Application.get_env(:levee, :storage_backend) == Levee.Storage.Postgres do

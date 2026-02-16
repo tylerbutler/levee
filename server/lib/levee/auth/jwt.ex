@@ -2,8 +2,9 @@ defmodule Levee.Auth.JWT do
   @moduledoc """
   JWT signing and verification for Fluid Framework authentication.
 
-  Uses the JOSE library for cryptographic operations.
-  Implements the token structure defined in the Fluid Protocol spec section 3.
+  Delegates to the Gleam levee_auth token module (backed by gwt) for
+  cryptographic operations. The Gleam module handles HS256 signing,
+  signature verification, and expiration checking.
 
   Token Claims Structure:
   - documentId: Document ID this token grants access to
@@ -19,6 +20,9 @@ defmodule Levee.Auth.JWT do
   alias Levee.Auth.TenantSecrets
 
   require Logger
+
+  # Tell compiler these Gleam modules will exist at runtime
+  @compile {:no_warn_undefined, [:token]}
 
   # Standard permission scopes
   @scope_doc_read "doc:read"
@@ -52,8 +56,10 @@ defmodule Levee.Auth.JWT do
   @doc """
   Signs a JWT token for the given claims and tenant.
 
+  Delegates to the Gleam token module for HS256 signing via gwt.
+
   ## Parameters
-  - claims: Map of token claims
+  - claims: Map of token claims (with :documentId, :tenantId, :user, :scopes, etc.)
   - tenant_id: Tenant ID to look up the signing secret
 
   ## Returns
@@ -64,19 +70,23 @@ defmodule Levee.Auth.JWT do
   def sign(claims, tenant_id) do
     case TenantSecrets.get_secret(tenant_id) do
       {:ok, secret} ->
-        jwk = JOSE.JWK.from_oct(secret)
-        jws = %{"alg" => "HS256"}
+        user_id = get_in(claims, [:user, :id]) || ""
+        tenant = claims[:tenantId] || tenant_id
+        doc_id = claims[:documentId] || ""
+        scopes_list = claims[:scopes] || []
+        iat = claims[:iat] || System.system_time(:second)
+        exp = claims[:exp] || iat + @default_expiration_seconds
+        jti = claims[:jti]
 
-        # Ensure claims has required fields
-        claims_with_defaults =
-          claims
-          |> Map.put_new(:iat, System.system_time(:second))
-          |> Map.put_new(:exp, System.system_time(:second) + @default_expiration_seconds)
-          |> Map.put_new(:ver, @token_version)
+        gleam_scopes = Enum.map(scopes_list, &string_to_gleam_scope/1)
+        token_id = if jti, do: {:some, jti}, else: :none
 
-        payload = Jason.encode!(claims_with_defaults)
+        gleam_claims =
+          {:token_claims, user_id, tenant, doc_id, gleam_scopes, iat, exp, token_id}
 
-        {_, token} = JOSE.JWS.compact(JOSE.JWT.sign(jwk, jws, payload))
+        config = {:token_config, secret, @default_expiration_seconds}
+
+        token = :token.create(gleam_claims, config)
         {:ok, token}
 
       {:error, reason} ->
@@ -86,6 +96,10 @@ defmodule Levee.Auth.JWT do
 
   @doc """
   Verifies a JWT token and returns the claims.
+
+  Delegates to the Gleam token module which uses gwt for verification.
+  Note: expired tokens are rejected during verification (gwt checks
+  expiration automatically).
 
   ## Parameters
   - token: The JWT token string
@@ -99,17 +113,42 @@ defmodule Levee.Auth.JWT do
   def verify(token, tenant_id) do
     case TenantSecrets.get_secret(tenant_id) do
       {:ok, secret} ->
-        jwk = JOSE.JWK.from_oct(secret)
+        case :token.verify(token, secret) do
+          {:ok, {:token_claims, user_id, t_id, doc_id, gleam_scopes, iat, exp, token_id}} ->
+            scopes = Enum.map(gleam_scopes, &gleam_scope_to_string/1)
 
-        case JOSE.JWT.verify_strict(jwk, ["HS256"], token) do
-          {true, %JOSE.JWT{fields: fields}, _jws} ->
-            {:ok, atomize_claims(fields)}
+            jti =
+              case token_id do
+                {:some, id} -> id
+                :none -> nil
+              end
 
-          {false, _jwt, _jws} ->
+            {:ok,
+             %{
+               documentId: doc_id,
+               scopes: scopes,
+               tenantId: t_id,
+               user: %{id: user_id},
+               iat: iat,
+               exp: exp,
+               ver: @token_version,
+               jti: jti
+             }}
+
+          {:error, :invalid_signature} ->
             {:error, :invalid_signature}
 
-          {:error, reason} ->
-            {:error, {:jwt_decode_error, reason}}
+          {:error, :token_expired} ->
+            {:error, :token_expired}
+
+          {:error, :malformed_token} ->
+            {:error, :malformed_token}
+
+          {:error, :missing_claims} ->
+            {:error, :missing_claims}
+
+          {:error, _} ->
+            {:error, :token_verification_failed}
         end
 
       {:error, reason} ->
@@ -218,23 +257,13 @@ defmodule Levee.Auth.JWT do
     :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
   end
 
-  # Convert string keys to atoms for internal use
-  defp atomize_claims(fields) do
-    %{
-      documentId: Map.get(fields, "documentId"),
-      scopes: Map.get(fields, "scopes", []),
-      tenantId: Map.get(fields, "tenantId"),
-      user: atomize_user(Map.get(fields, "user", %{})),
-      iat: Map.get(fields, "iat"),
-      exp: Map.get(fields, "exp"),
-      ver: Map.get(fields, "ver"),
-      jti: Map.get(fields, "jti")
-    }
-  end
+  defp string_to_gleam_scope("doc:read"), do: :doc_read
+  defp string_to_gleam_scope("doc:write"), do: :doc_write
+  defp string_to_gleam_scope("summary:read"), do: :summary_read
+  defp string_to_gleam_scope("summary:write"), do: :summary_write
 
-  defp atomize_user(user) when is_map(user) do
-    %{id: Map.get(user, "id")}
-  end
-
-  defp atomize_user(_), do: %{id: nil}
+  defp gleam_scope_to_string(:doc_read), do: "doc:read"
+  defp gleam_scope_to_string(:doc_write), do: "doc:write"
+  defp gleam_scope_to_string(:summary_read), do: "summary:read"
+  defp gleam_scope_to_string(:summary_write), do: "summary:write"
 end

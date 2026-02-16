@@ -183,8 +183,12 @@ defmodule LeveeWeb.Plugs.Auth do
     {401, "Token has expired"}
   end
 
-  defp error_response({:jwt_decode_error, _reason}) do
+  defp error_response(:malformed_token) do
     {401, "Invalid token format"}
+  end
+
+  defp error_response(:missing_claims) do
+    {401, "Invalid token: missing required claims"}
   end
 
   defp error_response({:tenant_secret_not_found, _}) do

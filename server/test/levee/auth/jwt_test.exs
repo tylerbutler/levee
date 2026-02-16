@@ -78,6 +78,13 @@ defmodule Levee.Auth.JWTTest do
 
       assert {:error, {:tenant_secret_not_found, _}} = JWT.verify(token, "unknown-tenant")
     end
+
+    test "rejects expired token" do
+      {:ok, token} =
+        JWT.generate_test_token(@tenant_id, @document_id, @user_id, expires_in: -1)
+
+      assert {:error, :token_expired} = JWT.verify(token, @tenant_id)
+    end
   end
 
   describe "generate_test_token/4" do
@@ -134,16 +141,6 @@ defmodule Levee.Auth.JWTTest do
       {:ok, claims} = JWT.verify(token, @tenant_id)
 
       refute JWT.expired?(claims)
-    end
-
-    test "returns true for expired token" do
-      # Generate token that expires immediately
-      {:ok, token} =
-        JWT.generate_test_token(@tenant_id, @document_id, @user_id, expires_in: -1)
-
-      {:ok, claims} = JWT.verify(token, @tenant_id)
-
-      assert JWT.expired?(claims)
     end
   end
 

@@ -1,7 +1,8 @@
 //// JWT token creation and verification for Levee authentication.
 ////
-//// Uses our internal jwt module for HS256 signed JWTs.
+//// Uses the gwt library for HS256 signed JWTs.
 
+import gleam/dynamic/decode
 import gleam/float
 import gleam/json
 import gleam/list
@@ -9,7 +10,7 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 import gleam/time/timestamp
-import jwt
+import gwt
 import scopes.{type Scope}
 
 /// Claims contained in a Levee JWT token.
@@ -73,95 +74,87 @@ pub fn create(claims: TokenClaims, config: TokenConfig) -> String {
     |> list.map(scopes.to_string)
     |> string.join(",")
 
-  let payload =
-    json.object([
-      #("sub", json.string(claims.user_id)),
-      #("iss", json.string("levee")),
-      #("iat", json.int(claims.iat)),
-      #("exp", json.int(claims.exp)),
-      #("tenant_id", json.string(claims.tenant_id)),
-      #("document_id", json.string(claims.document_id)),
-      #("scopes", json.string(scopes_str)),
-      ..case claims.token_id {
-        Some(id) -> [#("jti", json.string(id))]
-        None -> []
-      }
-    ])
+  let builder =
+    gwt.new()
+    |> gwt.set_subject(claims.user_id)
+    |> gwt.set_issuer("levee")
+    |> gwt.set_issued_at(claims.iat)
+    |> gwt.set_expiration(claims.exp)
+    |> gwt.set_payload_claim("tenant_id", json.string(claims.tenant_id))
+    |> gwt.set_payload_claim("document_id", json.string(claims.document_id))
+    |> gwt.set_payload_claim("scopes", json.string(scopes_str))
 
-  jwt.sign(payload, config.secret)
+  let builder = case claims.token_id {
+    Some(id) -> gwt.set_jwt_id(builder, id)
+    None -> builder
+  }
+
+  gwt.to_signed_string(builder, gwt.HS256, config.secret)
 }
 
 /// Verify a JWT token and extract claims.
 pub fn verify(token: String, secret: String) -> Result(TokenClaims, TokenError) {
-  use payload <- result.try(
-    jwt.verify(token, secret)
+  use jwt <- result.try(
+    gwt.from_signed_string(token, secret)
     |> result.map_error(fn(e) {
       case e {
-        jwt.InvalidSignature -> InvalidSignature
+        gwt.InvalidSignature -> InvalidSignature
+        gwt.TokenExpired -> TokenExpired
+        gwt.TokenNotValidYet -> TokenNotYetValid
         _ -> MalformedToken
       }
     }),
   )
 
-  let now = now_unix()
-
   // Extract standard claims
   use user_id <- result.try(
-    jwt.get_string(payload, "sub")
-    |> result.replace_error(MissingClaims),
+    gwt.get_subject(jwt) |> result.replace_error(MissingClaims),
   )
 
   use iat <- result.try(
-    jwt.get_int(payload, "iat")
-    |> result.replace_error(MissingClaims),
+    gwt.get_issued_at(jwt) |> result.replace_error(MissingClaims),
   )
 
   use exp <- result.try(
-    jwt.get_int(payload, "exp")
+    gwt.get_expiration(jwt) |> result.replace_error(MissingClaims),
+  )
+
+  // Extract custom claims
+  use tenant_id <- result.try(
+    gwt.get_payload_claim(jwt, "tenant_id", decode.string)
     |> result.replace_error(MissingClaims),
   )
 
-  // Check expiration
-  case exp < now {
-    True -> Error(TokenExpired)
-    False -> {
-      // Extract custom claims
-      use tenant_id <- result.try(
-        jwt.get_string(payload, "tenant_id")
-        |> result.replace_error(MissingClaims),
-      )
+  use document_id <- result.try(
+    gwt.get_payload_claim(jwt, "document_id", decode.string)
+    |> result.replace_error(MissingClaims),
+  )
 
-      use document_id <- result.try(
-        jwt.get_string(payload, "document_id")
-        |> result.replace_error(MissingClaims),
-      )
+  use scopes_str <- result.try(
+    gwt.get_payload_claim(jwt, "scopes", decode.string)
+    |> result.replace_error(MissingClaims),
+  )
 
-      use scopes_str <- result.try(
-        jwt.get_string(payload, "scopes")
-        |> result.replace_error(MissingClaims),
-      )
+  let parsed_scopes =
+    scopes_str
+    |> string.split(",")
+    |> list.filter(fn(s) { s != "" })
+    |> scopes.list_from_strings()
 
-      let parsed_scopes =
-        scopes_str
-        |> string.split(",")
-        |> list.filter(fn(s) { s != "" })
-        |> scopes.list_from_strings()
-
-      let token_id =
-        jwt.get_optional_string(payload, "jti")
-        |> option.from_result
-
-      Ok(TokenClaims(
-        user_id: user_id,
-        tenant_id: tenant_id,
-        document_id: document_id,
-        scopes: parsed_scopes,
-        iat: iat,
-        exp: exp,
-        token_id: token_id,
-      ))
-    }
+  let token_id = case gwt.get_jwt_id(jwt) {
+    Ok(id) -> Some(id)
+    Error(_) -> None
   }
+
+  Ok(TokenClaims(
+    user_id: user_id,
+    tenant_id: tenant_id,
+    document_id: document_id,
+    scopes: parsed_scopes,
+    iat: iat,
+    exp: exp,
+    token_id: token_id,
+  ))
 }
 
 /// Create claims for read-only document access.
