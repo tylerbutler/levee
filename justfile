@@ -1,4 +1,4 @@
-# Levee - Elixir + Gleam collaborative document service
+# Levee - Collaborative document service (server + client)
 
 # === ALIASES ===
 alias b := build
@@ -13,104 +13,150 @@ default:
 
 # === BUILD ===
 
-# Build everything
-build: build-gleam build-admin build-elixir
+# Build everything (server + client)
+build: build-server build-client
+
+# Build server (Gleam + admin + Elixir)
+build-server: build-gleam build-admin build-elixir
 
 # Build Gleam packages
 build-gleam:
-    cd levee_protocol && gleam build --target erlang
-    cd levee_auth && gleam build --target erlang
-    cd levee_admin && gleam build --target javascript
+    cd server/levee_protocol && gleam build --target erlang
+    cd server/levee_auth && gleam build --target erlang
+    cd server/levee_admin && gleam build --target javascript
 
 # Build admin UI and copy to priv/static/admin
 build-admin: build-gleam
-    mkdir -p priv/static/admin
-    cp -r levee_admin/build/dev/javascript/* priv/static/admin/
-    cp levee_admin/index.html priv/static/admin/
+    mkdir -p server/priv/static/admin
+    cp -r server/levee_admin/build/dev/javascript/* server/priv/static/admin/
+    cp server/levee_admin/index.html server/priv/static/admin/
 
 # Build Elixir application
 build-elixir: build-gleam
-    mix compile
+    cd server && mix compile
+
+# Build client (TypeScript)
+build-client:
+    cd client && pnpm install && pnpm build
 
 # === TESTING ===
 
-# Run all tests
-test: test-gleam test-elixir
+# Run all tests (server + client)
+test: test-server test-client
+
+# Run all server tests
+test-server: test-gleam test-elixir
 
 # Run Gleam tests
 test-gleam:
-    cd levee_protocol && gleam test
-    cd levee_auth && gleam test
-    cd levee_admin && gleam test
+    cd server/levee_protocol && gleam test
+    cd server/levee_auth && gleam test
+    cd server/levee_admin && gleam test
 
 # Run Elixir tests
 test-elixir:
-    mix test
+    cd server && mix test
+
+# Run client tests
+test-client:
+    cd client && pnpm install && pnpm test
 
 # === QUALITY ===
 
-# Format all code
-format: format-gleam format-elixir
+# Format all code (server + client)
+format: format-server format-client
+
+# Format server code
+format-server: format-gleam format-elixir
 
 # Format Gleam code
 format-gleam:
-    cd levee_protocol && gleam format
-    cd levee_auth && gleam format
-    cd levee_admin && gleam format
+    cd server/levee_protocol && gleam format
+    cd server/levee_auth && gleam format
+    cd server/levee_admin && gleam format
 
 # Format Elixir code
 format-elixir:
-    mix format
+    cd server && mix format
 
-# Lint all code
-lint: lint-gleam lint-elixir
+# Format client code
+format-client:
+    cd client && pnpm format
+
+# Lint all code (server + client)
+lint: lint-server lint-client
+
+# Lint server code
+lint-server: lint-gleam lint-elixir
 
 # Lint Gleam code (format check)
 lint-gleam:
-    cd levee_protocol && gleam format --check
-    cd levee_auth && gleam format --check
-    cd levee_admin && gleam format --check
+    cd server/levee_protocol && gleam format --check
+    cd server/levee_auth && gleam format --check
+    cd server/levee_admin && gleam format --check
 
 # Lint Elixir code
 lint-elixir:
-    mix format --check-formatted
-    mix compile --warnings-as-errors
+    cd server && mix format --check-formatted
+    cd server && mix compile --warnings-as-errors
+
+# Lint client code
+lint-client:
+    cd client && pnpm lint
 
 # Check formatting (alias for lint)
 check-format: lint
 
-# Remove all build artifacts
-clean: clean-gleam clean-elixir
+# === CLEANUP ===
+
+# Remove all build artifacts (server + client)
+clean: clean-server clean-client
+
+# Clean server build artifacts
+clean-server: clean-gleam clean-elixir
 
 clean-gleam:
-    cd levee_protocol && rm -rf build
-    cd levee_auth && rm -rf build
-    cd levee_admin && rm -rf build
-    rm -rf priv/static/admin
+    cd server/levee_protocol && rm -rf build
+    cd server/levee_auth && rm -rf build
+    cd server/levee_admin && rm -rf build
+    rm -rf server/priv/static/admin
 
 clean-elixir:
-    mix clean
-    rm -rf _build deps
+    cd server && mix clean
+    rm -rf server/_build server/deps
 
-# Full validation workflow
+# Clean client build artifacts
+clean-client:
+    cd client && pnpm clean
+
+# === CI ===
+
+# Full validation workflow (server + client)
 ci: format lint test build
 
 alias pr := ci
 
 # === SETUP ===
 
-# Install all dependencies
-setup: setup-gleam setup-elixir
+# Install all dependencies (server + client)
+setup: setup-server setup-client
+
+# Install server dependencies
+setup-server: setup-gleam setup-elixir
 
 # Install Gleam dependencies
 setup-gleam:
-    cd levee_protocol && gleam deps download
-    cd levee_auth && gleam deps download
-    cd levee_admin && gleam deps download
+    cd server/levee_protocol && gleam deps download
+    cd server/levee_auth && gleam deps download
+    cd server/levee_admin && gleam deps download
 
 # Install Elixir dependencies
 setup-elixir:
-    mix deps.get
+    cd server && mix deps.get
+
+# Install client dependencies
+setup-client:
+    cd client && pnpm install
 
 # === DEVELOPMENT ===
 
@@ -119,19 +165,19 @@ start: server
 
 # Start Phoenix server (builds Gleam + admin first)
 server: build-gleam build-admin
-    mix phx.server
+    cd server && mix phx.server
 
 # Start Phoenix server with IEx
 iex: build-gleam build-admin
-    iex -S mix phx.server
+    cd server && iex -S mix phx.server
 
 # === CODE GENERATION ===
 
 # Generate JSON schema from Gleam protocol types
 generate-schema:
-    mix generate_schema
+    cd server && mix generate_schema
 
-# Generate schema and copy to TypeScript project
+# Generate schema and copy to client driver package
 generate-schema-ts: generate-schema
-    mkdir -p ../tools-monorepo/packages/levee-driver/schemas
-    cp priv/protocol-schema.json ../tools-monorepo/packages/levee-driver/schemas/
+    mkdir -p client/packages/levee-driver/schemas
+    cp server/priv/protocol-schema.json client/packages/levee-driver/schemas/

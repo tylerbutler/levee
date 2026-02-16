@@ -1,23 +1,30 @@
 amends "package://github.com/jdx/hk/releases/download/v1.32.0/hk@1.32.0#/Config.pkl"
 import "package://github.com/jdx/hk/releases/download/v1.32.0/hk@1.32.0#/Builtins.pkl"
 
-// Elixir linters for Levee
+// Elixir linters for Levee (run from server/ directory)
 local elixir_linters = new Mapping<String, Step> {
     // Format Elixir code with mix format
-    ["mix_fmt"] = Builtins.mix_fmt
+    ["mix_fmt"] {
+        glob = "server/**/*.ex"
+        batch = true
+        fix = "cd server && mix format"
+        check = "cd server && mix format --check-formatted"
+    }
 
     // Compile with warnings as errors
-    ["mix_compile"] = Builtins.mix_compile
+    ["mix_compile"] {
+        glob = "server/**/*.ex"
+        batch = true
+        check = "cd server && mix compile --warnings-as-errors"
+    }
 }
 
 // Full test suite (slower, for pre-push or manual checks)
-// Note: We run the full test suite, not per-file, because mix test
-// doesn't support running tests based on which source files changed
 local test_linters = new Mapping<String, Step> {
     ["mix_test"] {
-        glob = "**/*.ex"
+        glob = "server/**/*.ex"
         batch = true
-        check = "mix test"
+        check = "cd server && mix test"
     }
 }
 
@@ -64,7 +71,10 @@ hooks {
             ...elixir_linters
             ...config_linters
             // Tests only run with --slow flag
-            ["mix_test"] = (Builtins.mix_test) {
+            ["mix_test"] {
+                glob = "server/**/*.ex"
+                batch = true
+                check = "cd server && mix test"
                 profiles = List("slow")
             }
         }

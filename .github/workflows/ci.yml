@@ -1,0 +1,191 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel in-progress runs for the same branch/PR
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  server-test:
+    name: Server Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+
+      - name: Setup BEAM
+        uses: tylerbutler/actions/setup-gleam@4dd5edb0cc1d941b6db7433504e406c001eea748 # ratchet:tylerbutler/actions/setup-gleam@main
+        with:
+          erlang-version: '28.3'
+          gleam-version: '1.14.0'
+          elixir-version: '1.18.4'
+          working-directory: server
+          run-deps: false
+
+      - name: Cache Gleam build dirs
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
+        with:
+          path: |
+            server/levee_protocol/build
+            server/levee_auth/build
+            server/levee_admin/build
+            ~/.cache/gleam
+          key: gleam-${{ runner.os }}-${{ hashFiles('server/levee_protocol/gleam.toml', 'server/levee_protocol/manifest.toml', 'server/levee_auth/gleam.toml', 'server/levee_auth/manifest.toml', 'server/levee_admin/gleam.toml', 'server/levee_admin/manifest.toml') }}
+          restore-keys: |
+            gleam-${{ runner.os }}-
+
+      - name: Cache Mix deps
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
+        with:
+          path: |
+            server/deps
+            server/_build
+          key: mix-${{ runner.os }}-1.18.4-${{ hashFiles('server/mix.lock') }}
+          restore-keys: |
+            mix-${{ runner.os }}-1.18.4-
+
+      - name: Install dependencies
+        run: just setup-server
+
+      - name: Run tests
+        run: just test-server
+
+  server-lint:
+    name: Server Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+
+      - name: Setup BEAM
+        uses: tylerbutler/actions/setup-gleam@4dd5edb0cc1d941b6db7433504e406c001eea748 # ratchet:tylerbutler/actions/setup-gleam@main
+        with:
+          erlang-version: '28.3'
+          gleam-version: '1.14.0'
+          elixir-version: '1.18.4'
+          working-directory: server
+          run-deps: false
+
+      - name: Cache Gleam build dirs
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
+        with:
+          path: |
+            server/levee_protocol/build
+            server/levee_auth/build
+            server/levee_admin/build
+            ~/.cache/gleam
+          key: gleam-${{ runner.os }}-${{ hashFiles('server/levee_protocol/gleam.toml', 'server/levee_protocol/manifest.toml', 'server/levee_auth/gleam.toml', 'server/levee_auth/manifest.toml', 'server/levee_admin/gleam.toml', 'server/levee_admin/manifest.toml') }}
+          restore-keys: |
+            gleam-${{ runner.os }}-
+
+      - name: Cache Mix deps
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
+        with:
+          path: |
+            server/deps
+            server/_build
+          key: mix-${{ runner.os }}-1.18.4-${{ hashFiles('server/mix.lock') }}
+          restore-keys: |
+            mix-${{ runner.os }}-1.18.4-
+
+      - name: Install dependencies
+        run: just setup-server
+
+      - name: Lint
+        run: just lint-server
+
+  client-test:
+    name: Client Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: tylerbutler/actions/setup-node@4dd5edb0cc1d941b6db7433504e406c001eea748 # ratchet:tylerbutler/actions/setup-node@main
+        with:
+          working-directory: client
+          install-just: false
+
+      - name: Build
+        working-directory: client
+        run: pnpm build
+
+      - name: Test
+        working-directory: client
+        run: pnpm test
+
+  client-lint:
+    name: Client Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: tylerbutler/actions/setup-node@4dd5edb0cc1d941b6db7433504e406c001eea748 # ratchet:tylerbutler/actions/setup-node@main
+        with:
+          working-directory: client
+          install-just: false
+
+      - name: Lint
+        working-directory: client
+        run: pnpm check
+
+  docker:
+    name: Docker Build
+    needs: [server-test, client-test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # ratchet:docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # ratchet:docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix=
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
+        with:
+          context: ./server
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
