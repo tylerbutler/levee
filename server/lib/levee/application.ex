@@ -73,11 +73,13 @@ defmodule Levee.Application do
     # Try multiple possible locations for Gleam build output:
     # 1. Development: relative to app root (mix compile)
     # 2. Release: in /app/<package> (Docker)
+    repo_root = Path.expand("..", app_root)
+
     base_paths = [
       Path.join([app_root, "levee_protocol", "build", "dev", "erlang"]),
       Path.join([app_root, "levee_auth", "build", "dev", "erlang"]),
-      Path.join([app_root, "beryl", "build", "dev", "erlang"]),
-      Path.join([app_root, "levee_channels", "build", "dev", "erlang"]),
+      Path.join([repo_root, "beryl", "build", "dev", "erlang"]),
+      Path.join([repo_root, "levee_channels", "build", "dev", "erlang"]),
       "/app/levee_protocol/build/dev/erlang",
       "/app/levee_auth/build/dev/erlang",
       "/app/beryl/build/dev/erlang",

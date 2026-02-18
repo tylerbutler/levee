@@ -74,7 +74,7 @@ defmodule Levee.MixProject do
   end
 
   defp gleam_build(_args) do
-    gleam_projects = ["levee_protocol", "levee_auth", "beryl", "levee_channels"]
+    gleam_projects = ["levee_protocol", "levee_auth", "../beryl", "../levee_channels"]
 
     Enum.each(gleam_projects, fn gleam_path ->
       if File.dir?(gleam_path) do
