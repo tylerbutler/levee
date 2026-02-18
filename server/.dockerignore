@@ -1,0 +1,41 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+_build
+deps
+.elixir_ls
+
+# Gleam build artifacts (will be rebuilt)
+levee_protocol/build
+levee_auth/build
+levee_admin/build
+
+# Editor/IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Claude
+.claude
+
+# Documentation
+*.md
+!README.md
+
+# Test
+test
+.formatter.exs
+
+# Local config
+*.local.exs
+
+# Misc
+.DS_Store
+Thumbs.db
+justfile
+hk.pkl
+mise.toml
