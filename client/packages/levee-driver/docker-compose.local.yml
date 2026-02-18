@@ -1,0 +1,11 @@
+# Docker Compose override for building from local Levee server source
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --wait --build
+
+services:
+  levee:
+    image: levee:local
+    build:
+      context: ../../../server
+      dockerfile: Dockerfile

@@ -1,0 +1,32 @@
+name: Auto-tag Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  server-tag:
+    if: github.event.pull_request.merged && contains(github.event.pull_request.labels.*.name, 'release:server')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+
+      - uses: tylerbutler/actions/changie-auto-tag@4dd5edb0cc1d941b6db7433504e406c001eea748 # ratchet:tylerbutler/actions/changie-auto-tag@main
+        with:
+          working-directory: server
+          tag-prefix: 'server/'
+
+  client-tag:
+    if: github.event.pull_request.merged && contains(github.event.pull_request.labels.*.name, 'release:client')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+
+      - uses: tylerbutler/actions/changie-auto-tag@4dd5edb0cc1d941b6db7433504e406c001eea748 # ratchet:tylerbutler/actions/changie-auto-tag@main
+        with:
+          working-directory: client
+          tag-prefix: 'client/'

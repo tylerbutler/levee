@@ -1,0 +1,71 @@
+name: Server Release PR
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          token: ${{ secrets.RELEASE_PAT }}
+
+      - uses: tylerbutler/actions/changie-release@4dd5edb0cc1d941b6db7433504e406c001eea748 # ratchet:tylerbutler/actions/changie-release@main
+        id: release
+        with:
+          token: ${{ secrets.RELEASE_PAT }}
+          working-directory: server
+          labels: release:server
+          pr-title-template: 'Release server {version}'
+          branch-template: 'release/server-{version}'
+          commit-message-template: 'chore(server): release {version}'
+          version-files: |
+            levee_protocol/gleam.toml:version
+            levee_auth/gleam.toml:version
+            levee_admin/gleam.toml:version
+
+      - name: Bump mix.exs version
+        if: steps.release.outputs.skipped != 'true'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          PR_BRANCH: ${{ steps.release.outputs.pr-branch }}
+        shell: bash
+        run: |
+          SEMVER="${VERSION#v}"
+          sed -i "s/version: \".*\"/version: \"${SEMVER}\"/" server/mix.exs
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout "$PR_BRANCH"
+          git add server/mix.exs
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(server): bump mix.exs version to ${SEMVER}"
+            git push origin "$PR_BRANCH"
+          fi
+
+      - name: Summary
+        if: steps.release.outputs.skipped != 'true'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          PR_URL: ${{ steps.release.outputs.pr-url }}
+          PR_OP: ${{ steps.release.outputs.pr-operation }}
+        run: |
+          echo "### Server Release PR" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Version:** $VERSION" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **PR:** $PR_URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Operation:** $PR_OP" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Skipped
+        if: steps.release.outputs.skipped == 'true'
+        run: |
+          echo "### Server Release Skipped" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "No unreleased server change fragments found." >> "$GITHUB_STEP_SUMMARY"

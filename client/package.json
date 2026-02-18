@@ -1,0 +1,30 @@
+{
+	"name": "@tylerbu/levee-client-workspace",
+	"version": "0.0.0",
+	"private": true,
+	"description": "TypeScript client packages for Levee collaborative document service",
+	"license": "MIT",
+	"author": "Tyler Butler <tyler@tylerbutler.com>",
+	"type": "module",
+	"scripts": {
+		"build": "workspaces-to-typescript-project-references && tsc --build",
+		"check": "biome check .",
+		"check:format": "biome format .",
+		"check:references": "workspaces-to-typescript-project-references --check",
+		"fix:references": "workspaces-to-typescript-project-references",
+		"clean": "rimraf --glob \"packages/*/esm\" \"packages/*/dist\" \"packages/*/*.tsbuildinfo\"",
+		"format": "biome check . --linter-enabled=false --write",
+		"lint": "biome lint .",
+		"lint:fix": "biome lint . --write",
+		"test": "vitest run"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.3.8",
+		"@monorepo-utils/workspaces-to-typescript-project-references": "^2.11.0",
+		"@tsconfig/node18": "^18.2.6",
+		"rimraf": "^6.1.2",
+		"typescript": "~5.9.3",
+		"vitest": "^4.0.18"
+	},
+	"packageManager": "pnpm@10.24.0"
+}
