@@ -24,7 +24,7 @@ config :levee, LeveeWeb.Endpoint, http: [port: String.to_integer(System.get_env(
 
 # Configure storage backend based on environment variable
 if database_url = System.get_env("DATABASE_URL") do
-  config :levee, Levee.Repo,
+  config :levee, Levee.Store,
     url: database_url,
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10")
 
@@ -55,7 +55,7 @@ if config_env() == :prod do
       For example: ecto://USER:PASS@HOST/DATABASE
       """
 
-  config :levee, Levee.Repo,
+  config :levee, Levee.Store,
     url: database_url,
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
     socket_options: if(System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: [])

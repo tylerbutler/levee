@@ -19,7 +19,7 @@ defmodule Levee.Storage.Postgres do
 
   import Ecto.Query
 
-  alias Levee.Repo
+  alias Levee.Store
   alias Levee.Storage.Schemas.{Document, Delta, Blob, Tree, Commit, Ref, Summary}
 
   @max_deltas_per_request 2000
@@ -34,7 +34,7 @@ defmodule Levee.Storage.Postgres do
       sequence_number: params[:sequence_number] || 0
     }
 
-    case %Document{} |> Document.changeset(attrs) |> Repo.insert() do
+    case %Document{} |> Document.changeset(attrs) |> Store.insert() do
       {:ok, doc} ->
         {:ok, Document.to_storage_format(doc)}
 
@@ -54,7 +54,7 @@ defmodule Levee.Storage.Postgres do
         where: d.tenant_id == ^tenant_id and d.id == ^document_id
       )
 
-    case Repo.one(query) do
+    case Store.one(query) do
       nil -> {:error, :not_found}
       doc -> {:ok, Document.to_storage_format(doc)}
     end
@@ -67,14 +67,14 @@ defmodule Levee.Storage.Postgres do
         where: d.tenant_id == ^tenant_id and d.id == ^document_id
       )
 
-    case Repo.one(query) do
+    case Store.one(query) do
       nil ->
         {:error, :not_found}
 
       doc ->
         doc
         |> Document.changeset(%{sequence_number: sequence_number})
-        |> Repo.update()
+        |> Store.update()
         |> case do
           {:ok, updated} -> {:ok, Document.to_storage_format(updated)}
           {:error, changeset} -> {:error, changeset.errors}
@@ -100,7 +100,7 @@ defmodule Levee.Storage.Postgres do
       timestamp: delta.timestamp
     }
 
-    case %Delta{} |> Delta.changeset(attrs) |> Repo.insert() do
+    case %Delta{} |> Delta.changeset(attrs) |> Store.insert() do
       {:ok, stored} -> {:ok, Delta.to_storage_format(stored)}
       {:error, changeset} -> {:error, changeset.errors}
     end
@@ -133,7 +133,7 @@ defmodule Levee.Storage.Postgres do
       end
 
     deltas =
-      Repo.all(query)
+      Store.all(query)
       |> Enum.map(&Delta.to_storage_format/1)
 
     {:ok, deltas}
@@ -155,7 +155,7 @@ defmodule Levee.Storage.Postgres do
     # Use upsert to handle duplicate SHAs (content-addressable storage)
     case %Blob{}
          |> Blob.changeset(attrs)
-         |> Repo.insert(
+         |> Store.insert(
            on_conflict: :nothing,
            conflict_target: [:tenant_id, :sha]
          ) do
@@ -175,7 +175,7 @@ defmodule Levee.Storage.Postgres do
         where: b.tenant_id == ^tenant_id and b.sha == ^sha
       )
 
-    case Repo.one(query) do
+    case Store.one(query) do
       nil -> {:error, :not_found}
       blob -> {:ok, Blob.to_storage_format(blob)}
     end
@@ -208,7 +208,7 @@ defmodule Levee.Storage.Postgres do
 
     case %Tree{}
          |> Tree.changeset(attrs)
-         |> Repo.insert(
+         |> Store.insert(
            on_conflict: :nothing,
            conflict_target: [:tenant_id, :sha]
          ) do
@@ -240,7 +240,7 @@ defmodule Levee.Storage.Postgres do
         where: t.tenant_id == ^tenant_id and t.sha == ^sha
       )
 
-    case Repo.one(query) do
+    case Store.one(query) do
       nil ->
         {:error, :not_found}
 
@@ -311,7 +311,7 @@ defmodule Levee.Storage.Postgres do
 
     case %Commit{}
          |> Commit.changeset(attrs)
-         |> Repo.insert(
+         |> Store.insert(
            on_conflict: :nothing,
            conflict_target: [:tenant_id, :sha]
          ) do
@@ -339,7 +339,7 @@ defmodule Levee.Storage.Postgres do
         where: c.tenant_id == ^tenant_id and c.sha == ^sha
       )
 
-    case Repo.one(query) do
+    case Store.one(query) do
       nil -> {:error, :not_found}
       commit -> {:ok, Commit.to_storage_format(commit)}
     end
@@ -355,7 +355,7 @@ defmodule Levee.Storage.Postgres do
       sha: sha
     }
 
-    case %Ref{} |> Ref.changeset(attrs) |> Repo.insert() do
+    case %Ref{} |> Ref.changeset(attrs) |> Store.insert() do
       {:ok, ref} ->
         {:ok, Ref.to_storage_format(ref)}
 
@@ -375,7 +375,7 @@ defmodule Levee.Storage.Postgres do
         where: r.tenant_id == ^tenant_id and r.ref_path == ^ref_path
       )
 
-    case Repo.one(query) do
+    case Store.one(query) do
       nil -> {:error, :not_found}
       ref -> {:ok, Ref.to_storage_format(ref)}
     end
@@ -389,7 +389,7 @@ defmodule Levee.Storage.Postgres do
       )
 
     refs =
-      Repo.all(query)
+      Store.all(query)
       |> Enum.map(&Ref.to_storage_format/1)
 
     {:ok, refs}
@@ -402,14 +402,14 @@ defmodule Levee.Storage.Postgres do
         where: r.tenant_id == ^tenant_id and r.ref_path == ^ref_path
       )
 
-    case Repo.one(query) do
+    case Store.one(query) do
       nil ->
         {:error, :not_found}
 
       ref ->
         ref
         |> Ref.changeset(%{sha: sha})
-        |> Repo.update()
+        |> Store.update()
         |> case do
           {:ok, updated} -> {:ok, Ref.to_storage_format(updated)}
           {:error, changeset} -> {:error, changeset.errors}
@@ -432,7 +432,7 @@ defmodule Levee.Storage.Postgres do
       message: summary.message
     }
 
-    case %Summary{} |> Summary.changeset(attrs) |> Repo.insert() do
+    case %Summary{} |> Summary.changeset(attrs) |> Store.insert() do
       {:ok, stored} ->
         {:ok, Summary.to_storage_format(stored)}
 
@@ -451,7 +451,7 @@ defmodule Levee.Storage.Postgres do
             s.handle == ^handle
       )
 
-    case Repo.one(query) do
+    case Store.one(query) do
       nil -> {:error, :not_found}
       summary -> {:ok, Summary.to_storage_format(summary)}
     end
@@ -466,7 +466,7 @@ defmodule Levee.Storage.Postgres do
         limit: 1
       )
 
-    case Repo.one(query) do
+    case Store.one(query) do
       nil -> {:error, :not_found}
       summary -> {:ok, Summary.to_storage_format(summary)}
     end
@@ -488,7 +488,7 @@ defmodule Levee.Storage.Postgres do
       )
 
     summaries =
-      Repo.all(query)
+      Store.all(query)
       |> Enum.map(&Summary.to_storage_format/1)
 
     {:ok, summaries}

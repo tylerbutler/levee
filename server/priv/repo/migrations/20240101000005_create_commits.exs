@@ -1,4 +1,4 @@
-defmodule Levee.Repo.Migrations.CreateCommits do
+defmodule Levee.Store.Migrations.CreateCommits do
   use Ecto.Migration
 
   def change do

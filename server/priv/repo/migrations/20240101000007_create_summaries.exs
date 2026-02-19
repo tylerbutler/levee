@@ -1,4 +1,4 @@
-defmodule Levee.Repo.Migrations.CreateSummaries do
+defmodule Levee.Store.Migrations.CreateSummaries do
   use Ecto.Migration
 
   def change do

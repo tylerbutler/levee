@@ -69,7 +69,7 @@ defmodule Levee.Application do
     case Application.get_env(:levee, :storage_backend, Levee.Storage.ETS) do
       Levee.Storage.Postgres ->
         # PostgreSQL backend - start Repo
-        [Levee.Repo]
+        [Levee.Store]
 
       Levee.Storage.ETS ->
         # ETS backend (default)

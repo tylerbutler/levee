@@ -1,4 +1,4 @@
-defmodule Levee.Repo.Migrations.CreateAuthTables do
+defmodule Levee.Store.Migrations.CreateAuthTables do
   use Ecto.Migration
 
   def change do

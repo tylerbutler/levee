@@ -3,7 +3,7 @@ import Config
 config :levee, env: :dev
 
 # Configure the Repo for development
-config :levee, Levee.Repo,
+config :levee, Levee.Store,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",

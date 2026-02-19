@@ -18,7 +18,7 @@ defmodule Levee.DataCase do
 
   using do
     quote do
-      alias Levee.Repo
+      alias Levee.Store
 
       import Ecto
       import Ecto.Changeset
@@ -38,7 +38,7 @@ defmodule Levee.DataCase do
   def setup_sandbox(tags) do
     # Only set up sandbox if using PostgreSQL backend
     if Application.get_env(:levee, :storage_backend) == Levee.Storage.Postgres do
-      pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Levee.Repo, shared: not tags[:async])
+      pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Levee.Store, shared: not tags[:async])
       on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
     end
   end

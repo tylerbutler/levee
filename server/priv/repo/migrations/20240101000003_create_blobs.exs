@@ -1,4 +1,4 @@
-defmodule Levee.Repo.Migrations.CreateBlobs do
+defmodule Levee.Store.Migrations.CreateBlobs do
   use Ecto.Migration
 
   def change do

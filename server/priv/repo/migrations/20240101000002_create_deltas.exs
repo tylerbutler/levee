@@ -1,4 +1,4 @@
-defmodule Levee.Repo.Migrations.CreateDeltas do
+defmodule Levee.Store.Migrations.CreateDeltas do
   use Ecto.Migration
 
   def change do

@@ -1,4 +1,4 @@
-defmodule Levee.Repo.Migrations.CreateTrees do
+defmodule Levee.Store.Migrations.CreateTrees do
   use Ecto.Migration
 
   def change do

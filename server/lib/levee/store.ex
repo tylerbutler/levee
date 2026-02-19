@@ -1,4 +1,4 @@
-defmodule Levee.Repo do
+defmodule Levee.Store do
   @moduledoc """
   Ecto repository for PostgreSQL storage backend.
 
