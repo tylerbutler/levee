@@ -123,6 +123,22 @@ defmodule LeveeWeb.Router do
     patch "/refs/*ref", GitController, :update_ref
   end
 
+  # Admin API routes (requires LEVEE_ADMIN_KEY)
+  pipeline :admin_auth do
+    plug :accepts, ["json"]
+    plug LeveeWeb.Plugs.AdminAuth
+  end
+
+  scope "/api/admin", LeveeWeb do
+    pipe_through :admin_auth
+
+    get "/tenants", TenantAdminController, :index
+    post "/tenants", TenantAdminController, :create
+    get "/tenants/:id", TenantAdminController, :show
+    put "/tenants/:id", TenantAdminController, :update
+    delete "/tenants/:id", TenantAdminController, :delete
+  end
+
   # Admin UI - SPA catch-all (serves index.html for all /admin/* paths)
   pipeline :browser do
     plug :accepts, ["html"]
