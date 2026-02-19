@@ -162,7 +162,7 @@ defmodule Levee.Documents.Session do
   end
 
   defp load_latest_summary(tenant_id, document_id) do
-    case Levee.Storage.ETS.get_latest_summary(tenant_id, document_id) do
+    case Levee.Storage.get_latest_summary(tenant_id, document_id) do
       {:ok, summary} ->
         %{
           handle: summary.handle,
@@ -340,9 +340,12 @@ defmodule Levee.Documents.Session do
     case Bridge.update_client_rsn(state.sequence_state, client_id, rsn) do
       {:ok, new_sequence_state} ->
         new_clients =
-          case Map.get(state.clients, client_id) do
-            nil -> state.clients
-            client_info -> Map.put(state.clients, client_id, %{client_info | last_seen_sn: rsn})
+          case Map.fetch(state.clients, client_id) do
+            {:ok, client_info} ->
+              Map.put(state.clients, client_id, %{client_info | last_seen_sn: rsn})
+
+            :error ->
+              state.clients
           end
 
         {:noreply, %{state | sequence_state: new_sequence_state, clients: new_clients}}
@@ -462,30 +465,21 @@ defmodule Levee.Documents.Session do
   # Negotiate features between client and server capabilities
   # Returns features that both client and server support
   defp negotiate_features(client_features) when is_map(client_features) do
-    # Start with server's supported features
-    # For each feature, check if client also supports it
-    @supported_features
-    |> Enum.map(fn {feature, server_value} ->
-      client_value = Map.get(client_features, feature)
-
-      negotiated_value =
-        case {server_value, client_value} do
-          # Both support it as boolean
-          {true, true} -> true
-          # Server supports, client doesn't specify - advertise server capability
-          {true, nil} -> true
-          # Feature not supported by client
-          {true, false} -> false
-          # Other cases - use server value
-          _ -> server_value
-        end
-
-      {feature, negotiated_value}
+    Map.new(@supported_features, fn {feature, server_value} ->
+      {feature, negotiate_feature_value(server_value, Map.get(client_features, feature))}
     end)
-    |> Map.new()
   end
 
   defp negotiate_features(_), do: @supported_features
+
+  # Server supports (true), client explicitly supports (true)
+  defp negotiate_feature_value(true, true), do: true
+  # Server supports, client doesn't specify - advertise server capability
+  defp negotiate_feature_value(true, nil), do: true
+  # Server supports, but client explicitly declines
+  defp negotiate_feature_value(true, false), do: false
+  # Default: use server value
+  defp negotiate_feature_value(server_value, _), do: server_value
 
   # Negotiate protocol version based on client's supported version ranges
   # For now, we use a simple approach: return the first server version
@@ -633,7 +627,7 @@ defmodule Levee.Documents.Session do
       message: message
     }
 
-    {:ok, _stored} = Levee.Storage.ETS.store_summary(tenant_id, document_id, summary)
+    {:ok, _stored} = Levee.Storage.store_summary(tenant_id, document_id, summary)
     {:ok, handle}
   end
 
@@ -766,12 +760,12 @@ defmodule Levee.Documents.Session do
     # We use from_checkpoint to update the SN since we're manually incrementing
     updated_sequence_state = Bridge.sequence_state_from_checkpoint(new_sn, msn)
 
-    # Re-register all clients with their current RSN
+    # Re-register all clients with the new SN as their join RSN
     # This is needed because from_checkpoint creates a fresh state
     final_sequence_state =
       Enum.reduce(Bridge.connected_clients(sequence_state), updated_sequence_state, fn cid, acc ->
-        # Use the current SN as the join RSN for existing clients
-        Bridge.client_join(acc, cid, current_sn)
+        # Use new_sn since from_checkpoint reset the state to this sequence number
+        Bridge.client_join(acc, cid, new_sn)
       end)
 
     # Add to history

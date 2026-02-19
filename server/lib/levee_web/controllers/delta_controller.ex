@@ -8,7 +8,7 @@ defmodule LeveeWeb.DeltaController do
 
   use LeveeWeb, :controller
 
-  alias Levee.Storage.ETS, as: Storage
+  alias Levee.Storage
 
   @max_ops_per_request 2000
 

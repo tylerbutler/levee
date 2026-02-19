@@ -31,7 +31,9 @@ defmodule LeveeWeb.ConnCase do
     end
   end
 
-  setup _tags do
+  setup tags do
+    # Set up database sandbox if using PostgreSQL backend
+    Levee.DataCase.setup_sandbox(tags)
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
 end

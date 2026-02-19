@@ -8,8 +8,10 @@
 import Config
 
 config :levee,
-  ecto_repos: [Levee.Repo],
-  generators: [timestamp_type: :utc_datetime]
+  generators: [timestamp_type: :utc_datetime],
+  ecto_repos: [Levee.Store],
+  # Storage backend: Levee.Storage.ETS (default) or Levee.Storage.Postgres
+  storage_backend: Levee.Storage.ETS
 
 # Configure the endpoint
 config :levee, LeveeWeb.Endpoint,

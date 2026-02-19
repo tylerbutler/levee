@@ -31,6 +31,11 @@ defmodule LeveeWeb.Router do
     plug Auth, scopes: ["doc:read", "summary:write"]
   end
 
+  # Session-based auth for auth management routes (me, logout)
+  pipeline :session_auth do
+    plug LeveeWeb.Plugs.SessionAuth
+  end
+
   # Public API routes (health checks, etc.)
   scope "/", LeveeWeb do
     pipe_through :api
@@ -44,6 +49,12 @@ defmodule LeveeWeb.Router do
 
     post "/register", AuthController, :register
     post "/login", AuthController, :login
+  end
+
+  # Auth API routes (require valid session)
+  scope "/api/auth", LeveeWeb do
+    pipe_through [:api, :session_auth]
+
     post "/logout", AuthController, :logout
     get "/me", AuthController, :me
   end

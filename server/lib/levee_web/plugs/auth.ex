@@ -127,10 +127,9 @@ defmodule LeveeWeb.Plugs.Auth do
   end
 
   defp validate_expiration(claims) do
-    if JWT.expired?(claims) do
-      {:error, :token_expired}
-    else
-      :ok
+    case JWT.expired?(claims) do
+      true -> {:error, :token_expired}
+      false -> :ok
     end
   end
 
@@ -142,39 +141,29 @@ defmodule LeveeWeb.Plugs.Auth do
     end
   end
 
+  defp validate_document(_claims, _conn, %{validate_document: false}), do: :ok
+
   defp validate_document(claims, conn, opts) do
-    if opts.validate_document do
-      param_name = opts.document_param
+    param_name = opts.document_param
 
-      case conn.params[param_name] || conn.path_params[param_name] do
-        nil ->
-          # No document in route, skip validation
-          :ok
+    case conn.params[param_name] || conn.path_params[param_name] do
+      nil ->
+        :ok
 
-        document_id ->
-          if claims.documentId == document_id do
-            :ok
-          else
-            {:error, {:document_mismatch, claims.documentId, document_id}}
-          end
-      end
-    else
-      :ok
+      document_id when document_id == claims.documentId ->
+        :ok
+
+      document_id ->
+        {:error, {:document_mismatch, claims.documentId, document_id}}
     end
   end
 
   defp validate_scopes(claims, opts) do
-    required_scopes = opts.scopes
+    missing = Enum.reject(opts.scopes, &JWT.has_scope?(claims, &1))
 
-    missing =
-      Enum.reject(required_scopes, fn scope ->
-        JWT.has_scope?(claims, scope)
-      end)
-
-    if Enum.empty?(missing) do
-      :ok
-    else
-      {:error, {:missing_scopes, missing}}
+    case missing do
+      [] -> :ok
+      _ -> {:error, {:missing_scopes, missing}}
     end
   end
 

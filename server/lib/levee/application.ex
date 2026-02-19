@@ -10,14 +10,17 @@ defmodule Levee.Application do
     # Add Gleam compiled modules to the code path
     load_gleam_modules()
 
+    # Start storage backend based on configuration
+    storage_children = storage_children()
+
     children =
-      maybe_start_repo() ++
+      [
+        LeveeWeb.Telemetry,
+        {DNSCluster, query: Application.get_env(:levee, :dns_cluster_query) || :ignore},
+        {Phoenix.PubSub, name: Levee.PubSub}
+      ] ++
+        storage_children ++
         [
-          LeveeWeb.Telemetry,
-          {DNSCluster, query: Application.get_env(:levee, :dns_cluster_query) || :ignore},
-          {Phoenix.PubSub, name: Levee.PubSub},
-          # ETS-based storage backend (must start before other services)
-          Levee.Storage.ETS,
           # Registry for looking up document sessions by {tenant_id, document_id}
           {Registry, keys: :unique, name: Levee.SessionRegistry},
           # Tenant secrets for JWT authentication
@@ -59,6 +62,23 @@ defmodule Levee.Application do
   def config_change(changed, _new, removed) do
     LeveeWeb.Endpoint.config_change(changed, removed)
     :ok
+  end
+
+  # Return the appropriate storage backend children based on configuration
+  defp storage_children do
+    case Application.get_env(:levee, :storage_backend, Levee.Storage.ETS) do
+      Levee.Storage.Postgres ->
+        # PostgreSQL backend - start Store
+        [Levee.Store]
+
+      Levee.Storage.ETS ->
+        # ETS backend (default)
+        [Levee.Storage.ETS]
+
+      _other ->
+        # Default to ETS
+        [Levee.Storage.ETS]
+    end
   end
 
   # Load Gleam compiled BEAM files into the code path
@@ -110,14 +130,23 @@ defmodule Levee.Application do
         end)
       end
     end
-  end
 
-  # Only start the Repo if database is configured and available
-  defp maybe_start_repo do
-    if Application.get_env(:levee, :start_repo, true) do
-      [Levee.Repo]
-    else
-      []
-    end
+    # Verify critical Gleam modules loaded successfully
+    required_modules = [:levee_protocol, :password_ffi]
+
+    Enum.each(required_modules, fn mod ->
+      case :code.ensure_loaded(mod) do
+        {:module, ^mod} ->
+          :ok
+
+        {:error, reason} ->
+          require Logger
+
+          Logger.error(
+            "Failed to load required Gleam module #{mod}: #{inspect(reason)}. " <>
+              "Run 'just build-gleam' to compile Gleam packages."
+          )
+      end
+    end)
   end
 end

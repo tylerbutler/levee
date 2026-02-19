@@ -359,20 +359,17 @@ defmodule LeveeWeb.DocumentChannel do
 
   # JWT validation
 
-  defp validate_token(connect_msg, socket) do
-    token = connect_msg["token"]
+  defp validate_token(%{"token" => token}, socket) when is_binary(token) and token != "" do
     tenant_id = socket.assigns.tenant_id
     document_id = socket.assigns.document_id
 
-    if is_nil(token) or token == "" do
-      {:error, :missing_token}
-    else
-      with {:ok, claims} <- verify_and_wrap_error(token, tenant_id),
-           :ok <- validate_claims_for_connection(claims, tenant_id, document_id) do
-        {:ok, claims}
-      end
+    with {:ok, claims} <- verify_and_wrap_error(token, tenant_id),
+         :ok <- validate_claims_for_connection(claims, tenant_id, document_id) do
+      {:ok, claims}
     end
   end
+
+  defp validate_token(_connect_msg, _socket), do: {:error, :missing_token}
 
   defp verify_and_wrap_error(token, tenant_id) do
     case JWT.verify(token, tenant_id) do
@@ -410,12 +407,11 @@ defmodule LeveeWeb.DocumentChannel do
     end
   end
 
-  defp has_write_scope?(socket) do
-    case socket.assigns[:claims] do
-      nil -> false
-      claims -> JWT.has_write_scope?(claims)
-    end
+  defp has_write_scope?(%{assigns: %{claims: claims}}) when is_map(claims) do
+    JWT.has_write_scope?(claims)
   end
+
+  defp has_write_scope?(_socket), do: false
 
   defp push_nack(socket, code, type, message) do
     push(socket, "nack", %{
@@ -507,41 +503,31 @@ defmodule LeveeWeb.DocumentChannel do
 
   # Process signal batches, detecting and normalizing v1/v2 formats
   defp process_signal_batches(batches) when is_list(batches) do
-    Enum.flat_map(batches, fn batch ->
-      case batch do
-        # Batch is a list of signals
-        signals when is_list(signals) ->
-          Enum.map(signals, &normalize_signal/1)
-
-        # Single signal (not in a list)
-        signal when is_map(signal) ->
-          [normalize_signal(signal)]
-
-        # JSON-stringified signal (v1 format)
-        signal when is_binary(signal) ->
-          case Jason.decode(signal) do
-            {:ok, decoded} -> [normalize_signal(decoded)]
-            {:error, _} -> []
-          end
-
-        _ ->
-          []
-      end
-    end)
+    Enum.flat_map(batches, &normalize_batch/1)
   end
 
   defp process_signal_batches(_), do: []
 
+  defp normalize_batch(signals) when is_list(signals), do: Enum.map(signals, &normalize_signal/1)
+  defp normalize_batch(signal) when is_map(signal), do: [normalize_signal(signal)]
+
+  defp normalize_batch(signal) when is_binary(signal) do
+    case Jason.decode(signal) do
+      {:ok, decoded} -> [normalize_signal(decoded)]
+      {:error, _} -> []
+    end
+  end
+
+  defp normalize_batch(_), do: []
+
   # Normalize a signal to a consistent internal format
   # Handles both v1 and v2 signal formats
   defp normalize_signal(signal) when is_map(signal) do
-    # Detect format: v1 has "address" and "contents", v2 has "content" directly
-    is_v1 = Map.has_key?(signal, "address") or Map.has_key?(signal, "contents")
-
-    if is_v1 do
-      normalize_v1_signal(signal)
-    else
-      normalize_v2_signal(signal)
+    # v1 format has "address" or "contents" keys; v2 has "content" directly
+    case {Map.has_key?(signal, "address"), Map.has_key?(signal, "contents")} do
+      {true, _} -> normalize_v1_signal(signal)
+      {_, true} -> normalize_v1_signal(signal)
+      _ -> normalize_v2_signal(signal)
     end
   end
 
