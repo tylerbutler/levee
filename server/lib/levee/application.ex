@@ -83,53 +83,29 @@ defmodule Levee.Application do
 
   # Load Gleam compiled BEAM files into the code path
   defp load_gleam_modules do
-    # In dev, Gleam packages are siblings in the project root (File.cwd!()).
-    # priv_dir points into _build/ which is NOT the project root.
+    # In dev/test, the project root is File.cwd!() (where mix.exs lives).
+    # In releases, Gleam packages are copied to /app/<package>.
     project_root = File.cwd!()
 
+    gleam_packages = ["levee_protocol", "levee_auth"]
+
     base_paths =
-      for pkg <- ["levee_protocol", "levee_auth"] do
-        Path.join([project_root, pkg, "build", "dev", "erlang"])
-      end ++
+      Enum.flat_map(gleam_packages, fn pkg ->
         [
-          # Release: in /app/<package> (Docker)
-          "/app/levee_protocol/build/dev/erlang",
-          "/app/levee_auth/build/dev/erlang"
+          Path.join([project_root, pkg, "build", "dev", "erlang"]),
+          Path.join(["/app", pkg, "build", "dev", "erlang"])
         ]
+      end)
 
-    gleam_modules = [
-      "levee_protocol",
-      "levee_auth",
-      "gleam_stdlib",
-      "gleam_crypto",
-      "gleam_json",
-      "gleam_time",
-      "youid"
-    ]
-
-    for base <- base_paths, mod <- gleam_modules do
-      path = Path.join([base, mod, "ebin"]) |> Path.expand()
-
-      if File.dir?(path) do
-        :code.add_patha(String.to_charlist(path))
-      end
-    end
-
-    # Explicitly load all Gleam modules to ensure they're available
-    # Gleam creates separate BEAM files for each submodule (e.g., levee_protocol@sequencing, gleam@dict)
-    for base <- base_paths, mod <- gleam_modules do
-      ebin_path = Path.join([base, mod, "ebin"]) |> Path.expand()
-
-      if File.dir?(ebin_path) do
-        ebin_path
-        |> File.ls!()
-        |> Enum.filter(&String.ends_with?(&1, ".beam"))
-        |> Enum.map(&String.trim_trailing(&1, ".beam"))
-        |> Enum.each(fn module_name ->
-          module_atom = String.to_atom(module_name)
-          :code.load_file(module_atom)
-        end)
-      end
+    # Find all ebin directories under each base path and add them to the code path
+    for base <- base_paths, File.dir?(base) do
+      base
+      |> File.ls!()
+      |> Enum.map(&Path.join([base, &1, "ebin"]))
+      |> Enum.filter(&File.dir?/1)
+      |> Enum.each(fn ebin_path ->
+        :code.add_patha(String.to_charlist(ebin_path))
+      end)
     end
 
     # Verify critical Gleam modules loaded successfully
