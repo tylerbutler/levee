@@ -179,3 +179,39 @@ pub fn message_too_large(
     ),
   )
 }
+
+/// Create a nack for an invalid RSN
+pub fn invalid_rsn(
+  current_sn: Int,
+  received_rsn: Int,
+  op: Option(DocumentMessage),
+) -> Nack {
+  Nack(
+    operation: op,
+    sequence_number: -1,
+    content: NackContent(
+      code: 400,
+      error_type: BadRequestError,
+      message: "Invalid RSN: current SN is "
+        <> int.to_string(current_sn)
+        <> ", received "
+        <> int.to_string(received_rsn),
+      retry_after: option.None,
+    ),
+  )
+}
+
+/// Create a nack for an unknown client
+pub fn unknown_client(client_id: String) -> Nack {
+  Nack(
+    operation: option.None,
+    sequence_number: -1,
+    content: NackContent(
+      code: 400,
+      error_type: BadRequestError,
+      message: "Unknown client: " <> client_id,
+      retry_after: option.None,
+    ),
+  )
+}
+

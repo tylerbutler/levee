@@ -23,6 +23,7 @@ defmodule LeveeWeb.DocumentChannel do
 
   alias Levee.Auth.JWT
   alias Levee.Documents.Session
+  alias Levee.Protocol.Bridge
 
   require Logger
 
@@ -200,8 +201,8 @@ defmodule LeveeWeb.DocumentChannel do
       true ->
         session_pid = socket.assigns.session_pid
 
-        # Process signal batches - normalize v1/v2 formats
-        processed_signals = process_signal_batches(batches)
+        # Process signal batches - normalize v1/v2 formats via Gleam
+        processed_signals = Enum.flat_map(batches, &Bridge.normalize_signal_batch/1)
         Session.submit_signals(session_pid, client_id, processed_signals)
 
         {:noreply, socket}
@@ -496,83 +497,4 @@ defmodule LeveeWeb.DocumentChannel do
 
   defp format_connect_error(reason) when is_binary(reason), do: {400, reason}
   defp format_connect_error(reason), do: {400, inspect(reason)}
-
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Signal Processing Helpers
-  # ─────────────────────────────────────────────────────────────────────────────
-
-  # Process signal batches, detecting and normalizing v1/v2 formats
-  defp process_signal_batches(batches) when is_list(batches) do
-    Enum.flat_map(batches, &normalize_batch/1)
-  end
-
-  defp process_signal_batches(_), do: []
-
-  defp normalize_batch(signals) when is_list(signals), do: Enum.map(signals, &normalize_signal/1)
-  defp normalize_batch(signal) when is_map(signal), do: [normalize_signal(signal)]
-
-  defp normalize_batch(signal) when is_binary(signal) do
-    case Jason.decode(signal) do
-      {:ok, decoded} -> [normalize_signal(decoded)]
-      {:error, _} -> []
-    end
-  end
-
-  defp normalize_batch(_), do: []
-
-  # Normalize a signal to a consistent internal format
-  # Handles both v1 and v2 signal formats
-  defp normalize_signal(signal) when is_map(signal) do
-    # v1 format has "address" or "contents" keys; v2 has "content" directly
-    case {Map.has_key?(signal, "address"), Map.has_key?(signal, "contents")} do
-      {true, _} -> normalize_v1_signal(signal)
-      {_, true} -> normalize_v1_signal(signal)
-      _ -> normalize_v2_signal(signal)
-    end
-  end
-
-  defp normalize_signal(signal) when is_binary(signal) do
-    # Try to parse JSON string (v1 format typically sends stringified envelopes)
-    case Jason.decode(signal) do
-      {:ok, decoded} -> normalize_signal(decoded)
-      {:error, _} -> %{"content" => signal, "type" => nil}
-    end
-  end
-
-  defp normalize_signal(_), do: %{"content" => nil, "type" => nil}
-
-  # Normalize v1 signal format to internal format
-  # V1: {address, contents: {type, content}, clientBroadcastSignalSequenceNumber}
-  defp normalize_v1_signal(signal) do
-    contents = signal["contents"] || %{}
-
-    %{
-      "content" => contents["content"],
-      "type" => contents["type"],
-      # V1 doesn't have targeting, so these are nil
-      "targetClientId" => nil,
-      "targetedClients" => nil,
-      "ignoredClients" => nil,
-      # Map v1 sequence number to connection number
-      "clientConnectionNumber" => signal["clientBroadcastSignalSequenceNumber"]
-    }
-  end
-
-  # Normalize v2 signal format (already in correct format, just ensure all fields)
-  defp normalize_v2_signal(signal) do
-    # Check if this is a clientBroadcastSignalEnvelope (wrapper with targeting)
-    # or a direct signal
-    inner_signal = signal["signal"] || signal
-
-    %{
-      "content" => inner_signal["content"],
-      "type" => inner_signal["type"],
-      "clientConnectionNumber" => inner_signal["clientConnectionNumber"],
-      "referenceSequenceNumber" => inner_signal["referenceSequenceNumber"],
-      "targetClientId" => inner_signal["targetClientId"],
-      # Targeting from envelope level
-      "targetedClients" => signal["targetedClients"],
-      "ignoredClients" => signal["ignoredClients"]
-    }
-  end
 end

@@ -196,7 +196,7 @@ defmodule Levee.Documents.Session do
       mode: mode,
       monitor_ref: Process.monitor(channel_pid),
       last_seen_sn: current_sn,
-      features: negotiate_features(client_features)
+      features: Bridge.negotiate_features(@supported_features, client_features)
     }
 
     new_clients = Map.put(state.clients, client_id, client_info)
@@ -423,11 +423,11 @@ defmodule Levee.Documents.Session do
 
     # Negotiate features based on client's supported features
     client_features = connect_msg["supportedFeatures"] || %{}
-    negotiated_features = negotiate_features(client_features)
+    negotiated_features = Bridge.negotiate_features(@supported_features, client_features)
 
     # Negotiate protocol version based on client's supported versions
     client_versions = connect_msg["versions"] || []
-    negotiated_version = negotiate_version(client_versions)
+    negotiated_version = Bridge.negotiate_version(@supported_versions, client_versions)
 
     # Build base response
     response = %{
@@ -461,40 +461,6 @@ defmodule Levee.Documents.Session do
         response
     end
   end
-
-  # Negotiate features between client and server capabilities
-  # Returns features that both client and server support
-  defp negotiate_features(client_features) when is_map(client_features) do
-    Map.new(@supported_features, fn {feature, server_value} ->
-      {feature, negotiate_feature_value(server_value, Map.get(client_features, feature))}
-    end)
-  end
-
-  defp negotiate_features(_), do: @supported_features
-
-  # Server supports (true), client explicitly supports (true)
-  defp negotiate_feature_value(true, true), do: true
-  # Server supports, client doesn't specify - advertise server capability
-  defp negotiate_feature_value(true, nil), do: true
-  # Server supports, but client explicitly declines
-  defp negotiate_feature_value(true, false), do: false
-  # Default: use server value
-  defp negotiate_feature_value(server_value, _), do: server_value
-
-  # Negotiate protocol version based on client's supported version ranges
-  # For now, we use a simple approach: return the first server version
-  # that matches any client version range
-  defp negotiate_version(client_versions) when is_list(client_versions) do
-    # Simple version negotiation - return first supported version
-    # In a full implementation, this would parse semver ranges
-    cond do
-      "^0.1.0" in client_versions -> "0.1.0"
-      "^1.0.0" in client_versions -> "1.0.0"
-      true -> "0.1.0"
-    end
-  end
-
-  defp negotiate_version(_), do: "0.1.0"
 
   defp build_mock_claims(connect_msg) do
     # In production, this would come from JWT validation
@@ -537,9 +503,10 @@ defmodule Levee.Documents.Session do
                 acc_state
               )
             else
-              sequenced_op = build_sequenced_op(op, client_id, assigned_sn, msn)
+              sequenced_op = Bridge.build_sequenced_op(op, client_id, assigned_sn, msn)
               # Add to history (newest first) and trim if needed
-              updated_history = add_to_history(sequenced_op, acc_state.op_history)
+              updated_history =
+                Bridge.add_to_history(sequenced_op, acc_state.op_history, @max_history_size)
 
               new_state = %{
                 acc_state
@@ -551,7 +518,7 @@ defmodule Levee.Documents.Session do
             end
 
           {:error, reason} ->
-            nack = build_nack(op, reason)
+            nack = Bridge.build_nack_from_reason(op, reason)
             {acc_ops, [nack | acc_nacks], acc_state}
         end
       end)
@@ -575,16 +542,20 @@ defmodule Levee.Documents.Session do
        ) do
     contents = op["contents"] || %{}
 
-    case validate_summarize_contents(contents) do
+    case Bridge.validate_summarize_contents(contents) do
       :ok ->
         {:ok, summary_handle} =
           store_summary(acc_state.tenant_id, acc_state.document_id, contents, assigned_sn)
 
-        summary_ack = build_summary_ack(summary_handle, assigned_sn, msn)
-        sequenced_summarize = build_sequenced_op(op, client_id, assigned_sn, msn)
+        summary_ack = Bridge.build_summary_ack(summary_handle, assigned_sn, msn)
+        sequenced_summarize = Bridge.build_sequenced_op(op, client_id, assigned_sn, msn)
 
         updated_history =
-          add_to_history(summary_ack, add_to_history(sequenced_summarize, acc_state.op_history))
+          Bridge.add_to_history(
+            summary_ack,
+            Bridge.add_to_history(sequenced_summarize, acc_state.op_history, @max_history_size),
+            @max_history_size
+          )
 
         new_state = %{
           acc_state
@@ -596,18 +567,8 @@ defmodule Levee.Documents.Session do
         {[summary_ack, sequenced_summarize | acc_ops], acc_nacks, new_state}
 
       {:error, reason} ->
-        nack = build_nack(op, {:invalid_summarize, reason})
+        nack = Bridge.build_nack_from_reason(op, {:invalid_summarize, reason})
         {acc_ops, [nack | acc_nacks], acc_state}
-    end
-  end
-
-  defp validate_summarize_contents(contents) do
-    required_fields = ["handle", "message", "parents", "head"]
-    missing = Enum.reject(required_fields, &Map.has_key?(contents, &1))
-
-    case missing do
-      [] -> :ok
-      _ -> {:error, "missing fields: #{Enum.join(missing, ", ")}"}
     end
   end
 
@@ -629,79 +590,6 @@ defmodule Levee.Documents.Session do
 
     {:ok, _stored} = Levee.Storage.store_summary(tenant_id, document_id, summary)
     {:ok, handle}
-  end
-
-  defp build_summary_ack(handle, sn, msn) do
-    %{
-      "clientId" => nil,
-      "sequenceNumber" => sn + 1,
-      "minimumSequenceNumber" => msn,
-      "clientSequenceNumber" => -1,
-      "referenceSequenceNumber" => sn,
-      "type" => "summaryAck",
-      "contents" => %{
-        "handle" => handle,
-        "summaryProposal" => %{
-          "summarySequenceNumber" => sn
-        }
-      },
-      "metadata" => nil,
-      "timestamp" => System.system_time(:millisecond)
-    }
-  end
-
-  defp add_to_history(op, history) do
-    # Add operation to front (newest first) and trim to max size
-    [op | history]
-    |> Enum.take(@max_history_size)
-  end
-
-  defp build_sequenced_op(op, client_id, sn, msn) do
-    %{
-      "clientId" => client_id,
-      "sequenceNumber" => sn,
-      "minimumSequenceNumber" => msn,
-      "clientSequenceNumber" => op["clientSequenceNumber"] || 0,
-      "referenceSequenceNumber" => op["referenceSequenceNumber"] || 0,
-      "type" => op["type"] || "op",
-      "contents" => op["contents"],
-      "metadata" => op["metadata"],
-      "timestamp" => System.system_time(:millisecond)
-    }
-  end
-
-  defp build_nack(op, reason) do
-    {code, type, message} = format_sequence_error(reason)
-
-    %{
-      "operation" => op,
-      "sequenceNumber" => -1,
-      "content" => %{
-        "code" => code,
-        "type" => type,
-        "message" => message
-      }
-    }
-  end
-
-  defp format_sequence_error({:invalid_csn, expected, received}) do
-    {400, "BadRequestError", "Invalid CSN: expected > #{expected}, received #{received}"}
-  end
-
-  defp format_sequence_error({:invalid_rsn, current_sn, received_rsn}) do
-    {400, "BadRequestError", "Invalid RSN: current SN is #{current_sn}, received #{received_rsn}"}
-  end
-
-  defp format_sequence_error({:unknown_client, client_id}) do
-    {400, "BadRequestError", "Unknown client: #{client_id}"}
-  end
-
-  defp format_sequence_error({:invalid_summarize, msg}) do
-    {400, "BadRequestError", "Invalid summarize op: #{msg}"}
-  end
-
-  defp format_sequence_error(reason) do
-    {400, "BadRequestError", "Sequencing error: #{inspect(reason)}"}
   end
 
   defp broadcast_ops(document_id, ops, clients) do
@@ -769,7 +657,7 @@ defmodule Levee.Documents.Session do
       end)
 
     # Add to history
-    updated_history = add_to_history(system_message, history)
+    updated_history = Bridge.add_to_history(system_message, history, @max_history_size)
 
     {system_message, final_sequence_state, updated_history}
   end
@@ -793,61 +681,23 @@ defmodule Levee.Documents.Session do
   defp process_signal_targeting(sender_client_id, signal, clients) do
     all_client_ids = Map.keys(clients)
 
-    # Build the base signal message
-    base_message = %{
-      "clientId" => sender_client_id,
-      "content" => signal["content"],
-      "type" => signal["type"]
-    }
-
-    # Add optional fields if present
+    # Build the signal message with optional fields
     message =
-      base_message
-      |> maybe_put("clientConnectionNumber", signal["clientConnectionNumber"])
-      |> maybe_put("referenceSequenceNumber", signal["referenceSequenceNumber"])
-      |> maybe_put("targetClientId", signal["targetClientId"])
+      %{
+        "clientId" => sender_client_id,
+        "content" => signal["content"],
+        "type" => signal["type"]
+      }
+      |> put_if_present("clientConnectionNumber", signal["clientConnectionNumber"])
+      |> put_if_present("referenceSequenceNumber", signal["referenceSequenceNumber"])
+      |> put_if_present("targetClientId", signal["targetClientId"])
 
-    # Determine recipients based on targeting fields
-    recipients = determine_signal_recipients(sender_client_id, signal, all_client_ids)
+    # Determine recipients via Gleam
+    recipients = Bridge.determine_signal_recipients(sender_client_id, signal, all_client_ids)
 
     {message, recipients}
   end
 
-  # Determine which clients should receive a signal based on targeting rules
-  # Priority: targetedClients > ignoredClients > single targetClientId > broadcast
-  defp determine_signal_recipients(sender_client_id, signal, all_client_ids) do
-    targeted_clients = signal["targetedClients"]
-    ignored_clients = signal["ignoredClients"]
-    single_target = signal["targetClientId"]
-
-    cond do
-      # V2 with targetedClients: send only to specified clients (excluding sender)
-      is_list(targeted_clients) and targeted_clients != [] ->
-        targeted_clients
-        |> Enum.filter(&(&1 != sender_client_id))
-        |> Enum.filter(&(&1 in all_client_ids))
-
-      # V2 with ignoredClients: send to all except ignored and sender
-      is_list(ignored_clients) and ignored_clients != [] ->
-        all_client_ids
-        |> Enum.reject(&(&1 == sender_client_id))
-        |> Enum.reject(&(&1 in ignored_clients))
-
-      # V2 with single targetClientId
-      is_binary(single_target) and single_target != "" ->
-        if single_target in all_client_ids and single_target != sender_client_id do
-          [single_target]
-        else
-          []
-        end
-
-      # V1 or V2 broadcast: send to all except sender
-      true ->
-        Enum.reject(all_client_ids, &(&1 == sender_client_id))
-    end
-  end
-
-  # Helper to conditionally add a field to a map
-  defp maybe_put(map, _key, nil), do: map
-  defp maybe_put(map, key, value), do: Map.put(map, key, value)
+  defp put_if_present(map, _key, nil), do: map
+  defp put_if_present(map, key, value), do: Map.put(map, key, value)
 end

@@ -124,32 +124,28 @@ defmodule Levee.Auth.GleamBridge do
   Check if a role can manage members.
   """
   def can_manage_members?(role) do
-    gleam_role = atom_to_gleam_role(role)
-    @gleam_tenant.can_manage_members(gleam_role)
+    @gleam_tenant.can_manage_members(role)
   end
 
   @doc """
   Check if a role can update tenant settings.
   """
   def can_update_tenant?(role) do
-    gleam_role = atom_to_gleam_role(role)
-    @gleam_tenant.can_update_tenant(gleam_role)
+    @gleam_tenant.can_update_tenant(role)
   end
 
   @doc """
   Check if a role can delete the tenant.
   """
   def can_delete_tenant?(role) do
-    gleam_role = atom_to_gleam_role(role)
-    @gleam_tenant.can_delete_tenant(gleam_role)
+    @gleam_tenant.can_delete_tenant(role)
   end
 
   @doc """
   Create a membership for a user in a tenant.
   """
   def create_membership(user_id, tenant_id, role) do
-    gleam_role = atom_to_gleam_role(role)
-    membership = @gleam_tenant.create_membership(user_id, tenant_id, gleam_role)
+    membership = @gleam_tenant.create_membership(user_id, tenant_id, role)
     gleam_membership_to_map(membership)
   end
 
@@ -199,9 +195,7 @@ defmodule Levee.Auth.GleamBridge do
   Create a new invite.
   """
   def create_invite(email, tenant_id, role, invited_by) do
-    gleam_role = atom_to_gleam_role(role)
-
-    case @gleam_invite.create(email, tenant_id, gleam_role, invited_by) do
+    case @gleam_invite.create(email, tenant_id, role, invited_by) do
       {:ok, invite} -> {:ok, gleam_invite_to_map(invite)}
       {:error, :invalid_email} -> {:error, :invalid_email}
       {:error, _} -> {:error, :invite_creation_failed}
@@ -242,10 +236,9 @@ defmodule Levee.Auth.GleamBridge do
   Create a document access token.
   """
   def create_document_token(user_id, tenant_id, document_id, scopes, secret) do
-    gleam_scopes = Enum.map(scopes, &atom_to_gleam_scope/1)
     config = @gleam_token.default_config(secret)
 
-    @gleam_token.create_document_token(user_id, tenant_id, document_id, gleam_scopes, config)
+    @gleam_token.create_document_token(user_id, tenant_id, document_id, scopes, config)
   end
 
   @doc """
@@ -291,7 +284,7 @@ defmodule Levee.Auth.GleamBridge do
     %{
       user_id: user_id,
       tenant_id: tenant_id,
-      role: gleam_role_to_atom(role),
+      role: role,
       joined_at: joined_at
     }
   end
@@ -317,9 +310,9 @@ defmodule Levee.Auth.GleamBridge do
       token: token,
       email: email,
       tenant_id: tenant_id,
-      role: gleam_role_to_atom(role),
+      role: role,
       invited_by: invited_by,
-      status: gleam_invite_status_to_atom(status),
+      status: status,
       created_at: created_at,
       expires_at: expires_at
     }
@@ -332,7 +325,7 @@ defmodule Levee.Auth.GleamBridge do
       user_id: user_id,
       tenant_id: tenant_id,
       document_id: document_id,
-      scopes: Enum.map(scopes, &gleam_scope_to_atom/1),
+      scopes: scopes,
       iat: iat,
       exp: exp,
       token_id: unwrap_option(token_id)
@@ -354,44 +347,9 @@ defmodule Levee.Auth.GleamBridge do
   end
 
   defp map_to_gleam_invite(invite) do
-    {:invite, invite.id, invite.token, invite.email, invite.tenant_id,
-     atom_to_gleam_role(invite.role), invite.invited_by,
-     atom_to_gleam_invite_status(invite.status), invite.created_at, invite.expires_at}
+    {:invite, invite.id, invite.token, invite.email, invite.tenant_id, invite.role,
+     invite.invited_by, invite.status, invite.created_at, invite.expires_at}
   end
-
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Role/Scope/Status Conversions
-  # ─────────────────────────────────────────────────────────────────────────────
-
-  defp gleam_role_to_atom(:owner), do: :owner
-  defp gleam_role_to_atom(:admin), do: :admin
-  defp gleam_role_to_atom(:member), do: :member
-  defp gleam_role_to_atom(:viewer), do: :viewer
-
-  defp atom_to_gleam_role(:owner), do: :owner
-  defp atom_to_gleam_role(:admin), do: :admin
-  defp atom_to_gleam_role(:member), do: :member
-  defp atom_to_gleam_role(:viewer), do: :viewer
-
-  defp gleam_scope_to_atom(:doc_read), do: :doc_read
-  defp gleam_scope_to_atom(:doc_write), do: :doc_write
-  defp gleam_scope_to_atom(:summary_read), do: :summary_read
-  defp gleam_scope_to_atom(:summary_write), do: :summary_write
-
-  defp atom_to_gleam_scope(:doc_read), do: :doc_read
-  defp atom_to_gleam_scope(:doc_write), do: :doc_write
-  defp atom_to_gleam_scope(:summary_read), do: :summary_read
-  defp atom_to_gleam_scope(:summary_write), do: :summary_write
-
-  defp gleam_invite_status_to_atom(:pending), do: :pending
-  defp gleam_invite_status_to_atom(:accepted), do: :accepted
-  defp gleam_invite_status_to_atom(:cancelled), do: :cancelled
-  defp gleam_invite_status_to_atom(:expired), do: :expired
-
-  defp atom_to_gleam_invite_status(:pending), do: :pending
-  defp atom_to_gleam_invite_status(:accepted), do: :accepted
-  defp atom_to_gleam_invite_status(:cancelled), do: :cancelled
-  defp atom_to_gleam_invite_status(:expired), do: :expired
 
   # Gleam Option type: {:some, value} or :none
   defp unwrap_option({:some, value}), do: value

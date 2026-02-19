@@ -3,11 +3,14 @@
 //// This module provides the main API for the Elixir interop layer.
 //// All core types and functions are re-exported here.
 
+import gleam/dict.{type Dict}
+import gleam/dynamic.{type Dynamic}
 import gleam/option
 import levee_protocol/jwt
 import levee_protocol/message
 import levee_protocol/nack
 import levee_protocol/sequencing
+import levee_protocol/session_logic
 import levee_protocol/summary
 import levee_protocol/types
 import levee_protocol/validation
@@ -195,6 +198,31 @@ pub fn nack_throttled(
 pub fn nack_read_only_client(op: option.Option(types.DocumentMessage)) -> Nack {
   nack.read_only_client(op)
 }
+
+/// Create an unknown client nack
+pub fn nack_unknown_client(client_id: String) -> Nack {
+  nack.unknown_client(client_id)
+}
+
+/// Create an invalid CSN nack
+pub fn nack_invalid_csn(
+  expected: Int,
+  received: Int,
+  op: option.Option(types.DocumentMessage),
+) -> Nack {
+  nack.invalid_csn(expected, received, op)
+}
+
+/// Create an invalid RSN nack
+pub fn nack_invalid_rsn(
+  current_sn: Int,
+  received_rsn: Int,
+  op: option.Option(types.DocumentMessage),
+) -> Nack {
+  nack.invalid_rsn(current_sn, received_rsn, op)
+}
+
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Validation API
@@ -509,3 +537,77 @@ pub fn summary_handle(
 pub fn summary_attachment(id: String) -> summary.SummaryObject {
   summary.SummaryAttachment(id)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Session Logic API
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Negotiate features between server and client
+pub fn negotiate_features(
+  server_features: Dict(String, Bool),
+  client_features: Dict(String, Bool),
+) -> Dict(String, Bool) {
+  session_logic.negotiate_features(server_features, client_features)
+}
+
+/// Negotiate protocol version
+pub fn negotiate_version(
+  supported_versions: List(String),
+  client_versions: List(String),
+) -> String {
+  session_logic.negotiate_version(supported_versions, client_versions)
+}
+
+/// Validate summarize contents
+pub fn validate_summarize_contents(
+  contents: Dict(String, Dynamic),
+) -> Result(Nil, String) {
+  session_logic.validate_summarize_contents(contents)
+}
+
+/// Determine signal recipients based on targeting rules
+pub fn determine_signal_recipients(
+  sender_client_id: String,
+  targeted_clients: option.Option(List(String)),
+  ignored_clients: option.Option(List(String)),
+  single_target: option.Option(String),
+  all_client_ids: List(String),
+) -> List(String) {
+  session_logic.determine_signal_recipients(
+    sender_client_id,
+    targeted_clients,
+    ignored_clients,
+    single_target,
+    all_client_ids,
+  )
+}
+
+/// Add op to history with max size trimming
+pub fn add_to_history(
+  op: a,
+  history: List(a),
+  max_size: Int,
+) -> List(a) {
+  session_logic.add_to_history(op, history, max_size)
+}
+
+/// Build a sequenced operation for the wire format
+pub fn build_sequenced_op(
+  params: session_logic.SequencedOpParams,
+) -> List(#(String, Dynamic)) {
+  session_logic.build_sequenced_op(params)
+}
+
+/// Build a summary ack for the wire format
+pub fn build_summary_ack(
+  handle: String,
+  sn: Int,
+  msn: Int,
+  timestamp: Int,
+) -> List(#(String, Dynamic)) {
+  session_logic.build_summary_ack(handle, sn, msn, timestamp)
+}
+
+// Re-export the SequencedOpParams type
+pub type SequencedOpParams =
+  session_logic.SequencedOpParams
