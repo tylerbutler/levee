@@ -83,18 +83,19 @@ defmodule Levee.Application do
 
   # Load Gleam compiled BEAM files into the code path
   defp load_gleam_modules do
-    priv_dir = :code.priv_dir(:levee) |> to_string()
-    app_root = Path.join([priv_dir, ".."])
+    # In dev, Gleam packages are siblings in the project root (File.cwd!()).
+    # priv_dir points into _build/ which is NOT the project root.
+    project_root = File.cwd!()
 
-    # Try multiple possible locations for Gleam build output:
-    # 1. Development: relative to app root (mix compile)
-    # 2. Release: in /app/<package> (Docker)
-    base_paths = [
-      Path.join([app_root, "levee_protocol", "build", "dev", "erlang"]),
-      Path.join([app_root, "levee_auth", "build", "dev", "erlang"]),
-      "/app/levee_protocol/build/dev/erlang",
-      "/app/levee_auth/build/dev/erlang"
-    ]
+    base_paths =
+      for pkg <- ["levee_protocol", "levee_auth"] do
+        Path.join([project_root, pkg, "build", "dev", "erlang"])
+      end ++
+        [
+          # Release: in /app/<package> (Docker)
+          "/app/levee_protocol/build/dev/erlang",
+          "/app/levee_auth/build/dev/erlang"
+        ]
 
     gleam_modules = [
       "levee_protocol",
