@@ -8,5 +8,6 @@ defmodule Levee.Store do
 
   use Ecto.Repo,
     otp_app: :levee,
-    adapter: Ecto.Adapters.Postgres
+    adapter: Ecto.Adapters.Postgres,
+    priv: "priv/store"
 end

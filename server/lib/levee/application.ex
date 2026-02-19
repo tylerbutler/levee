@@ -68,7 +68,7 @@ defmodule Levee.Application do
   defp storage_children do
     case Application.get_env(:levee, :storage_backend, Levee.Storage.ETS) do
       Levee.Storage.Postgres ->
-        # PostgreSQL backend - start Repo
+        # PostgreSQL backend - start Store
         [Levee.Store]
 
       Levee.Storage.ETS ->

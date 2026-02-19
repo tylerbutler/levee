@@ -2,7 +2,7 @@ import Config
 
 config :levee, env: :test
 
-# Configure the Repo for test
+# Configure the Store for test
 config :levee, Levee.Store,
   username: "postgres",
   password: "postgres",
