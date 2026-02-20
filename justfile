@@ -61,6 +61,18 @@ test-elixir:
 test-client:
     cd client && pnpm install && pnpm test
 
+# Run E2E tests (requires server running: just server)
+test-e2e:
+    cd e2e && pnpm exec playwright test
+
+# Run E2E tests with visible browser
+test-e2e-headed:
+    cd e2e && pnpm exec playwright test --headed
+
+# Run E2E tests with Playwright UI
+test-e2e-ui:
+    cd e2e && pnpm exec playwright test --ui
+
 # === QUALITY ===
 
 # Format all code (server + client)
@@ -138,8 +150,8 @@ alias pr := ci
 
 # === SETUP ===
 
-# Install all dependencies (server + client)
-setup: setup-server setup-client
+# Install all dependencies (server + client + e2e)
+setup: setup-server setup-client setup-e2e
 
 # Install server dependencies
 setup-server: setup-gleam setup-elixir
@@ -157,6 +169,10 @@ setup-elixir:
 # Install client dependencies
 setup-client:
     cd client && pnpm install
+
+# Install E2E test dependencies
+setup-e2e:
+    cd e2e && pnpm install
 
 # === DEVELOPMENT ===
 
