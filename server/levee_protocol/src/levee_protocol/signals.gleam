@@ -153,9 +153,7 @@ pub type NormalizedSignal {
 
 /// Normalize a raw signal map to the internal format.
 /// Detects v1 vs v2 based on the presence of "address" or "contents" keys.
-pub fn normalize_signal(
-  raw: Dict(String, Dynamic),
-) -> NormalizedSignal {
+pub fn normalize_signal(raw: Dict(String, Dynamic)) -> NormalizedSignal {
   let has_address = dict.has_key(raw, "address")
   let has_contents = dict.has_key(raw, "contents")
 
@@ -258,9 +256,7 @@ fn normalize_v2(raw: Dict(String, Dynamic)) -> NormalizedSignal {
 }
 
 /// Normalize a batch of signals (handles list, single map, or JSON string)
-pub fn normalize_signal_batch(
-  batch: Dynamic,
-) -> List(NormalizedSignal) {
+pub fn normalize_signal_batch(batch: Dynamic) -> List(NormalizedSignal) {
   // Try as list of maps
   case decode.run(batch, decode.list(decode_string_keyed_map())) {
     Ok(maps) -> list.map(maps, normalize_signal)
@@ -275,9 +271,7 @@ pub fn normalize_signal_batch(
 }
 
 /// Convert a NormalizedSignal to a Dict for Elixir interop
-pub fn normalized_to_map(
-  s: NormalizedSignal,
-) -> Dict(String, Dynamic) {
+pub fn normalized_to_map(s: NormalizedSignal) -> Dict(String, Dynamic) {
   dict.from_list([
     #("content", s.content),
     #("type", option_to_dynamic(s.signal_type)),

@@ -139,11 +139,36 @@ defmodule LeveeWeb.Router do
     delete "/tenants/:id", TenantAdminController, :delete
   end
 
-  # Admin UI - SPA catch-all (serves index.html for all /admin/* paths)
+  # Session-auth admin routes (for admin UI SPA)
+  pipeline :admin_session do
+    plug :accepts, ["json"]
+    plug LeveeWeb.Plugs.AdminSessionAuth
+  end
+
+  scope "/api/tenants", LeveeWeb do
+    pipe_through :admin_session
+
+    get "/", TenantAdminController, :index
+    post "/", TenantAdminController, :create
+    get "/:id", TenantAdminController, :show
+    put "/:id", TenantAdminController, :update
+    delete "/:id", TenantAdminController, :delete
+  end
+
+  # Browser pipeline for HTML routes
   pipeline :browser do
     plug :accepts, ["html"]
   end
 
+  # OAuth authentication routes
+  scope "/auth", LeveeWeb do
+    pipe_through :browser
+
+    get "/:provider", OAuthController, :request
+    get "/:provider/callback", OAuthController, :callback
+  end
+
+  # Admin UI - SPA catch-all (serves index.html for all /admin/* paths)
   scope "/admin", LeveeWeb do
     pipe_through :browser
 

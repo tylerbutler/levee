@@ -50,6 +50,9 @@ defmodule Levee.MixProject do
       {:jose, "~> 1.11"},
       # CORS support
       {:cors_plug, "~> 3.0"},
+      # OAuth authentication
+      {:ueberauth, "~> 0.10"},
+      {:ueberauth_github, "~> 0.8"},
       # Database (optional PostgreSQL backend)
       {:ecto_sql, "~> 3.12"},
       {:postgrex, "~> 0.19"}

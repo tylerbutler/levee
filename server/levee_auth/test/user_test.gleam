@@ -1,3 +1,4 @@
+import gleam/option
 import gleeunit/should
 import user
 
@@ -167,6 +168,23 @@ pub fn to_public_test() {
   should.equal(public.email, new_user.email)
   should.equal(public.display_name, new_user.display_name)
   should.equal(public.created_at, new_user.created_at)
+}
+
+// OAuth user creation tests
+
+pub fn create_oauth_user_test() {
+  let oauth_user =
+    user.create_oauth(
+      email: "github@example.com",
+      display_name: "GitHub User",
+      github_id: "12345",
+    )
+
+  should.equal(oauth_user.email, "github@example.com")
+  should.equal(oauth_user.display_name, "GitHub User")
+  should.equal(oauth_user.github_id, option.Some("12345"))
+  should.equal(oauth_user.password_hash, "")
+  should.be_true(has_prefix(oauth_user.id, "usr_"))
 }
 
 // Helper

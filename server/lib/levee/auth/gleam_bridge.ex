@@ -68,6 +68,14 @@ defmodule Levee.Auth.GleamBridge do
   end
 
   @doc """
+  Create a new user from OAuth (no password).
+  """
+  def create_oauth_user(email, display_name, github_id) do
+    user = @gleam_user.create_oauth(email, display_name, github_id)
+    gleam_user_to_map(user)
+  end
+
+  @doc """
   Verify a password against a user's stored hash.
   """
   def verify_user_password(user, password) do
@@ -259,12 +267,17 @@ defmodule Levee.Auth.GleamBridge do
   # Type Conversions: Gleam -> Elixir
   # ─────────────────────────────────────────────────────────────────────────────
 
-  defp gleam_user_to_map({:user, id, email, password_hash, display_name, created_at, updated_at}) do
+  defp gleam_user_to_map(
+         {:user, id, email, password_hash, display_name, github_id, is_admin, created_at,
+          updated_at}
+       ) do
     %{
       id: id,
       email: email,
       password_hash: password_hash,
       display_name: display_name,
+      github_id: unwrap_option(github_id),
+      is_admin: is_admin,
       created_at: created_at,
       updated_at: updated_at
     }
@@ -337,8 +350,11 @@ defmodule Levee.Auth.GleamBridge do
   # ─────────────────────────────────────────────────────────────────────────────
 
   defp map_to_gleam_user(user) do
-    {:user, user.id, user.email, user.password_hash, user.display_name, user.created_at,
-     user.updated_at}
+    github_id = wrap_option(Map.get(user, :github_id))
+    is_admin = Map.get(user, :is_admin, false)
+
+    {:user, user.id, user.email, user.password_hash, user.display_name, github_id, is_admin,
+     user.created_at, user.updated_at}
   end
 
   defp map_to_gleam_session(session) do
@@ -354,4 +370,7 @@ defmodule Levee.Auth.GleamBridge do
   # Gleam Option type: {:some, value} or :none
   defp unwrap_option({:some, value}), do: value
   defp unwrap_option(:none), do: nil
+
+  defp wrap_option(nil), do: :none
+  defp wrap_option(value), do: {:some, value}
 end
