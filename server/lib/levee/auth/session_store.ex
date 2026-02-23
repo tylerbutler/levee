@@ -39,6 +39,16 @@ defmodule Levee.Auth.SessionStore do
     end)
   end
 
+  def find_user_by_github_id(github_id) do
+    Agent.get(__MODULE__, fn state ->
+      state.users
+      |> Map.values()
+      |> Enum.find_value(:error, fn user ->
+        if user.github_id == github_id, do: {:ok, user}, else: nil
+      end)
+    end)
+  end
+
   # Session operations
 
   def store_session(session) do
