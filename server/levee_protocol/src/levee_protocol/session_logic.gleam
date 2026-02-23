@@ -136,11 +136,7 @@ pub fn determine_signal_recipients(
 // =============================================================================
 
 /// Add an operation to the history (newest first) and trim to max size.
-pub fn add_to_history(
-  op: a,
-  history: List(a),
-  max_size: Int,
-) -> List(a) {
+pub fn add_to_history(op: a, history: List(a), max_size: Int) -> List(a) {
   [op, ..history]
   |> list.take(max_size)
 }
@@ -167,9 +163,7 @@ pub type SequencedOpParams {
 
 /// Build a sequenced op as a list of key-value pairs.
 /// The caller converts this to a map in their native format.
-pub fn build_sequenced_op(
-  params: SequencedOpParams,
-) -> List(#(String, Dynamic)) {
+pub fn build_sequenced_op(params: SequencedOpParams) -> List(#(String, Dynamic)) {
   [
     #("clientId", coerce(params.client_id)),
     #("sequenceNumber", coerce(params.sequence_number)),

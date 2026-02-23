@@ -222,8 +222,6 @@ pub fn nack_invalid_rsn(
   nack.invalid_rsn(current_sn, received_rsn, op)
 }
 
-
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Validation API
 // ─────────────────────────────────────────────────────────────────────────────
@@ -583,11 +581,7 @@ pub fn determine_signal_recipients(
 }
 
 /// Add op to history with max size trimming
-pub fn add_to_history(
-  op: a,
-  history: List(a),
-  max_size: Int,
-) -> List(a) {
+pub fn add_to_history(op: a, history: List(a), max_size: Int) -> List(a) {
   session_logic.add_to_history(op, history, max_size)
 }
 

@@ -214,4 +214,3 @@ pub fn unknown_client(client_id: String) -> Nack {
     ),
   )
 }
-
