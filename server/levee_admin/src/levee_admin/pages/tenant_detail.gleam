@@ -93,6 +93,10 @@ pub fn get_pending_delete(model: Model) -> Bool {
   model.pending_delete
 }
 
+pub fn set_delete_error(model: Model, error: String) -> Model {
+  Model(..model, delete_state: DeleteError(error))
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Messages
 // ─────────────────────────────────────────────────────────────────────────────
@@ -120,14 +124,15 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     )
 
     SubmitSecret -> {
-      case string.is_empty(string.trim(model.new_secret)) {
+      let trimmed = string.trim(model.new_secret)
+      case string.is_empty(trimmed) {
         True -> #(
           Model(..model, secret_state: SecretError("Secret cannot be empty")),
           effect.none(),
         )
         False -> {
           #(
-            Model(..model, pending_update: Some(model.new_secret)),
+            Model(..model, pending_update: Some(trimmed)),
             effect.none(),
           )
         }

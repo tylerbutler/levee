@@ -107,13 +107,14 @@ fn view_content(model: Model) -> Element(Msg) {
             ]),
           ])
 
-        tenants ->
+        tenants -> {
+          let count = list.length(tenants)
           div([class("tenant-table card")], [
             div([class("tenant-table-header")], [
               span([], [
                 text(
-                  int.to_string(list.length(tenants)) <> " tenant"
-                  <> case list.length(tenants) {
+                  int.to_string(count) <> " tenant"
+                  <> case count {
                     1 -> ""
                     _ -> "s"
                   },
@@ -131,6 +132,7 @@ fn view_content(model: Model) -> Element(Msg) {
               }),
             ),
           ])
+        }
       }
   }
 }

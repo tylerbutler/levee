@@ -455,10 +455,7 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 
     DeleteTenantResponse(Error(_error)) -> {
       let detail_model =
-        tenant_detail.Model(
-          ..model.tenant_detail,
-          delete_state: tenant_detail.DeleteError("Failed to delete tenant"),
-        )
+        tenant_detail.set_delete_error(model.tenant_detail, "Failed to delete tenant")
       #(Model(..model, tenant_detail: detail_model), effect.none())
     }
 
