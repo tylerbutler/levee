@@ -3,6 +3,7 @@
 //// A Lustre-based single-page application for managing tenants,
 //// users, and document access in Levee.
 
+import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/uri.{type Uri}
 import lustre
@@ -23,6 +24,9 @@ import levee_admin/api
 import levee_admin/pages/dashboard
 import levee_admin/pages/login
 import levee_admin/pages/register
+import levee_admin/pages/tenant_detail
+import levee_admin/pages/tenant_new
+import levee_admin/pages/tenants
 import levee_admin/router.{type Route}
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -37,6 +41,9 @@ pub type Model {
     login: login.Model,
     register: register.Model,
     dashboard: dashboard.Model,
+    tenants: tenants.Model,
+    tenant_new: tenant_new.Model,
+    tenant_detail: tenant_detail.Model,
   )
 }
 
@@ -59,6 +66,9 @@ fn init(_flags) -> #(Model, Effect(Msg)) {
       login: login.init(),
       register: register.init(),
       dashboard: dashboard.init(),
+      tenants: tenants.init(),
+      tenant_new: tenant_new.init(),
+      tenant_detail: tenant_detail.init(""),
     )
 
   #(model, effect.batch([modem.init(on_url_change), oauth_effect]))
@@ -73,10 +83,20 @@ pub type Msg {
   LoginMsg(login.Msg)
   RegisterMsg(register.Msg)
   DashboardMsg(dashboard.Msg)
+  TenantsMsg(tenants.Msg)
+  TenantNewMsg(tenant_new.Msg)
+  TenantDetailMsg(tenant_detail.Msg)
   // Auth API responses
   LoginResponse(Result(api.AuthResponse, api.ApiError))
   RegisterResponse(Result(api.AuthResponse, api.ApiError))
   MeResponse(Result(api.User, api.ApiError))
+  // Tenant API responses
+  TenantsResponse(Result(api.TenantList, api.ApiError))
+  DashboardTenantsResponse(Result(api.TenantList, api.ApiError))
+  CreateTenantResponse(Result(api.TenantResponse, api.ApiError))
+  GetTenantResponse(Result(api.Tenant, api.ApiError))
+  UpdateTenantResponse(Result(api.TenantResponse, api.ApiError))
+  DeleteTenantResponse(Result(api.DeleteResponse, api.ApiError))
   Logout
 }
 
@@ -99,7 +119,34 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         None, router.TenantDetail(_) -> router.Login
         _, r -> r
       }
-      #(Model(..model, route: route), effect.none())
+
+      let effect = case route, model.session_token {
+        router.Dashboard, Some(token) ->
+          api.list_tenants(token, DashboardTenantsResponse)
+        router.Tenants, Some(token) ->
+          api.list_tenants(token, TenantsResponse)
+        router.TenantDetail(id), Some(token) ->
+          api.get_tenant(token, id, GetTenantResponse)
+        _, _ -> effect.none()
+      }
+
+      let model = case route {
+        router.Tenants ->
+          Model(..model, route: route, tenants: tenants.init())
+        router.TenantNew ->
+          Model(..model, route: route, tenant_new: tenant_new.init())
+        router.TenantDetail(id) ->
+          Model(..model, route: route, tenant_detail: tenant_detail.init(id))
+        router.Dashboard ->
+          Model(
+            ..model,
+            route: route,
+            dashboard: dashboard.start_loading(dashboard.init()),
+          )
+        _ -> Model(..model, route: route)
+      }
+
+      #(model, effect)
     }
 
     LoginMsg(login.GitHubLogin) -> {
@@ -153,6 +200,93 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       #(Model(..model, dashboard: dashboard_model), effect)
     }
 
+    TenantsMsg(tenants_msg) -> {
+      let #(tenants_model, tenants_effect) =
+        tenants.update(model.tenants, tenants_msg)
+      let mapped_effect = effect.map(tenants_effect, TenantsMsg)
+
+      case tenants_msg {
+        tenants.Retry ->
+          case model.session_token {
+            Some(token) -> #(
+              Model(..model, tenants: tenants_model),
+              api.list_tenants(token, TenantsResponse),
+            )
+            None -> #(Model(..model, tenants: tenants_model), mapped_effect)
+          }
+        _ -> #(Model(..model, tenants: tenants_model), mapped_effect)
+      }
+    }
+
+    TenantNewMsg(tenant_new_msg) -> {
+      let #(tenant_new_model, tenant_new_effect) =
+        tenant_new.update(model.tenant_new, tenant_new_msg)
+      let mapped_effect = effect.map(tenant_new_effect, TenantNewMsg)
+
+      case
+        tenant_new.get_pending_submit(tenant_new_model),
+        model.session_token
+      {
+        Some(data), Some(token) -> {
+          let tenant_new_model = tenant_new.start_loading(tenant_new_model)
+          let api_effect =
+            api.create_tenant(
+              token,
+              data.tenant_id,
+              data.secret,
+              CreateTenantResponse,
+            )
+          #(Model(..model, tenant_new: tenant_new_model), api_effect)
+        }
+        _, _ -> #(Model(..model, tenant_new: tenant_new_model), mapped_effect)
+      }
+    }
+
+    TenantDetailMsg(detail_msg) -> {
+      let #(detail_model, detail_effect) =
+        tenant_detail.update(model.tenant_detail, detail_msg)
+      let mapped_effect = effect.map(detail_effect, TenantDetailMsg)
+
+      case
+        tenant_detail.get_pending_update(detail_model),
+        model.session_token
+      {
+        Some(secret), Some(token) -> {
+          let detail_model = tenant_detail.start_update_loading(detail_model)
+          let api_effect =
+            api.update_tenant(
+              token,
+              detail_model.tenant_id,
+              secret,
+              UpdateTenantResponse,
+            )
+          #(Model(..model, tenant_detail: detail_model), api_effect)
+        }
+        _, _ -> {
+          case
+            tenant_detail.get_pending_delete(detail_model),
+            model.session_token
+          {
+            True, Some(token) -> {
+              let detail_model =
+                tenant_detail.start_delete_loading(detail_model)
+              let api_effect =
+                api.delete_tenant(
+                  token,
+                  detail_model.tenant_id,
+                  DeleteTenantResponse,
+                )
+              #(Model(..model, tenant_detail: detail_model), api_effect)
+            }
+            _, _ -> #(
+              Model(..model, tenant_detail: detail_model),
+              mapped_effect,
+            )
+          }
+        }
+      }
+    }
+
     LoginResponse(Ok(response)) -> {
       let user =
         User(
@@ -168,7 +302,10 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           route: router.Dashboard,
           login: login.init(),
         )
-      #(model, modem.push("/admin/dashboard", None, None))
+      let nav_effect = modem.push("/admin/dashboard", None, None)
+      let load_effect =
+        api.list_tenants(response.token, DashboardTenantsResponse)
+      #(model, effect.batch([nav_effect, load_effect]))
     }
 
     LoginResponse(Error(_error)) -> {
@@ -192,7 +329,10 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           route: router.Dashboard,
           register: register.init(),
         )
-      #(model, modem.push("/admin/dashboard", None, None))
+      let nav_effect = modem.push("/admin/dashboard", None, None)
+      let load_effect =
+        api.list_tenants(response.token, DashboardTenantsResponse)
+      #(model, effect.batch([nav_effect, load_effect]))
     }
 
     RegisterResponse(Error(_error)) -> {
@@ -209,12 +349,117 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           display_name: api_user.display_name,
         )
       let model = Model(..model, user: Some(user), route: router.Dashboard)
-      #(model, modem.push("/admin/dashboard", None, None))
+      let nav_effect = modem.push("/admin/dashboard", None, None)
+      case model.session_token {
+        Some(token) -> {
+          let load_effect =
+            api.list_tenants(token, DashboardTenantsResponse)
+          #(model, effect.batch([nav_effect, load_effect]))
+        }
+        None -> #(model, nav_effect)
+      }
     }
 
     MeResponse(Error(_error)) -> {
       // Token was invalid — clear it and stay on login
       #(Model(..model, session_token: None), effect.none())
+    }
+
+    TenantsResponse(Ok(tenant_list)) -> {
+      let tenant_models =
+        list.map(tenant_list.tenants, fn(t) { tenants.Tenant(id: t.id) })
+      let tenants_model =
+        tenants.update(model.tenants, tenants.TenantsLoaded(tenant_models)).0
+      #(Model(..model, tenants: tenants_model), effect.none())
+    }
+
+    TenantsResponse(Error(_error)) -> {
+      let tenants_model =
+        tenants.update(model.tenants, tenants.LoadError("Failed to load tenants")).0
+      #(Model(..model, tenants: tenants_model), effect.none())
+    }
+
+    DashboardTenantsResponse(Ok(tenant_list)) -> {
+      let tenant_models =
+        list.map(tenant_list.tenants, fn(t) { dashboard.Tenant(id: t.id) })
+      let dashboard_model =
+        dashboard.update(
+          model.dashboard,
+          dashboard.TenantsLoaded(tenant_models),
+        ).0
+      #(Model(..model, dashboard: dashboard_model), effect.none())
+    }
+
+    DashboardTenantsResponse(Error(_error)) -> {
+      let dashboard_model =
+        dashboard.update(
+          model.dashboard,
+          dashboard.LoadError("Failed to load tenants"),
+        ).0
+      #(Model(..model, dashboard: dashboard_model), effect.none())
+    }
+
+    CreateTenantResponse(Ok(response)) -> {
+      let model = Model(..model, tenant_new: tenant_new.init())
+      #(model, modem.push("/admin/tenants/" <> response.tenant.id, None, None))
+    }
+
+    CreateTenantResponse(Error(api.ServerError(409, _))) -> {
+      let tenant_new_model =
+        tenant_new.set_error(
+          model.tenant_new,
+          "A tenant with this ID already exists",
+        )
+      #(Model(..model, tenant_new: tenant_new_model), effect.none())
+    }
+
+    CreateTenantResponse(Error(_error)) -> {
+      let tenant_new_model =
+        tenant_new.set_error(model.tenant_new, "Failed to create tenant")
+      #(Model(..model, tenant_new: tenant_new_model), effect.none())
+    }
+
+    GetTenantResponse(Ok(_tenant)) -> {
+      let detail_model = tenant_detail.set_loaded(model.tenant_detail)
+      #(Model(..model, tenant_detail: detail_model), effect.none())
+    }
+
+    GetTenantResponse(Error(api.ServerError(404, _))) -> {
+      let detail_model = tenant_detail.set_not_found(model.tenant_detail)
+      #(Model(..model, tenant_detail: detail_model), effect.none())
+    }
+
+    GetTenantResponse(Error(_error)) -> {
+      let detail_model =
+        tenant_detail.set_error(model.tenant_detail, "Failed to load tenant")
+      #(Model(..model, tenant_detail: detail_model), effect.none())
+    }
+
+    UpdateTenantResponse(Ok(_response)) -> {
+      let detail_model = tenant_detail.set_update_success(model.tenant_detail)
+      #(Model(..model, tenant_detail: detail_model), effect.none())
+    }
+
+    UpdateTenantResponse(Error(_error)) -> {
+      let detail_model =
+        tenant_detail.set_update_error(
+          model.tenant_detail,
+          "Failed to update secret",
+        )
+      #(Model(..model, tenant_detail: detail_model), effect.none())
+    }
+
+    DeleteTenantResponse(Ok(_response)) -> {
+      #(model, modem.push("/admin/tenants", None, None))
+    }
+
+    DeleteTenantResponse(Error(_error)) -> {
+      let detail_model =
+        tenant_detail.Model(
+          ..model.tenant_detail,
+          delete_state: tenant_detail.DeleteError("Failed to delete tenant"),
+        )
+      #(Model(..model, tenant_detail: detail_model), effect.none())
     }
 
     Logout -> {
@@ -246,13 +491,22 @@ fn view_content(model: Model) -> Element(Msg) {
       )
 
     router.Tenants ->
-      view_authenticated_layout(model, view_tenants_placeholder())
+      view_authenticated_layout(
+        model,
+        element.map(tenants.view(model.tenants), TenantsMsg),
+      )
 
     router.TenantNew ->
-      view_authenticated_layout(model, view_tenant_new_placeholder())
+      view_authenticated_layout(
+        model,
+        element.map(tenant_new.view(model.tenant_new), TenantNewMsg),
+      )
 
-    router.TenantDetail(id) ->
-      view_authenticated_layout(model, view_tenant_detail_placeholder(id))
+    router.TenantDetail(_id) ->
+      view_authenticated_layout(
+        model,
+        element.map(tenant_detail.view(model.tenant_detail), TenantDetailMsg),
+      )
 
     router.NotFound -> view_not_found()
   }
@@ -282,27 +536,6 @@ fn view_nav(model: Model) -> Element(Msg) {
         text("Logout"),
       ]),
     ]),
-  ])
-}
-
-fn view_tenants_placeholder() -> Element(Msg) {
-  div([class("page tenants")], [
-    h1([], [text("Tenants")]),
-    p([], [text("Tenant list coming soon...")]),
-  ])
-}
-
-fn view_tenant_new_placeholder() -> Element(Msg) {
-  div([class("page tenant-new")], [
-    h1([], [text("Create Tenant")]),
-    p([], [text("Create tenant form coming soon...")]),
-  ])
-}
-
-fn view_tenant_detail_placeholder(id: String) -> Element(Msg) {
-  div([class("page tenant-detail")], [
-    h1([], [text("Tenant: " <> id)]),
-    p([], [text("Tenant details coming soon...")]),
   ])
 }
 
