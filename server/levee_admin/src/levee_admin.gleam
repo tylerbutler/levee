@@ -95,6 +95,7 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       let route = case model.session_token, route {
         None, router.Dashboard -> router.Login
         None, router.Tenants -> router.Login
+        None, router.TenantNew -> router.Login
         None, router.TenantDetail(_) -> router.Login
         _, r -> r
       }
@@ -247,6 +248,9 @@ fn view_content(model: Model) -> Element(Msg) {
     router.Tenants ->
       view_authenticated_layout(model, view_tenants_placeholder())
 
+    router.TenantNew ->
+      view_authenticated_layout(model, view_tenant_new_placeholder())
+
     router.TenantDetail(id) ->
       view_authenticated_layout(model, view_tenant_detail_placeholder(id))
 
@@ -285,6 +289,13 @@ fn view_tenants_placeholder() -> Element(Msg) {
   div([class("page tenants")], [
     h1([], [text("Tenants")]),
     p([], [text("Tenant list coming soon...")]),
+  ])
+}
+
+fn view_tenant_new_placeholder() -> Element(Msg) {
+  div([class("page tenant-new")], [
+    h1([], [text("Create Tenant")]),
+    p([], [text("Create tenant form coming soon...")]),
   ])
 }
 
