@@ -268,7 +268,8 @@ defmodule Levee.Auth.GleamBridge do
   # ─────────────────────────────────────────────────────────────────────────────
 
   defp gleam_user_to_map(
-         {:user, id, email, password_hash, display_name, github_id, created_at, updated_at}
+         {:user, id, email, password_hash, display_name, github_id, is_admin, created_at,
+          updated_at}
        ) do
     %{
       id: id,
@@ -276,6 +277,7 @@ defmodule Levee.Auth.GleamBridge do
       password_hash: password_hash,
       display_name: display_name,
       github_id: unwrap_option(github_id),
+      is_admin: is_admin,
       created_at: created_at,
       updated_at: updated_at
     }
@@ -349,8 +351,9 @@ defmodule Levee.Auth.GleamBridge do
 
   defp map_to_gleam_user(user) do
     github_id = wrap_option(Map.get(user, :github_id))
+    is_admin = Map.get(user, :is_admin, false)
 
-    {:user, user.id, user.email, user.password_hash, user.display_name, github_id,
+    {:user, user.id, user.email, user.password_hash, user.display_name, github_id, is_admin,
      user.created_at, user.updated_at}
   end
 

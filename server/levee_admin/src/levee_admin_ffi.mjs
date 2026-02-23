@@ -1,4 +1,4 @@
-import { Some, None } from "../build/dev/javascript/gleam_stdlib/gleam/option.mjs";
+import { Some, None } from "../gleam_stdlib/gleam/option.mjs";
 
 export function get_query_param(name) {
   const params = new URLSearchParams(window.location.search);
@@ -11,4 +11,8 @@ export function get_query_param(name) {
 
 export function navigate_to(url) {
   window.location.href = url;
+}
+
+export function get_origin() {
+  return window.location.origin;
 }

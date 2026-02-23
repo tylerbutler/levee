@@ -24,6 +24,15 @@ defmodule LeveeWeb.OAuthController do
 
         :error ->
           new_user = GleamBridge.create_oauth_user(email, display_name, github_id)
+
+          # Auto-promote first user to admin
+          new_user =
+            if SessionStore.user_count() == 0 do
+              Map.put(new_user, :is_admin, true)
+            else
+              new_user
+            end
+
           SessionStore.store_user(new_user)
           new_user
       end

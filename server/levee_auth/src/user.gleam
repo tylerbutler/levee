@@ -26,6 +26,8 @@ pub type User {
     display_name: String,
     /// GitHub user ID (for OAuth users)
     github_id: Option(String),
+    /// Whether this user has system-wide admin privileges
+    is_admin: Bool,
     /// Unix timestamp when user was created
     created_at: Int,
     /// Unix timestamp when user was last updated
@@ -86,6 +88,7 @@ pub fn create(
     password_hash: password_hash,
     display_name: name,
     github_id: None,
+    is_admin: False,
     created_at: now,
     updated_at: now,
   ))
@@ -111,6 +114,7 @@ pub fn create_oauth(
     password_hash: "",
     display_name: name,
     github_id: Some(github_id),
+    is_admin: False,
     created_at: now,
     updated_at: now,
   )
@@ -169,6 +173,7 @@ pub fn from_db(
   password_hash: String,
   display_name: String,
   github_id: Option(String),
+  is_admin: Bool,
   created_at: Int,
   updated_at: Int,
 ) -> User {
@@ -178,9 +183,15 @@ pub fn from_db(
     password_hash: password_hash,
     display_name: display_name,
     github_id: github_id,
+    is_admin: is_admin,
     created_at: created_at,
     updated_at: updated_at,
   )
+}
+
+/// Promote a user to admin.
+pub fn promote_to_admin(user: User) -> User {
+  User(..user, is_admin: True, updated_at: now_unix())
 }
 
 // Validation helpers

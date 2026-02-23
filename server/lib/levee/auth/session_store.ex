@@ -49,6 +49,10 @@ defmodule Levee.Auth.SessionStore do
     end)
   end
 
+  def user_count do
+    Agent.get(__MODULE__, fn state -> map_size(state.users) end)
+  end
+
   # Session operations
 
   def store_session(session) do
