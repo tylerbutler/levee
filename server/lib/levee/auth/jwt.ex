@@ -62,12 +62,11 @@ defmodule Levee.Auth.JWT do
   """
   @spec sign(token_claims(), String.t()) :: {:ok, String.t()} | {:error, term()}
   def sign(claims, tenant_id) do
-    case TenantSecrets.get_secret(tenant_id) do
-      {:ok, secret} ->
+    case TenantSecrets.get_secrets(tenant_id) do
+      {:ok, %{secret1: secret}} ->
         jwk = JOSE.JWK.from_oct(secret)
         jws = %{"alg" => "HS256"}
 
-        # Ensure claims has required fields
         claims_with_defaults =
           claims
           |> Map.put_new(:iat, System.system_time(:second))
@@ -79,8 +78,8 @@ defmodule Levee.Auth.JWT do
         {_, token} = JOSE.JWS.compact(JOSE.JWT.sign(jwk, jws, payload))
         {:ok, token}
 
-      {:error, reason} ->
-        {:error, {:tenant_secret_not_found, reason}}
+      {:error, :tenant_not_found} ->
+        {:error, {:tenant_secret_not_found, :tenant_not_found}}
     end
   end
 
@@ -97,23 +96,36 @@ defmodule Levee.Auth.JWT do
   """
   @spec verify(String.t(), String.t()) :: {:ok, token_claims()} | {:error, term()}
   def verify(token, tenant_id) do
-    case TenantSecrets.get_secret(tenant_id) do
-      {:ok, secret} ->
-        jwk = JOSE.JWK.from_oct(secret)
+    case TenantSecrets.get_secrets(tenant_id) do
+      {:ok, %{secret1: secret1, secret2: secret2}} ->
+        case verify_with_secret(token, secret1) do
+          {:ok, claims} ->
+            {:ok, claims}
 
-        case JOSE.JWT.verify_strict(jwk, ["HS256"], token) do
-          {true, %JOSE.JWT{fields: fields}, _jws} ->
-            {:ok, atomize_claims(fields)}
-
-          {false, _jwt, _jws} ->
-            {:error, :invalid_signature}
+          {:error, :invalid_signature} ->
+            verify_with_secret(token, secret2)
 
           {:error, reason} ->
-            {:error, {:jwt_decode_error, reason}}
+            {:error, reason}
         end
 
+      {:error, :tenant_not_found} ->
+        {:error, {:tenant_secret_not_found, :tenant_not_found}}
+    end
+  end
+
+  defp verify_with_secret(token, secret) do
+    jwk = JOSE.JWK.from_oct(secret)
+
+    case JOSE.JWT.verify_strict(jwk, ["HS256"], token) do
+      {true, %JOSE.JWT{fields: fields}, _jws} ->
+        {:ok, atomize_claims(fields)}
+
+      {false, _jwt, _jws} ->
+        {:error, :invalid_signature}
+
       {:error, reason} ->
-        {:error, {:tenant_secret_not_found, reason}}
+        {:error, {:jwt_decode_error, reason}}
     end
   end
 

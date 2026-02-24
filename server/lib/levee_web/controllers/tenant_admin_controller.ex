@@ -3,93 +3,58 @@ defmodule LeveeWeb.TenantAdminController do
 
   alias Levee.Auth.TenantSecrets
 
-  @doc """
-  List all registered tenants.
-
-  GET /api/admin/tenants
-  Returns: {tenants: [{id, has_secret}]}
-  """
   def index(conn, _params) do
-    tenants =
-      TenantSecrets.list_tenants()
-      |> Enum.map(fn id -> %{id: id} end)
-
+    tenants = TenantSecrets.list_tenants_with_names()
     json(conn, %{tenants: tenants})
   end
 
-  @doc """
-  Register a new tenant with a secret key.
+  def create(conn, %{"name" => name}) do
+    {:ok, tenant} = TenantSecrets.create_tenant(name)
 
-  POST /api/admin/tenants
-  Body: {id, secret}
-  Returns: {tenant: {id}, message: "..."}
-  """
-  def create(conn, %{"id" => tenant_id, "secret" => secret}) do
-    if TenantSecrets.tenant_exists?(tenant_id) do
-      conn
-      |> put_status(:conflict)
-      |> json(%{error: %{code: "tenant_exists", message: "Tenant already registered"}})
-    else
-      :ok = TenantSecrets.register_tenant(tenant_id, secret)
-
-      conn
-      |> put_status(:created)
-      |> json(%{tenant: %{id: tenant_id}, message: "Tenant registered"})
-    end
+    conn
+    |> put_status(:created)
+    |> json(%{tenant: tenant})
   end
 
   def create(conn, _params) do
     conn
     |> put_status(:unprocessable_entity)
-    |> json(%{error: %{code: "missing_fields", message: "Required: id, secret"}})
+    |> json(%{error: %{code: "missing_fields", message: "Required: name"}})
   end
 
-  @doc """
-  Get a tenant's registration status.
-
-  GET /api/admin/tenants/:id
-  Returns: {tenant: {id}}
-  """
   def show(conn, %{"id" => tenant_id}) do
-    if TenantSecrets.tenant_exists?(tenant_id) do
-      json(conn, %{tenant: %{id: tenant_id}})
-    else
-      conn
-      |> put_status(:not_found)
-      |> json(%{error: %{code: "not_found", message: "Tenant not found"}})
+    case TenantSecrets.get_tenant(tenant_id) do
+      {:ok, tenant} ->
+        {:ok, secrets} = TenantSecrets.get_secrets(tenant_id)
+        json(conn, %{tenant: Map.merge(tenant, secrets)})
+
+      {:error, :tenant_not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: %{code: "not_found", message: "Tenant not found"}})
     end
   end
 
-  @doc """
-  Update a tenant's secret key.
+  def regenerate_secret(conn, %{"id" => tenant_id, "slot" => slot_str}) do
+    case Integer.parse(slot_str) do
+      {slot, ""} when slot in [1, 2] ->
+        case TenantSecrets.regenerate_secret(tenant_id, slot) do
+          {:ok, new_secret} ->
+            json(conn, %{secret: new_secret})
 
-  PUT /api/admin/tenants/:id
-  Body: {secret}
-  Returns: {tenant: {id}, message: "..."}
-  """
-  def update(conn, %{"id" => tenant_id, "secret" => secret}) do
-    if TenantSecrets.tenant_exists?(tenant_id) do
-      :ok = TenantSecrets.register_tenant(tenant_id, secret)
-      json(conn, %{tenant: %{id: tenant_id}, message: "Tenant secret updated"})
-    else
-      conn
-      |> put_status(:not_found)
-      |> json(%{error: %{code: "not_found", message: "Tenant not found"}})
+          {:error, :tenant_not_found} ->
+            conn
+            |> put_status(:not_found)
+            |> json(%{error: %{code: "not_found", message: "Tenant not found"}})
+        end
+
+      _ ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: %{code: "invalid_slot", message: "Slot must be 1 or 2"}})
     end
   end
 
-  def update(conn, %{"id" => _tenant_id}) do
-    conn
-    |> put_status(:unprocessable_entity)
-    |> json(%{error: %{code: "missing_fields", message: "Required: secret"}})
-  end
-
-  @doc """
-  Unregister a tenant.
-
-  DELETE /api/admin/tenants/:id
-  Returns: {message: "..."}
-  """
   def delete(conn, %{"id" => tenant_id}) do
     if TenantSecrets.tenant_exists?(tenant_id) do
       :ok = TenantSecrets.unregister_tenant(tenant_id)
