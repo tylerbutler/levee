@@ -94,7 +94,7 @@ pub type Msg {
   TenantsResponse(Result(api.TenantList, api.ApiError))
   DashboardTenantsResponse(Result(api.TenantList, api.ApiError))
   CreateTenantResponse(Result(api.TenantWithSecrets, api.ApiError))
-  GetTenantResponse(Result(api.Tenant, api.ApiError))
+  GetTenantResponse(Result(api.TenantWithSecrets, api.ApiError))
   RegenerateSecretResponse(Int, Result(api.RegenerateResponse, api.ApiError))
   DeleteTenantResponse(Result(api.DeleteResponse, api.ApiError))
   Logout
@@ -426,7 +426,12 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 
     GetTenantResponse(Ok(tenant)) -> {
       let detail_model =
-        tenant_detail.set_loaded(model.tenant_detail, tenant.name)
+        tenant_detail.set_loaded(
+          model.tenant_detail,
+          tenant.name,
+          tenant.secret1,
+          tenant.secret2,
+        )
       #(Model(..model, tenant_detail: detail_model), effect.none())
     }
 

@@ -25,7 +25,8 @@ defmodule LeveeWeb.TenantAdminController do
   def show(conn, %{"id" => tenant_id}) do
     case TenantSecrets.get_tenant(tenant_id) do
       {:ok, tenant} ->
-        json(conn, %{tenant: tenant})
+        {:ok, secrets} = TenantSecrets.get_secrets(tenant_id)
+        json(conn, %{tenant: Map.merge(tenant, secrets)})
 
       {:error, :tenant_not_found} ->
         conn

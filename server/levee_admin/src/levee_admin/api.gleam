@@ -315,17 +315,12 @@ pub fn list_tenants(
 pub fn get_tenant(
   token: String,
   tenant_id: String,
-  on_response: fn(Result(Tenant, ApiError)) -> msg,
+  on_response: fn(Result(TenantWithSecrets, ApiError)) -> msg,
 ) -> Effect(msg) {
-  let tenant_wrapper_decoder = {
-    use tenant <- decode.field("tenant", tenant_decoder())
-    decode.success(tenant)
-  }
-
   get_json(
     api_base <> "/tenants/" <> tenant_id,
     Some(token),
-    tenant_wrapper_decoder,
+    create_tenant_response_decoder(),
     on_response,
   )
 }

@@ -144,7 +144,7 @@ defmodule LeveeWeb.TenantAdminControllerTest do
   end
 
   describe "GET /api/tenants/:id" do
-    test "returns tenant info without secrets", %{conn: conn, admin_session: session} do
+    test "returns tenant info with secrets", %{conn: conn, admin_session: session} do
       {:ok, created} = TenantSecrets.create_tenant("My App")
 
       conn =
@@ -155,8 +155,8 @@ defmodule LeveeWeb.TenantAdminControllerTest do
       assert %{"tenant" => tenant} = json_response(conn, 200)
       assert tenant["id"] == created.id
       assert tenant["name"] == "My App"
-      refute Map.has_key?(tenant, "secret1")
-      refute Map.has_key?(tenant, "secret2")
+      assert tenant["secret1"] == created.secret1
+      assert tenant["secret2"] == created.secret2
     end
 
     test "returns 404 when tenant does not exist", %{conn: conn, admin_session: session} do

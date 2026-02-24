@@ -69,8 +69,19 @@ pub fn init(tenant_id: String) -> Model {
   )
 }
 
-pub fn set_loaded(model: Model, name: String) -> Model {
-  Model(..model, state: Loaded, tenant_name: name)
+pub fn set_loaded(
+  model: Model,
+  name: String,
+  secret1: String,
+  secret2: String,
+) -> Model {
+  Model(
+    ..model,
+    state: Loaded,
+    tenant_name: name,
+    secret1_value: secret1,
+    secret2_value: secret2,
+  )
 }
 
 pub fn set_loaded_with_secrets(
