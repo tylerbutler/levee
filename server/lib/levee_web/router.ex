@@ -135,8 +135,8 @@ defmodule LeveeWeb.Router do
     get "/tenants", TenantAdminController, :index
     post "/tenants", TenantAdminController, :create
     get "/tenants/:id", TenantAdminController, :show
-    put "/tenants/:id", TenantAdminController, :update
     delete "/tenants/:id", TenantAdminController, :delete
+    post "/tenants/:id/secrets/:slot", TenantAdminController, :regenerate_secret
   end
 
   # Session-auth admin routes (for admin UI SPA)
@@ -151,8 +151,8 @@ defmodule LeveeWeb.Router do
     get "/", TenantAdminController, :index
     post "/", TenantAdminController, :create
     get "/:id", TenantAdminController, :show
-    put "/:id", TenantAdminController, :update
     delete "/:id", TenantAdminController, :delete
+    post "/:id/secrets/:slot", TenantAdminController, :regenerate_secret
   end
 
   # Browser pipeline for HTML routes
