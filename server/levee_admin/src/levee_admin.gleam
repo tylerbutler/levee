@@ -93,9 +93,9 @@ pub type Msg {
   // Tenant API responses
   TenantsResponse(Result(api.TenantList, api.ApiError))
   DashboardTenantsResponse(Result(api.TenantList, api.ApiError))
-  CreateTenantResponse(Result(api.TenantResponse, api.ApiError))
+  CreateTenantResponse(Result(api.TenantWithSecrets, api.ApiError))
   GetTenantResponse(Result(api.Tenant, api.ApiError))
-  UpdateTenantResponse(Result(api.TenantResponse, api.ApiError))
+  RegenerateSecretResponse(Int, Result(api.RegenerateResponse, api.ApiError))
   DeleteTenantResponse(Result(api.DeleteResponse, api.ApiError))
   Logout
 }
@@ -123,16 +123,14 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       let effect = case route, model.session_token {
         router.Dashboard, Some(token) ->
           api.list_tenants(token, DashboardTenantsResponse)
-        router.Tenants, Some(token) ->
-          api.list_tenants(token, TenantsResponse)
+        router.Tenants, Some(token) -> api.list_tenants(token, TenantsResponse)
         router.TenantDetail(id), Some(token) ->
           api.get_tenant(token, id, GetTenantResponse)
         _, _ -> effect.none()
       }
 
       let model = case route {
-        router.Tenants ->
-          Model(..model, route: route, tenants: tenants.init())
+        router.Tenants -> Model(..model, route: route, tenants: tenants.init())
         router.TenantNew ->
           Model(..model, route: route, tenant_new: tenant_new.init())
         router.TenantDetail(id) ->
@@ -227,15 +225,9 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         tenant_new.get_pending_submit(tenant_new_model),
         model.session_token
       {
-        Some(data), Some(token) -> {
+        Some(name), Some(token) -> {
           let tenant_new_model = tenant_new.start_loading(tenant_new_model)
-          let api_effect =
-            api.create_tenant(
-              token,
-              data.tenant_id,
-              data.secret,
-              CreateTenantResponse,
-            )
+          let api_effect = api.create_tenant(token, name, CreateTenantResponse)
           #(Model(..model, tenant_new: tenant_new_model), api_effect)
         }
         _, _ -> #(Model(..model, tenant_new: tenant_new_model), mapped_effect)
@@ -248,17 +240,18 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       let mapped_effect = effect.map(detail_effect, TenantDetailMsg)
 
       case
-        tenant_detail.get_pending_update(detail_model),
+        tenant_detail.get_pending_regenerate(detail_model),
         model.session_token
       {
-        Some(secret), Some(token) -> {
-          let detail_model = tenant_detail.start_update_loading(detail_model)
+        Some(slot), Some(token) -> {
+          let detail_model =
+            tenant_detail.start_regenerate_loading(detail_model, slot)
           let api_effect =
-            api.update_tenant(
+            api.regenerate_secret(
               token,
               detail_model.tenant_id,
-              secret,
-              UpdateTenantResponse,
+              slot,
+              fn(result) { RegenerateSecretResponse(slot, result) },
             )
           #(Model(..model, tenant_detail: detail_model), api_effect)
         }
@@ -352,8 +345,7 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       let nav_effect = modem.push("/admin/dashboard", None, None)
       case model.session_token {
         Some(token) -> {
-          let load_effect =
-            api.list_tenants(token, DashboardTenantsResponse)
+          let load_effect = api.list_tenants(token, DashboardTenantsResponse)
           #(model, effect.batch([nav_effect, load_effect]))
         }
         None -> #(model, nav_effect)
@@ -367,7 +359,9 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 
     TenantsResponse(Ok(tenant_list)) -> {
       let tenant_models =
-        list.map(tenant_list.tenants, fn(t) { tenants.Tenant(id: t.id) })
+        list.map(tenant_list.tenants, fn(t) {
+          tenants.Tenant(id: t.id, name: t.name)
+        })
       let tenants_model =
         tenants.update(model.tenants, tenants.TenantsLoaded(tenant_models)).0
       #(Model(..model, tenants: tenants_model), effect.none())
@@ -375,13 +369,18 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 
     TenantsResponse(Error(_error)) -> {
       let tenants_model =
-        tenants.update(model.tenants, tenants.LoadError("Failed to load tenants")).0
+        tenants.update(
+          model.tenants,
+          tenants.LoadError("Failed to load tenants"),
+        ).0
       #(Model(..model, tenants: tenants_model), effect.none())
     }
 
     DashboardTenantsResponse(Ok(tenant_list)) -> {
       let tenant_models =
-        list.map(tenant_list.tenants, fn(t) { dashboard.Tenant(id: t.id) })
+        list.map(tenant_list.tenants, fn(t) {
+          dashboard.Tenant(id: t.id, name: t.name)
+        })
       let dashboard_model =
         dashboard.update(
           model.dashboard,
@@ -399,18 +398,24 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       #(Model(..model, dashboard: dashboard_model), effect.none())
     }
 
-    CreateTenantResponse(Ok(response)) -> {
-      let model = Model(..model, tenant_new: tenant_new.init())
-      #(model, modem.push("/admin/tenants/" <> response.tenant.id, None, None))
-    }
-
-    CreateTenantResponse(Error(api.ServerError(409, _))) -> {
-      let tenant_new_model =
-        tenant_new.set_error(
-          model.tenant_new,
-          "A tenant with this ID already exists",
+    CreateTenantResponse(Ok(tenant_with_secrets)) -> {
+      let detail_model =
+        tenant_detail.init(tenant_with_secrets.id)
+        |> tenant_detail.set_loaded_with_secrets(
+          tenant_with_secrets.name,
+          tenant_with_secrets.secret1,
+          tenant_with_secrets.secret2,
         )
-      #(Model(..model, tenant_new: tenant_new_model), effect.none())
+      let model =
+        Model(
+          ..model,
+          tenant_new: tenant_new.init(),
+          tenant_detail: detail_model,
+        )
+      #(
+        model,
+        modem.push("/admin/tenants/" <> tenant_with_secrets.id, None, None),
+      )
     }
 
     CreateTenantResponse(Error(_error)) -> {
@@ -419,8 +424,9 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       #(Model(..model, tenant_new: tenant_new_model), effect.none())
     }
 
-    GetTenantResponse(Ok(_tenant)) -> {
-      let detail_model = tenant_detail.set_loaded(model.tenant_detail)
+    GetTenantResponse(Ok(tenant)) -> {
+      let detail_model =
+        tenant_detail.set_loaded(model.tenant_detail, tenant.name)
       #(Model(..model, tenant_detail: detail_model), effect.none())
     }
 
@@ -435,16 +441,22 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       #(Model(..model, tenant_detail: detail_model), effect.none())
     }
 
-    UpdateTenantResponse(Ok(_response)) -> {
-      let detail_model = tenant_detail.set_update_success(model.tenant_detail)
+    RegenerateSecretResponse(slot, Ok(response)) -> {
+      let detail_model =
+        tenant_detail.set_regenerate_success(
+          model.tenant_detail,
+          slot,
+          response.secret,
+        )
       #(Model(..model, tenant_detail: detail_model), effect.none())
     }
 
-    UpdateTenantResponse(Error(_error)) -> {
+    RegenerateSecretResponse(slot, Error(_error)) -> {
       let detail_model =
-        tenant_detail.set_update_error(
+        tenant_detail.set_regenerate_error(
           model.tenant_detail,
-          "Failed to update secret",
+          slot,
+          "Failed to regenerate secret",
         )
       #(Model(..model, tenant_detail: detail_model), effect.none())
     }
@@ -455,7 +467,10 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 
     DeleteTenantResponse(Error(_error)) -> {
       let detail_model =
-        tenant_detail.set_delete_error(model.tenant_detail, "Failed to delete tenant")
+        tenant_detail.set_delete_error(
+          model.tenant_detail,
+          "Failed to delete tenant",
+        )
       #(Model(..model, tenant_detail: detail_model), effect.none())
     }
 

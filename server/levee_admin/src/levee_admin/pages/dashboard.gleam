@@ -9,7 +9,7 @@ import lustre/element.{type Element}
 import lustre/element/html.{a, div, h1, h2, li, p, span, text, ul}
 
 pub type Tenant {
-  Tenant(id: String)
+  Tenant(id: String, name: String)
 }
 
 pub type Model {
@@ -98,17 +98,23 @@ fn view_tenant_preview(tenants: List(Tenant)) -> Element(Msg) {
   div([], [
     p([class("tenant-count")], [
       text(
-        int.to_string(count) <> " tenant" <> case count {
+        int.to_string(count)
+        <> " tenant"
+        <> case count {
           1 -> ""
           _ -> "s"
-        } <> " registered",
+        }
+        <> " registered",
       ),
     ]),
     ul(
       [class("tenant-list")],
       list.map(preview, fn(tenant) {
         li([class("tenant-item")], [
-          a([href("/admin/tenants/" <> tenant.id)], [text(tenant.id)]),
+          a([href("/admin/tenants/" <> tenant.id)], [
+            text(tenant.name),
+            span([class("tenant-id-small")], [text(" (" <> tenant.id <> ")")]),
+          ]),
         ])
       }),
     ),

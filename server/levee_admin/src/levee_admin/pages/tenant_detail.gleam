@@ -1,11 +1,12 @@
-//// Tenant detail page component with edit secret and type-to-confirm delete.
+//// Tenant detail page with dual secret display and per-slot regeneration.
 
+import gleam/int
 import gleam/option.{type Option, None, Some}
 import gleam/string
-import lustre/attribute.{class, disabled, for, id, placeholder, type_, value}
+import lustre/attribute.{class, disabled, type_}
 import lustre/effect.{type Effect}
 import lustre/element.{type Element}
-import lustre/element/html.{a, button, div, form, h1, h2, input, label, p, span, text}
+import lustre/element/html.{a, button, code, div, h1, h2, p, span, text}
 import lustre/event
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -19,11 +20,12 @@ pub type PageState {
   Error(String)
 }
 
-pub type SecretState {
-  SecretIdle
-  SecretSubmitting
-  SecretSuccess
-  SecretError(String)
+pub type SecretSlotState {
+  SlotIdle
+  SlotConfirming
+  SlotSubmitting
+  SlotSuccess(String)
+  SlotError(String)
 }
 
 pub type DeleteState {
@@ -36,11 +38,16 @@ pub type DeleteState {
 pub type Model {
   Model(
     tenant_id: String,
+    tenant_name: String,
     state: PageState,
-    new_secret: String,
-    secret_state: SecretState,
+    secret1_visible: Bool,
+    secret2_visible: Bool,
+    secret1_value: String,
+    secret2_value: String,
+    secret1_state: SecretSlotState,
+    secret2_state: SecretSlotState,
     delete_state: DeleteState,
-    pending_update: Option(String),
+    pending_regenerate: Option(Int),
     pending_delete: Bool,
   )
 }
@@ -48,17 +55,39 @@ pub type Model {
 pub fn init(tenant_id: String) -> Model {
   Model(
     tenant_id: tenant_id,
+    tenant_name: "",
     state: Loading,
-    new_secret: "",
-    secret_state: SecretIdle,
+    secret1_visible: False,
+    secret2_visible: False,
+    secret1_value: "",
+    secret2_value: "",
+    secret1_state: SlotIdle,
+    secret2_state: SlotIdle,
     delete_state: DeleteHidden,
-    pending_update: None,
+    pending_regenerate: None,
     pending_delete: False,
   )
 }
 
-pub fn set_loaded(model: Model) -> Model {
-  Model(..model, state: Loaded)
+pub fn set_loaded(model: Model, name: String) -> Model {
+  Model(..model, state: Loaded, tenant_name: name)
+}
+
+pub fn set_loaded_with_secrets(
+  model: Model,
+  name: String,
+  secret1: String,
+  secret2: String,
+) -> Model {
+  Model(
+    ..model,
+    state: Loaded,
+    tenant_name: name,
+    secret1_value: secret1,
+    secret2_value: secret2,
+    secret1_visible: True,
+    secret2_visible: True,
+  )
 }
 
 pub fn set_not_found(model: Model) -> Model {
@@ -69,20 +98,45 @@ pub fn set_error(model: Model, error: String) -> Model {
   Model(..model, state: Error(error))
 }
 
-pub fn start_update_loading(model: Model) -> Model {
-  Model(..model, secret_state: SecretSubmitting, pending_update: None)
+pub fn get_pending_regenerate(model: Model) -> Option(Int) {
+  model.pending_regenerate
 }
 
-pub fn set_update_success(model: Model) -> Model {
-  Model(..model, secret_state: SecretSuccess, new_secret: "")
+pub fn start_regenerate_loading(model: Model, slot: Int) -> Model {
+  case slot {
+    1 -> Model(..model, secret1_state: SlotSubmitting, pending_regenerate: None)
+    _ -> Model(..model, secret2_state: SlotSubmitting, pending_regenerate: None)
+  }
 }
 
-pub fn set_update_error(model: Model, error: String) -> Model {
-  Model(..model, secret_state: SecretError(error))
+pub fn set_regenerate_success(
+  model: Model,
+  slot: Int,
+  new_secret: String,
+) -> Model {
+  case slot {
+    1 ->
+      Model(
+        ..model,
+        secret1_state: SlotSuccess("Secret 1 regenerated"),
+        secret1_value: new_secret,
+        secret1_visible: True,
+      )
+    _ ->
+      Model(
+        ..model,
+        secret2_state: SlotSuccess("Secret 2 regenerated"),
+        secret2_value: new_secret,
+        secret2_visible: True,
+      )
+  }
 }
 
-pub fn get_pending_update(model: Model) -> Option(String) {
-  model.pending_update
+pub fn set_regenerate_error(model: Model, slot: Int, error: String) -> Model {
+  case slot {
+    1 -> Model(..model, secret1_state: SlotError(error))
+    _ -> Model(..model, secret2_state: SlotError(error))
+  }
 }
 
 pub fn start_delete_loading(model: Model) -> Model {
@@ -102,10 +156,11 @@ pub fn set_delete_error(model: Model, error: String) -> Model {
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub type Msg {
-  // Secret editing
-  UpdateNewSecret(String)
-  SubmitSecret
-  // Delete flow
+  ToggleSecret1Visible
+  ToggleSecret2Visible
+  RequestRegenerate(Int)
+  ConfirmRegenerate(Int)
+  CancelRegenerate(Int)
   ShowDeleteConfirm
   HideDeleteConfirm
   UpdateDeleteConfirmation(String)
@@ -118,24 +173,32 @@ pub type Msg {
 
 pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   case msg {
-    UpdateNewSecret(secret) -> #(
-      Model(..model, new_secret: secret),
+    ToggleSecret1Visible -> #(
+      Model(..model, secret1_visible: !model.secret1_visible),
       effect.none(),
     )
 
-    SubmitSecret -> {
-      let trimmed = string.trim(model.new_secret)
-      case string.is_empty(trimmed) {
-        True -> #(
-          Model(..model, secret_state: SecretError("Secret cannot be empty")),
-          effect.none(),
-        )
-        False -> {
-          #(
-            Model(..model, pending_update: Some(trimmed)),
-            effect.none(),
-          )
-        }
+    ToggleSecret2Visible -> #(
+      Model(..model, secret2_visible: !model.secret2_visible),
+      effect.none(),
+    )
+
+    RequestRegenerate(slot) -> {
+      case slot {
+        1 -> #(Model(..model, secret1_state: SlotConfirming), effect.none())
+        _ -> #(Model(..model, secret2_state: SlotConfirming), effect.none())
+      }
+    }
+
+    ConfirmRegenerate(slot) -> #(
+      Model(..model, pending_regenerate: Some(slot)),
+      effect.none(),
+    )
+
+    CancelRegenerate(slot) -> {
+      case slot {
+        1 -> #(Model(..model, secret1_state: SlotIdle), effect.none())
+        _ -> #(Model(..model, secret2_state: SlotIdle), effect.none())
       }
     }
 
@@ -175,7 +238,7 @@ pub fn view(model: Model) -> Element(Msg) {
       a([class("back-link"), attribute.href("/admin/tenants")], [
         text("Back to Tenants"),
       ]),
-      h1([class("page-title")], [text("Tenant: " <> model.tenant_id)]),
+      h1([class("page-title")], [text("Tenant: " <> model.tenant_name)]),
     ]),
     view_content(model),
   ])
@@ -203,7 +266,8 @@ fn view_content(model: Model) -> Element(Msg) {
     Loaded ->
       div([class("tenant-detail-content")], [
         view_info(model),
-        view_update_secret(model),
+        view_secret_card(model, 1),
+        view_secret_card(model, 2),
         view_delete_section(model),
       ])
   }
@@ -216,50 +280,62 @@ fn view_info(model: Model) -> Element(Msg) {
       span([class("detail-label")], [text("ID")]),
       span([class("detail-value")], [text(model.tenant_id)]),
     ]),
-  ])
-}
-
-fn view_update_secret(model: Model) -> Element(Msg) {
-  let is_submitting = case model.secret_state {
-    SecretSubmitting -> True
-    _ -> False
-  }
-
-  div([class("card")], [
-    h2([], [text("Update Secret")]),
-    view_secret_status(model.secret_state),
-    form([class("tenant-form"), event.on_submit(fn(_) { SubmitSecret })], [
-      div([class("form-group")], [
-        label([for("new_secret")], [text("New Secret")]),
-        input([
-          type_("password"),
-          id("new_secret"),
-          placeholder("Enter new signing secret"),
-          value(model.new_secret),
-          event.on_input(UpdateNewSecret),
-          attribute.required(True),
-        ]),
-      ]),
-      button(
-        [type_("submit"), class("btn btn-primary"), disabled(is_submitting)],
-        [
-          case is_submitting {
-            True -> text("Updating...")
-            False -> text("Update Secret")
-          },
-        ],
-      ),
+    div([class("detail-row")], [
+      span([class("detail-label")], [text("Name")]),
+      span([class("detail-value")], [text(model.tenant_name)]),
     ]),
   ])
 }
 
-fn view_secret_status(state: SecretState) -> Element(Msg) {
+fn view_secret_card(model: Model, slot: Int) -> Element(Msg) {
+  let #(slot_state, secret_value, is_visible) = case slot {
+    1 -> #(model.secret1_state, model.secret1_value, model.secret1_visible)
+    _ -> #(model.secret2_state, model.secret2_value, model.secret2_visible)
+  }
+
+  let toggle_msg = case slot {
+    1 -> ToggleSecret1Visible
+    _ -> ToggleSecret2Visible
+  }
+
+  div([class("card")], [
+    h2([], [text("Secret " <> int.to_string(slot))]),
+    view_slot_status(slot_state),
+    case string.is_empty(secret_value) {
+      True ->
+        p([class("form-help")], [
+          text("Secret value is hidden. Regenerate to see the new value."),
+        ])
+      False ->
+        div([class("secret-display")], [
+          code([class("secret-value")], [
+            text(case is_visible {
+              True -> secret_value
+              False -> "••••••••••••••••••••••••••••••••"
+            }),
+          ]),
+          button(
+            [class("btn btn-secondary btn-sm"), event.on_click(toggle_msg)],
+            [
+              text(case is_visible {
+                True -> "Hide"
+                False -> "Show"
+              }),
+            ],
+          ),
+        ])
+    },
+    view_regenerate_section(slot, slot_state),
+  ])
+}
+
+fn view_slot_status(state: SecretSlotState) -> Element(Msg) {
   case state {
-    SecretSuccess ->
+    SlotSuccess(message) ->
       div([class("alert alert-success")], [
-        span([class("alert-message")], [text("Secret updated successfully.")]),
+        span([class("alert-message")], [text(message)]),
       ])
-    SecretError(message) ->
+    SlotError(message) ->
       div([class("alert alert-error")], [
         span([class("alert-icon")], [text("!")]),
         span([class("alert-message")], [text(message)]),
@@ -268,30 +344,56 @@ fn view_secret_status(state: SecretState) -> Element(Msg) {
   }
 }
 
+fn view_regenerate_section(slot: Int, state: SecretSlotState) -> Element(Msg) {
+  case state {
+    SlotConfirming ->
+      div([class("regenerate-confirm")], [
+        p([class("delete-warning")], [
+          text("This will invalidate tokens signed with this secret. Continue?"),
+        ]),
+        div([class("delete-actions")], [
+          button(
+            [class("btn btn-danger"), event.on_click(ConfirmRegenerate(slot))],
+            [text("Regenerate")],
+          ),
+          button(
+            [class("btn btn-secondary"), event.on_click(CancelRegenerate(slot))],
+            [text("Cancel")],
+          ),
+        ]),
+      ])
+
+    SlotSubmitting -> p([class("loading")], [text("Regenerating...")])
+
+    _ ->
+      button(
+        [class("btn btn-primary"), event.on_click(RequestRegenerate(slot))],
+        [text("Regenerate Secret " <> int.to_string(slot))],
+      )
+  }
+}
+
 fn view_delete_section(model: Model) -> Element(Msg) {
   div([class("card danger-card")], [
     h2([], [text("Danger Zone")]),
     case model.delete_state {
       DeleteHidden ->
-        button(
-          [class("btn btn-danger"), event.on_click(ShowDeleteConfirm)],
-          [text("Delete Tenant")],
-        )
+        button([class("btn btn-danger"), event.on_click(ShowDeleteConfirm)], [
+          text("Delete Tenant"),
+        ])
 
       DeleteConfirming(confirmation) -> {
         let matches = confirmation == model.tenant_id
         div([class("delete-confirm")], [
           p([class("delete-warning")], [
-            text(
-              "This action cannot be undone. Type the tenant ID to confirm:",
-            ),
+            text("This action cannot be undone. Type the tenant ID to confirm:"),
           ]),
           p([class("delete-tenant-id")], [text(model.tenant_id)]),
           div([class("form-group")], [
-            input([
+            html.input([
               type_("text"),
-              placeholder("Type tenant ID to confirm"),
-              value(confirmation),
+              attribute.placeholder("Type tenant ID to confirm"),
+              attribute.value(confirmation),
               event.on_input(UpdateDeleteConfirmation),
               class("delete-confirm-input"),
             ]),
@@ -313,8 +415,7 @@ fn view_delete_section(model: Model) -> Element(Msg) {
         ])
       }
 
-      DeleteSubmitting ->
-        p([class("loading")], [text("Deleting tenant...")])
+      DeleteSubmitting -> p([class("loading")], [text("Deleting tenant...")])
 
       DeleteError(message) ->
         div([], [

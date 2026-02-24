@@ -13,7 +13,7 @@ import lustre/event
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub type Tenant {
-  Tenant(id: String)
+  Tenant(id: String, name: String)
 }
 
 pub type PageState {
@@ -83,7 +83,8 @@ pub fn view(model: Model) -> Element(Msg) {
 
 fn view_content(model: Model) -> Element(Msg) {
   case model.state {
-    Loading -> div([class("loading-state")], [p([], [text("Loading tenants...")])])
+    Loading ->
+      div([class("loading-state")], [p([], [text("Loading tenants...")])])
 
     Error(message) ->
       div([class("error-state")], [
@@ -91,10 +92,9 @@ fn view_content(model: Model) -> Element(Msg) {
           span([class("alert-icon")], [text("!")]),
           span([class("alert-message")], [text(message)]),
         ]),
-        html.button(
-          [class("btn btn-primary"), event.on_click(Retry)],
-          [text("Retry")],
-        ),
+        html.button([class("btn btn-primary"), event.on_click(Retry)], [
+          text("Retry"),
+        ]),
       ])
 
     Loaded ->
@@ -113,7 +113,8 @@ fn view_content(model: Model) -> Element(Msg) {
             div([class("tenant-table-header")], [
               span([], [
                 text(
-                  int.to_string(count) <> " tenant"
+                  int.to_string(count)
+                  <> " tenant"
                   <> case count {
                     1 -> ""
                     _ -> "s"
@@ -126,6 +127,7 @@ fn view_content(model: Model) -> Element(Msg) {
               list.map(tenants, fn(tenant) {
                 li([class("tenant-row")], [
                   a([href("/admin/tenants/" <> tenant.id)], [
+                    span([class("tenant-name")], [text(tenant.name)]),
                     span([class("tenant-id")], [text(tenant.id)]),
                   ]),
                 ])

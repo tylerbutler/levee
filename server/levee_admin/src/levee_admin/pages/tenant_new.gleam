@@ -1,11 +1,13 @@
-//// Create tenant form page component.
+//// Create tenant form page — only requires a name, server generates everything else.
 
 import gleam/option.{type Option, None, Some}
 import gleam/string
 import lustre/attribute.{class, disabled, for, id, placeholder, type_, value}
 import lustre/effect.{type Effect}
 import lustre/element.{type Element}
-import lustre/element/html.{a, button, div, form, h1, input, label, p, span, text}
+import lustre/element/html.{
+  a, button, div, form, h1, input, label, p, span, text,
+}
 import lustre/event
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -19,20 +21,11 @@ pub type FormState {
 }
 
 pub type Model {
-  Model(
-    tenant_id: String,
-    secret: String,
-    state: FormState,
-    pending_submit: Option(SubmitData),
-  )
-}
-
-pub type SubmitData {
-  SubmitData(tenant_id: String, secret: String)
+  Model(name: String, state: FormState, pending_submit: Option(String))
 }
 
 pub fn init() -> Model {
-  Model(tenant_id: "", secret: "", state: Idle, pending_submit: None)
+  Model(name: "", state: Idle, pending_submit: None)
 }
 
 pub fn start_loading(model: Model) -> Model {
@@ -43,7 +36,7 @@ pub fn set_error(model: Model, error: String) -> Model {
   Model(..model, state: Error(error))
 }
 
-pub fn get_pending_submit(model: Model) -> Option(SubmitData) {
+pub fn get_pending_submit(model: Model) -> Option(String) {
   model.pending_submit
 }
 
@@ -52,8 +45,7 @@ pub fn get_pending_submit(model: Model) -> Option(SubmitData) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub type Msg {
-  UpdateTenantId(String)
-  UpdateSecret(String)
+  UpdateName(String)
   Submit
 }
 
@@ -63,30 +55,16 @@ pub type Msg {
 
 pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   case msg {
-    UpdateTenantId(tenant_id) -> #(
-      Model(..model, tenant_id: tenant_id),
-      effect.none(),
-    )
-
-    UpdateSecret(secret) -> #(Model(..model, secret: secret), effect.none())
+    UpdateName(name) -> #(Model(..model, name: name), effect.none())
 
     Submit -> {
-      case string.is_empty(string.trim(model.tenant_id)), string.is_empty(string.trim(model.secret)) {
-        True, _ -> #(
-          Model(..model, state: Error("Tenant ID is required")),
+      let trimmed = string.trim(model.name)
+      case string.is_empty(trimmed) {
+        True -> #(
+          Model(..model, state: Error("Name is required")),
           effect.none(),
         )
-        _, True -> #(
-          Model(..model, state: Error("Secret is required")),
-          effect.none(),
-        )
-        False, False -> {
-          let data = SubmitData(
-            tenant_id: string.trim(model.tenant_id),
-            secret: model.secret,
-          )
-          #(Model(..model, pending_submit: Some(data)), effect.none())
-        }
+        False -> #(Model(..model, pending_submit: Some(trimmed)), effect.none())
       }
     }
   }
@@ -113,31 +91,19 @@ pub fn view(model: Model) -> Element(Msg) {
       view_error(model.state),
       form([class("tenant-form"), event.on_submit(fn(_) { Submit })], [
         div([class("form-group")], [
-          label([for("tenant_id")], [text("Tenant ID")]),
+          label([for("name")], [text("Name")]),
           input([
             type_("text"),
-            id("tenant_id"),
-            placeholder("my-tenant"),
-            value(model.tenant_id),
-            event.on_input(UpdateTenantId),
+            id("name"),
+            placeholder("My Application"),
+            value(model.name),
+            event.on_input(UpdateName),
             attribute.required(True),
           ]),
           p([class("form-help")], [
-            text("Choose a unique identifier for this tenant. This cannot be changed later."),
-          ]),
-        ]),
-        div([class("form-group")], [
-          label([for("secret")], [text("Secret")]),
-          input([
-            type_("password"),
-            id("secret"),
-            placeholder("Tenant signing secret"),
-            value(model.secret),
-            event.on_input(UpdateSecret),
-            attribute.required(True),
-          ]),
-          p([class("form-help")], [
-            text("Used to sign JWT tokens for this tenant's clients."),
+            text(
+              "A display name for this tenant. The tenant ID and secrets will be generated automatically.",
+            ),
           ]),
         ]),
         button(
