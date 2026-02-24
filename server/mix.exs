@@ -55,7 +55,9 @@ defmodule Levee.MixProject do
       {:ueberauth_github, "~> 0.8"},
       # Database (optional PostgreSQL backend)
       {:ecto_sql, "~> 3.12"},
-      {:postgrex, "~> 0.19"}
+      {:postgrex, "~> 0.19"},
+      # Tenant ID generation
+      {:unique_names_generator, "~> 0.2.0"}
     ]
   end
 
