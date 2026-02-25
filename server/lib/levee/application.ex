@@ -87,7 +87,7 @@ defmodule Levee.Application do
     # In releases, Gleam packages are copied to /app/<package>.
     project_root = File.cwd!()
 
-    gleam_packages = ["levee_protocol", "levee_auth"]
+    gleam_packages = ["levee_protocol", "levee_auth", "levee_oauth"]
 
     base_paths =
       Enum.flat_map(gleam_packages, fn pkg ->
