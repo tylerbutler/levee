@@ -22,12 +22,11 @@ end
 
 config :levee, LeveeWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
-# Configure GitHub OAuth credentials from environment
-if github_client_id = System.get_env("GITHUB_CLIENT_ID") do
-  config :ueberauth, Ueberauth.Strategy.Github.OAuth,
-    client_id: github_client_id,
-    client_secret: System.get_env("GITHUB_CLIENT_SECRET")
-end
+# GitHub OAuth credentials are read directly from environment variables
+# by the Gleam levee_oauth package:
+#   GITHUB_CLIENT_ID - GitHub OAuth App client ID
+#   GITHUB_CLIENT_SECRET - GitHub OAuth App client secret
+#   GITHUB_REDIRECT_URI - Callback URL (e.g., http://localhost:4000/auth/github/callback)
 
 # Configure storage backend based on environment variable
 if database_url = System.get_env("DATABASE_URL") do
