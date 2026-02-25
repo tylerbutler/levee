@@ -9,6 +9,7 @@ import gleam/result
 
 import vestibule
 import vestibule/auth.{type Auth}
+import vestibule/authorization_request.{AuthorizationRequest}
 import vestibule/strategy.{type Strategy}
 import vestibule/strategy/github
 
@@ -22,7 +23,7 @@ import levee_oauth/state_store
 const state_ttl_seconds = 180
 
 /// Phase 1: Begin OAuth flow. Returns the authorization URL to redirect to.
-/// Stores CSRF state in the state store with a 3-minute TTL.
+/// Stores CSRF state and PKCE code verifier in the state store with a 3-minute TTL.
 pub fn begin_auth(
   provider: String,
   store: Subject(state_store.Message),
@@ -31,8 +32,8 @@ pub fn begin_auth(
   use oauth_config <- result.try(config.load_github_config())
 
   case vestibule.authorize_url(strategy, oauth_config) {
-    Ok(#(url, state)) -> {
-      state_store.store(store, state, state_ttl_seconds)
+    Ok(AuthorizationRequest(url:, state:, code_verifier:)) -> {
+      state_store.store(store, state, code_verifier, state_ttl_seconds)
       Ok(url)
     }
     Error(err) -> Error(VestibuleError(err))
@@ -50,8 +51,8 @@ pub fn complete_auth(
   use strategy <- require_strategy(provider)
   use oauth_config <- result.try(config.load_github_config())
 
-  // Validate and consume CSRF state
-  use _ <- result.try(
+  // Validate and consume CSRF state, recovering the code verifier
+  use code_verifier <- result.try(
     state_store.validate_and_consume(store, state)
     |> result.replace_error(StateStoreUnavailable),
   )
@@ -62,7 +63,13 @@ pub fn complete_auth(
 
   // Call vestibule to exchange code and fetch user
   case
-    vestibule.handle_callback(strategy, oauth_config, callback_params, state)
+    vestibule.handle_callback(
+      strategy,
+      oauth_config,
+      callback_params,
+      state,
+      code_verifier,
+    )
   {
     Ok(auth) -> Ok(auth)
     Error(err) -> Error(VestibuleError(err))

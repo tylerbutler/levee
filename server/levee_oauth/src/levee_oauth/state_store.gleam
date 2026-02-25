@@ -5,20 +5,25 @@ import gleam/time/timestamp
 
 /// Messages accepted by the state store actor.
 pub type Message {
-  /// Store a token with a TTL in seconds (fire-and-forget).
-  Store(token: String, ttl_seconds: Int)
-  /// Validate and consume a token, replying with Result(Nil, Nil).
-  Validate(token: String, reply_to: Subject(Result(Nil, Nil)))
+  /// Store a token with its PKCE code verifier and a TTL in seconds (fire-and-forget).
+  Store(token: String, code_verifier: String, ttl_seconds: Int)
+  /// Validate and consume a token, replying with the code verifier on success.
+  Validate(token: String, reply_to: Subject(Result(String, Nil)))
   /// Periodic cleanup of expired tokens.
   Cleanup
   /// Shut down the actor.
   Shutdown
 }
 
-/// Internal actor state: a dict mapping state tokens to expiry timestamps
-/// (unix seconds), plus the actor's own subject for scheduling cleanup.
+/// Entry stored per state token: PKCE code verifier and expiry timestamp.
+type StoreEntry {
+  StoreEntry(code_verifier: String, expires_at: Int)
+}
+
+/// Internal actor state: a dict mapping state tokens to store entries,
+/// plus the actor's own subject for scheduling cleanup.
 type State {
-  State(tokens: Dict(String, Int), self_subject: Subject(Message))
+  State(tokens: Dict(String, StoreEntry), self_subject: Subject(Message))
 }
 
 /// Start the state store actor.
@@ -46,18 +51,23 @@ fn extract_subject(
   }
 }
 
-/// Store a state token with a TTL (fire-and-forget).
-pub fn store(actor: Subject(Message), token: String, ttl_seconds: Int) -> Nil {
-  process.send(actor, Store(token:, ttl_seconds:))
+/// Store a state token with its PKCE code verifier and a TTL (fire-and-forget).
+pub fn store(
+  actor: Subject(Message),
+  token: String,
+  code_verifier: String,
+  ttl_seconds: Int,
+) -> Nil {
+  process.send(actor, Store(token:, code_verifier:, ttl_seconds:))
 }
 
-/// Validate and consume a state token. Returns Ok(Nil) if the token existed
-/// and was not expired, Error(Nil) otherwise. The token is consumed on
+/// Validate and consume a state token. Returns Ok(code_verifier) if the token
+/// existed and was not expired, Error(Nil) otherwise. The token is consumed on
 /// successful validation (one-time use).
 pub fn validate_and_consume(
   actor: Subject(Message),
   token: String,
-) -> Result(Nil, Nil) {
+) -> Result(String, Nil) {
   process.call(actor, 5000, fn(reply_to) { Validate(token:, reply_to:) })
 }
 
@@ -78,21 +88,22 @@ fn schedule_cleanup(subject: Subject(Message)) -> Nil {
 /// Handle incoming messages.
 fn handle_message(state: State, message: Message) -> actor.Next(State, Message) {
   case message {
-    Store(token:, ttl_seconds:) -> {
+    Store(token:, code_verifier:, ttl_seconds:) -> {
       let expires_at = now_seconds() + ttl_seconds
-      let new_tokens = dict.insert(state.tokens, token, expires_at)
+      let entry = StoreEntry(code_verifier:, expires_at:)
+      let new_tokens = dict.insert(state.tokens, token, entry)
       actor.continue(State(..state, tokens: new_tokens))
     }
 
     Validate(token:, reply_to:) -> {
       let now = now_seconds()
       case dict.get(state.tokens, token) {
-        Ok(expires_at) -> {
+        Ok(entry) -> {
           // Always remove the token (consume it)
           let new_tokens = dict.delete(state.tokens, token)
-          case expires_at > now {
+          case entry.expires_at > now {
             True -> {
-              process.send(reply_to, Ok(Nil))
+              process.send(reply_to, Ok(entry.code_verifier))
               actor.continue(State(..state, tokens: new_tokens))
             }
             False -> {
@@ -111,7 +122,7 @@ fn handle_message(state: State, message: Message) -> actor.Next(State, Message) 
     Cleanup -> {
       let now = now_seconds()
       let new_tokens =
-        dict.filter(state.tokens, fn(_token, expires_at) { expires_at > now })
+        dict.filter(state.tokens, fn(_token, entry) { entry.expires_at > now })
       // Schedule next cleanup
       schedule_cleanup(state.self_subject)
       actor.continue(State(..state, tokens: new_tokens))
