@@ -6,3 +6,6 @@ just = "latest"
 rebar = "3.26.0"
 node = "22"
 pnpm = "10.24.0"
+
+[env]
+GITHUB_REDIRECT_URI = "http://localhost:4000/auth/github/callback"
