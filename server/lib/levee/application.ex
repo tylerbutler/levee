@@ -27,6 +27,8 @@ defmodule Levee.Application do
           Levee.Auth.TenantSecrets,
           # In-memory user/session store (dev/test only, replaced by DB in prod)
           Levee.Auth.SessionStore,
+          # OAuth CSRF state store (Gleam Actor)
+          Levee.OAuth.StateStoreSupervisor,
           # DynamicSupervisor for document sessions
           Levee.Documents.Supervisor,
           # Start to serve requests, typically the last entry
