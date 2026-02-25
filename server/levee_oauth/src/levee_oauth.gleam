@@ -58,8 +58,7 @@ pub fn complete_auth(
   )
 
   // Build callback params dict
-  let callback_params =
-    dict.from_list([#("code", code), #("state", state)])
+  let callback_params = dict.from_list([#("code", code), #("state", state)])
 
   // Call vestibule to exchange code and fetch user
   case

@@ -19,7 +19,12 @@ defmodule LeveeWeb.OAuthController do
       {:error, {:unknown_provider, _name}} ->
         conn
         |> put_resp_content_type("application/json")
-        |> send_resp(404, Jason.encode!(%{error: %{code: "unknown_provider", message: "Unknown auth provider: #{provider}"}}))
+        |> send_resp(
+          404,
+          Jason.encode!(%{
+            error: %{code: "unknown_provider", message: "Unknown auth provider: #{provider}"}
+          })
+        )
 
       {:error, {:config_missing, variable}} ->
         require Logger
@@ -27,7 +32,12 @@ defmodule LeveeWeb.OAuthController do
 
         conn
         |> put_resp_content_type("application/json")
-        |> send_resp(500, Jason.encode!(%{error: %{code: "oauth_not_configured", message: "OAuth is not configured"}}))
+        |> send_resp(
+          500,
+          Jason.encode!(%{
+            error: %{code: "oauth_not_configured", message: "OAuth is not configured"}
+          })
+        )
 
       {:error, reason} ->
         require Logger
@@ -35,7 +45,12 @@ defmodule LeveeWeb.OAuthController do
 
         conn
         |> put_resp_content_type("application/json")
-        |> send_resp(500, Jason.encode!(%{error: %{code: "oauth_error", message: "Failed to start authentication"}}))
+        |> send_resp(
+          500,
+          Jason.encode!(%{
+            error: %{code: "oauth_error", message: "Failed to start authentication"}
+          })
+        )
     end
   end
 
@@ -52,22 +67,42 @@ defmodule LeveeWeb.OAuthController do
       {:error, {:vestibule_error, :state_mismatch}} ->
         conn
         |> put_resp_content_type("application/json")
-        |> send_resp(401, Jason.encode!(%{error: %{code: "state_mismatch", message: "Authentication failed, please try again"}}))
+        |> send_resp(
+          401,
+          Jason.encode!(%{
+            error: %{code: "state_mismatch", message: "Authentication failed, please try again"}
+          })
+        )
 
       {:error, {:vestibule_error, {:code_exchange_failed, _reason}}} ->
         conn
         |> put_resp_content_type("application/json")
-        |> send_resp(401, Jason.encode!(%{error: %{code: "auth_failed", message: "Authentication failed, please try again"}}))
+        |> send_resp(
+          401,
+          Jason.encode!(%{
+            error: %{code: "auth_failed", message: "Authentication failed, please try again"}
+          })
+        )
 
       {:error, {:vestibule_error, {:user_info_failed, _reason}}} ->
         conn
         |> put_resp_content_type("application/json")
-        |> send_resp(502, Jason.encode!(%{error: %{code: "provider_error", message: "Could not fetch profile from provider"}}))
+        |> send_resp(
+          502,
+          Jason.encode!(%{
+            error: %{code: "provider_error", message: "Could not fetch profile from provider"}
+          })
+        )
 
       {:error, :state_store_unavailable} ->
         conn
         |> put_resp_content_type("application/json")
-        |> send_resp(401, Jason.encode!(%{error: %{code: "state_invalid", message: "Authentication failed, please try again"}}))
+        |> send_resp(
+          401,
+          Jason.encode!(%{
+            error: %{code: "state_invalid", message: "Authentication failed, please try again"}
+          })
+        )
 
       {:error, reason} ->
         require Logger
@@ -75,7 +110,10 @@ defmodule LeveeWeb.OAuthController do
 
         conn
         |> put_resp_content_type("application/json")
-        |> send_resp(401, Jason.encode!(%{error: %{code: "auth_failed", message: "Authentication failed"}}))
+        |> send_resp(
+          401,
+          Jason.encode!(%{error: %{code: "auth_failed", message: "Authentication failed"}})
+        )
     end
   end
 
