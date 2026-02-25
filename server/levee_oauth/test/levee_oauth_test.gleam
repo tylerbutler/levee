@@ -1,13 +1,10 @@
 import startest
-import startest/expect
-
-import levee_oauth
 
 pub fn main() {
   startest.run(startest.default_config())
 }
 
-pub fn placeholder_test() {
-  levee_oauth.placeholder()
-  |> expect.to_equal(Nil)
-}
+// Integration tests for begin_auth/complete_auth require
+// real GitHub OAuth credentials and are tested via the
+// Elixir e2e test suite. Unit tests for individual modules
+// are in their respective test files.
