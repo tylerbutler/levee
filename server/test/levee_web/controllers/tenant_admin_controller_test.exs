@@ -2,28 +2,27 @@ defmodule LeveeWeb.TenantAdminControllerTest do
   use LeveeWeb.ConnCase
 
   alias Levee.Auth.GleamBridge
-  alias Levee.Auth.SessionStore
   alias Levee.Auth.TenantSecrets
 
   setup do
-    SessionStore.clear()
+    GleamBridge.clear_session_store()
 
     {:ok, admin_user} =
       GleamBridge.create_user("admin@example.com", "admin_password_123", "Admin User")
 
     admin_user = %{admin_user | is_admin: true}
-    SessionStore.store_user(admin_user)
+    GleamBridge.store_user(admin_user)
 
     admin_session = GleamBridge.create_session(admin_user.id, nil)
-    SessionStore.store_session(admin_session)
+    GleamBridge.store_session(admin_session)
 
     {:ok, regular_user} =
       GleamBridge.create_user("user@example.com", "user_password_123", "Regular User")
 
-    SessionStore.store_user(regular_user)
+    GleamBridge.store_user(regular_user)
 
     regular_session = GleamBridge.create_session(regular_user.id, nil)
-    SessionStore.store_session(regular_session)
+    GleamBridge.store_session(regular_session)
 
     on_exit(fn ->
       for tenant_id <- TenantSecrets.list_tenants() do

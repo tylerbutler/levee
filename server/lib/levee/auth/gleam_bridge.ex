@@ -17,6 +17,7 @@ defmodule Levee.Auth.GleamBridge do
   @gleam_session :session
   @gleam_invite :invite
   @gleam_token :token
+  @gleam_session_store :session_store
 
   # Tell compiler these modules will exist at runtime
   @compile {:no_warn_undefined,
@@ -27,7 +28,8 @@ defmodule Levee.Auth.GleamBridge do
               :session,
               :invite,
               :token,
-              :scopes
+              :scopes,
+              :session_store
             ]}
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -261,6 +263,110 @@ defmodule Levee.Auth.GleamBridge do
       {:error, :missing_claims} -> {:error, :missing_claims}
       {:error, _} -> {:error, :token_verification_failed}
     end
+  end
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Session Store Functions (Gleam actor)
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  defp get_session_store_actor do
+    Levee.Auth.SessionStoreSupervisor.get_actor()
+  end
+
+  @doc """
+  Store a user in the session store.
+  """
+  def store_user(user) do
+    actor = get_session_store_actor()
+    gleam_user = map_to_gleam_user(user)
+    @gleam_session_store.store_user(actor, gleam_user)
+  end
+
+  @doc """
+  Get a user by ID from the session store.
+  Returns `{:ok, user_map}` or `:error`.
+  """
+  def get_user(user_id) do
+    actor = get_session_store_actor()
+
+    case @gleam_session_store.get_user(actor, user_id) do
+      {:ok, gleam_user} -> {:ok, gleam_user_to_map(gleam_user)}
+      {:error, _} -> :error
+    end
+  end
+
+  @doc """
+  Find a user by email.
+  Returns `{:ok, user_map}` or `:error`.
+  """
+  def find_user_by_email(email) do
+    actor = get_session_store_actor()
+
+    case @gleam_session_store.find_user_by_email(actor, email) do
+      {:ok, gleam_user} -> {:ok, gleam_user_to_map(gleam_user)}
+      {:error, _} -> :error
+    end
+  end
+
+  @doc """
+  Find a user by GitHub ID.
+  Returns `{:ok, user_map}` or `:error`.
+  """
+  def find_user_by_github_id(github_id) do
+    actor = get_session_store_actor()
+
+    case @gleam_session_store.find_user_by_github_id(actor, github_id) do
+      {:ok, gleam_user} -> {:ok, gleam_user_to_map(gleam_user)}
+      {:error, _} -> :error
+    end
+  end
+
+  @doc """
+  Get the number of stored users.
+  """
+  def user_count do
+    actor = get_session_store_actor()
+    @gleam_session_store.user_count(actor)
+  end
+
+  @doc """
+  Store a session in the session store.
+  """
+  def store_session(session) do
+    actor = get_session_store_actor()
+    gleam_session = map_to_gleam_session(session)
+    @gleam_session_store.store_session(actor, gleam_session)
+  end
+
+  @doc """
+  Get a session by ID from the session store.
+  Optionally validates the session belongs to the given tenant.
+  Returns `{:ok, session_map}` or `:error`.
+  """
+  def get_session(session_id, tenant_id \\ nil) do
+    actor = get_session_store_actor()
+    gleam_tenant_id = wrap_option(tenant_id)
+
+    case @gleam_session_store.get_session(actor, session_id, gleam_tenant_id) do
+      {:ok, gleam_session} -> {:ok, gleam_session_to_map(gleam_session)}
+      {:error, _} -> :error
+    end
+  end
+
+  @doc """
+  Delete a session by ID from the session store.
+  """
+  def delete_session(session_id) do
+    actor = get_session_store_actor()
+    @gleam_session_store.delete_session(actor, session_id)
+  end
+
+  @doc """
+  Clear all users and sessions (test helper).
+  """
+  def clear_session_store do
+    actor = get_session_store_actor()
+    @gleam_session_store.clear(actor)
   end
 
   # ─────────────────────────────────────────────────────────────────────────────
