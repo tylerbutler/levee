@@ -28,16 +28,6 @@ config :levee, LeveeWeb.Endpoint, http: [port: String.to_integer(System.get_env(
 #   GITHUB_CLIENT_SECRET - GitHub OAuth App client secret
 #   GITHUB_REDIRECT_URI - Callback URL (e.g., http://localhost:4000/auth/github/callback)
 
-# Configure storage backend based on environment variable
-if database_url = System.get_env("DATABASE_URL") do
-  config :levee, Levee.Store,
-    url: database_url,
-    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10")
-
-  # When DATABASE_URL is set, use PostgreSQL storage backend
-  config :levee, :storage_backend, Levee.Storage.Postgres
-end
-
 if config_env() == :prod do
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you
@@ -52,16 +42,6 @@ if config_env() == :prod do
       """
 
   host = System.get_env("PHX_HOST") || "example.com"
-
-  # Storage backend: PostgreSQL (if DATABASE_URL set) or ETS (default)
-  if database_url = System.get_env("DATABASE_URL") do
-    config :levee, Levee.Store,
-      url: database_url,
-      pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
-      socket_options: if(System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: [])
-
-    config :levee, :storage_backend, Levee.Storage.Postgres
-  end
 
   config :levee, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 

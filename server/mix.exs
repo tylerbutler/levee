@@ -50,9 +50,6 @@ defmodule Levee.MixProject do
       {:jose, "~> 1.11"},
       # CORS support
       {:cors_plug, "~> 3.0"},
-      # Database (optional PostgreSQL backend)
-      {:ecto_sql, "~> 3.12"},
-      {:postgrex, "~> 0.19"},
       # Tenant ID generation
       {:unique_names_generator, "~> 0.2.0"}
     ]
@@ -66,12 +63,10 @@ defmodule Levee.MixProject do
   # See the documentation for `Mix` for more info on aliases.
   defp aliases do
     [
-      setup: ["deps.get", "gleam.build", "ecto.setup"],
+      setup: ["deps.get", "gleam.build"],
       "gleam.build": &gleam_build/1,
       compile: ["gleam.build", "compile"],
-      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"],
-      "ecto.setup": ["ecto.create", "ecto.migrate"],
-      "ecto.reset": ["ecto.drop", "ecto.setup"]
+      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
     ]
   end
 

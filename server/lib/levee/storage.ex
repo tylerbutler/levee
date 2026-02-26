@@ -5,9 +5,7 @@ defmodule Levee.Storage do
   Delegates all storage operations to the configured backend module.
   The backend is configured via:
 
-      config :levee, :storage_backend, Levee.Storage.ETS  # default
-      # or
-      config :levee, :storage_backend, Levee.Storage.Postgres
+      config :levee, :storage_backend, Levee.Storage.GleamETS
 
   All functions delegate to the configured backend module.
   """
