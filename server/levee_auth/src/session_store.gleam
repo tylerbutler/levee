@@ -20,10 +20,7 @@ pub type Message {
   StoreUser(user: User)
   GetUser(id: String, reply_to: Subject(Result(User, Nil)))
   FindUserByEmail(email: String, reply_to: Subject(Result(User, Nil)))
-  FindUserByGithubId(
-    github_id: String,
-    reply_to: Subject(Result(User, Nil)),
-  )
+  FindUserByGithubId(github_id: String, reply_to: Subject(Result(User, Nil)))
   UserCount(reply_to: Subject(Int))
   StoreSession(session: Session)
   GetSession(
@@ -66,10 +63,7 @@ pub fn store_user(actor: Subject(Message), user: User) -> Nil {
 }
 
 /// Get a user by ID.
-pub fn get_user(
-  actor: Subject(Message),
-  id: String,
-) -> Result(User, Nil) {
+pub fn get_user(actor: Subject(Message), id: String) -> Result(User, Nil) {
   process.call(actor, 5000, fn(reply_to) { GetUser(id:, reply_to:) })
 }
 
@@ -78,9 +72,7 @@ pub fn find_user_by_email(
   actor: Subject(Message),
   email: String,
 ) -> Result(User, Nil) {
-  process.call(actor, 5000, fn(reply_to) {
-    FindUserByEmail(email:, reply_to:)
-  })
+  process.call(actor, 5000, fn(reply_to) { FindUserByEmail(email:, reply_to:) })
 }
 
 /// Find a user by GitHub ID.
@@ -148,9 +140,7 @@ fn handle_message(state: State, message: Message) -> actor.Next(State, Message) 
 
     FindUserByGithubId(github_id:, reply_to:) -> {
       let result =
-        find_user_where(state.users, fn(u) {
-          u.github_id == Some(github_id)
-        })
+        find_user_where(state.users, fn(u) { u.github_id == Some(github_id) })
       process.send(reply_to, result)
       actor.continue(state)
     }
