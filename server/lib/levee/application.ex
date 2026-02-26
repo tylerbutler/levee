@@ -91,11 +91,14 @@ defmodule Levee.Application do
     # In releases, Gleam packages are copied to /app/<package>.
     project_root = File.cwd!()
     repo_root = Path.expand("..", project_root)
+    workspace_root = Path.expand("../..", project_root)
 
     # Packages inside server/
     server_packages = ["levee_protocol", "levee_auth", "levee_oauth"]
     # Packages at repo root (siblings of server/)
-    root_packages = ["beryl", "levee_channels"]
+    repo_packages = ["levee_channels"]
+    # Packages at workspace root (separate repos)
+    workspace_packages = ["beryl"]
 
     base_paths =
       Enum.flat_map(server_packages, fn pkg ->
@@ -104,9 +107,15 @@ defmodule Levee.Application do
           Path.join(["/app", pkg, "build", "dev", "erlang"])
         ]
       end) ++
-        Enum.flat_map(root_packages, fn pkg ->
+        Enum.flat_map(repo_packages, fn pkg ->
           [
             Path.join([repo_root, pkg, "build", "dev", "erlang"]),
+            Path.join(["/app", pkg, "build", "dev", "erlang"])
+          ]
+        end) ++
+        Enum.flat_map(workspace_packages, fn pkg ->
+          [
+            Path.join([workspace_root, pkg, "build", "dev", "erlang"]),
             Path.join(["/app", pkg, "build", "dev", "erlang"])
           ]
         end)

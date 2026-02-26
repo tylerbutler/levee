@@ -24,7 +24,7 @@ build-gleam:
     cd server/levee_protocol && gleam build --target erlang
     cd server/levee_auth && gleam build --target erlang
     cd server/levee_oauth && gleam build --target erlang
-    cd beryl && gleam build --target erlang
+    cd ../beryl && gleam build --target erlang
     cd levee_channels && gleam build --target erlang
     cd server/levee_admin && gleam build --target javascript
 
@@ -55,7 +55,7 @@ test-gleam:
     cd server/levee_protocol && gleam test
     cd server/levee_auth && gleam test
     cd server/levee_oauth && gleam test
-    cd beryl && gleam test
+    cd ../beryl && gleam test
     cd server/levee_admin && gleam test
 
 # Run Elixir tests
