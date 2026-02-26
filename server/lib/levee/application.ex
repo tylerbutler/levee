@@ -25,8 +25,8 @@ defmodule Levee.Application do
           {Registry, keys: :unique, name: Levee.SessionRegistry},
           # Tenant secrets for JWT authentication
           Levee.Auth.TenantSecrets,
-          # In-memory user/session store (dev/test only, replaced by DB in prod)
-          Levee.Auth.SessionStore,
+          # In-memory user/session store (Gleam actor, dev/test only)
+          Levee.Auth.SessionStoreSupervisor,
           # OAuth CSRF state store (Gleam Actor)
           Levee.OAuth.StateStoreSupervisor,
           # DynamicSupervisor for document sessions

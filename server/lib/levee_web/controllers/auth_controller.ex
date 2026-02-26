@@ -2,7 +2,6 @@ defmodule LeveeWeb.AuthController do
   use LeveeWeb, :controller
 
   alias Levee.Auth.GleamBridge
-  alias Levee.Auth.SessionStore
 
   @doc """
   Register a new user.
@@ -18,18 +17,18 @@ defmodule LeveeWeb.AuthController do
       {:ok, user} ->
         # Auto-promote first user to admin
         user =
-          if SessionStore.user_count() == 0 do
+          if GleamBridge.user_count() == 0 do
             Map.put(user, :is_admin, true)
           else
             user
           end
 
         # Store the user
-        SessionStore.store_user(user)
+        GleamBridge.store_user(user)
 
         # Create a session for the new user
         session = GleamBridge.create_session(user.id, nil)
-        SessionStore.store_session(session)
+        GleamBridge.store_session(session)
 
         conn
         |> put_status(:created)
@@ -70,7 +69,7 @@ defmodule LeveeWeb.AuthController do
 
   def login(conn, %{"email" => email, "password" => password}) do
     {user, hash} =
-      case SessionStore.find_user_by_email(email) do
+      case GleamBridge.find_user_by_email(email) do
         {:ok, user} -> {user, user.password_hash}
         :error -> {nil, @dummy_hash}
       end
@@ -81,7 +80,7 @@ defmodule LeveeWeb.AuthController do
     case {user, password_valid} do
       {%{} = user, true} ->
         session = GleamBridge.create_session(user.id, nil)
-        SessionStore.store_session(session)
+        GleamBridge.store_session(session)
 
         conn
         |> put_status(:ok)
@@ -123,7 +122,7 @@ defmodule LeveeWeb.AuthController do
   def logout(conn, _params) do
     # current_session is set by SessionAuth plug
     session = conn.assigns.current_session
-    SessionStore.delete_session(session.id)
+    GleamBridge.delete_session(session.id)
 
     conn
     |> put_status(:ok)
