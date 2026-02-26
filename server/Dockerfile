@@ -86,9 +86,11 @@ COPY --from=builder /build/_build/prod/rel/levee ./
 # levee_protocol and its dependencies
 COPY --from=builder /build/levee_protocol/build/dev/erlang/levee_protocol/ebin ./levee_protocol/build/dev/erlang/levee_protocol/ebin
 COPY --from=builder /build/levee_protocol/build/dev/erlang/gleam_stdlib/ebin ./levee_protocol/build/dev/erlang/gleam_stdlib/ebin
+COPY --from=builder /build/levee_protocol/build/dev/erlang/gleam_json/ebin ./levee_protocol/build/dev/erlang/gleam_json/ebin
 
 # levee_auth and its dependencies
 COPY --from=builder /build/levee_auth/build/dev/erlang/levee_auth/ebin ./levee_auth/build/dev/erlang/levee_auth/ebin
+COPY --from=builder /build/levee_auth/build/dev/erlang/gleam_stdlib/ebin ./levee_auth/build/dev/erlang/gleam_stdlib/ebin
 COPY --from=builder /build/levee_auth/build/dev/erlang/gleam_crypto/ebin ./levee_auth/build/dev/erlang/gleam_crypto/ebin
 COPY --from=builder /build/levee_auth/build/dev/erlang/gleam_json/ebin ./levee_auth/build/dev/erlang/gleam_json/ebin
 COPY --from=builder /build/levee_auth/build/dev/erlang/gleam_time/ebin ./levee_auth/build/dev/erlang/gleam_time/ebin

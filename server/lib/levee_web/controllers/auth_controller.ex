@@ -16,6 +16,14 @@ defmodule LeveeWeb.AuthController do
 
     case GleamBridge.create_user(email, password, display_name) do
       {:ok, user} ->
+        # Auto-promote first user to admin
+        user =
+          if SessionStore.user_count() == 0 do
+            Map.put(user, :is_admin, true)
+          else
+            user
+          end
+
         # Store the user
         SessionStore.store_user(user)
 
@@ -129,6 +137,8 @@ defmodule LeveeWeb.AuthController do
       id: user.id,
       email: user.email,
       display_name: user.display_name,
+      github_id: Map.get(user, :github_id),
+      is_admin: Map.get(user, :is_admin, false),
       created_at: user.created_at
     }
   end

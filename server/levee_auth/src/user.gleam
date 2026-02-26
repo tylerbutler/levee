@@ -3,6 +3,7 @@
 //// Handles user creation, password verification, and profile updates.
 
 import gleam/float
+import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 import gleam/time/timestamp
@@ -23,6 +24,10 @@ pub type User {
     password_hash: String,
     /// Display name
     display_name: String,
+    /// GitHub user ID (for OAuth users)
+    github_id: Option(String),
+    /// Whether this user has system-wide admin privileges
+    is_admin: Bool,
     /// Unix timestamp when user was created
     created_at: Int,
     /// Unix timestamp when user was last updated
@@ -82,9 +87,37 @@ pub fn create(
     email: email,
     password_hash: password_hash,
     display_name: name,
+    github_id: None,
+    is_admin: False,
     created_at: now,
     updated_at: now,
   ))
+}
+
+/// Create a new user from an OAuth provider (no password required).
+pub fn create_oauth(
+  email email: String,
+  display_name display_name: String,
+  github_id github_id: String,
+) -> User {
+  let now = now_unix()
+  let id = generate_id("usr")
+
+  let name = case display_name {
+    "" -> derive_name_from_email(email)
+    name -> name
+  }
+
+  User(
+    id: id,
+    email: email,
+    password_hash: "",
+    display_name: name,
+    github_id: Some(github_id),
+    is_admin: False,
+    created_at: now,
+    updated_at: now,
+  )
 }
 
 /// Verify a password against a user's stored hash.
@@ -139,6 +172,8 @@ pub fn from_db(
   email: String,
   password_hash: String,
   display_name: String,
+  github_id: Option(String),
+  is_admin: Bool,
   created_at: Int,
   updated_at: Int,
 ) -> User {
@@ -147,9 +182,16 @@ pub fn from_db(
     email: email,
     password_hash: password_hash,
     display_name: display_name,
+    github_id: github_id,
+    is_admin: is_admin,
     created_at: created_at,
     updated_at: updated_at,
   )
+}
+
+/// Promote a user to admin.
+pub fn promote_to_admin(user: User) -> User {
+  User(..user, is_admin: True, updated_at: now_unix())
 }
 
 // Validation helpers

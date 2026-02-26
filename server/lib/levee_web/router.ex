@@ -135,15 +135,40 @@ defmodule LeveeWeb.Router do
     get "/tenants", TenantAdminController, :index
     post "/tenants", TenantAdminController, :create
     get "/tenants/:id", TenantAdminController, :show
-    put "/tenants/:id", TenantAdminController, :update
     delete "/tenants/:id", TenantAdminController, :delete
+    post "/tenants/:id/secrets/:slot", TenantAdminController, :regenerate_secret
   end
 
-  # Admin UI - SPA catch-all (serves index.html for all /admin/* paths)
+  # Session-auth admin routes (for admin UI SPA)
+  pipeline :admin_session do
+    plug :accepts, ["json"]
+    plug LeveeWeb.Plugs.AdminSessionAuth
+  end
+
+  scope "/api/tenants", LeveeWeb do
+    pipe_through :admin_session
+
+    get "/", TenantAdminController, :index
+    post "/", TenantAdminController, :create
+    get "/:id", TenantAdminController, :show
+    delete "/:id", TenantAdminController, :delete
+    post "/:id/secrets/:slot", TenantAdminController, :regenerate_secret
+  end
+
+  # Browser pipeline for HTML routes
   pipeline :browser do
     plug :accepts, ["html"]
   end
 
+  # OAuth authentication routes
+  scope "/auth", LeveeWeb do
+    pipe_through :browser
+
+    get "/:provider", OAuthController, :request
+    get "/:provider/callback", OAuthController, :callback
+  end
+
+  # Admin UI - SPA catch-all (serves index.html for all /admin/* paths)
   scope "/admin", LeveeWeb do
     pipe_through :browser
 

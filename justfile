@@ -23,6 +23,7 @@ build-server: build-gleam build-admin build-elixir
 build-gleam:
     cd server/levee_protocol && gleam build --target erlang
     cd server/levee_auth && gleam build --target erlang
+    cd server/levee_oauth && gleam build --target erlang
     cd server/levee_admin && gleam build --target javascript
 
 # Build admin UI and copy to priv/static/admin
@@ -51,6 +52,7 @@ test-server: test-gleam test-elixir
 test-gleam:
     cd server/levee_protocol && gleam test
     cd server/levee_auth && gleam test
+    cd server/levee_oauth && gleam test
     cd server/levee_admin && gleam test
 
 # Run Elixir tests
@@ -85,6 +87,7 @@ format-server: format-gleam format-elixir
 format-gleam:
     cd server/levee_protocol && gleam format
     cd server/levee_auth && gleam format
+    cd server/levee_oauth && gleam format
     cd server/levee_admin && gleam format
 
 # Format Elixir code
@@ -105,6 +108,7 @@ lint-server: lint-gleam lint-elixir
 lint-gleam:
     cd server/levee_protocol && gleam format --check
     cd server/levee_auth && gleam format --check
+    cd server/levee_oauth && gleam format --check
     cd server/levee_admin && gleam format --check
 
 # Lint Elixir code
@@ -130,6 +134,7 @@ clean-server: clean-gleam clean-elixir
 clean-gleam:
     cd server/levee_protocol && rm -rf build
     cd server/levee_auth && rm -rf build
+    cd server/levee_oauth && rm -rf build
     cd server/levee_admin && rm -rf build
     rm -rf server/priv/static/admin
 
@@ -160,6 +165,7 @@ setup-server: setup-gleam setup-elixir
 setup-gleam:
     cd server/levee_protocol && gleam deps download
     cd server/levee_auth && gleam deps download
+    cd server/levee_oauth && gleam deps download
     cd server/levee_admin && gleam deps download
 
 # Install Elixir dependencies

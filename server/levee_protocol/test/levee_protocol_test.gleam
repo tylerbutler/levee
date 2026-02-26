@@ -390,20 +390,17 @@ pub fn negotiate_features_client_unspecified_test() {
 // -- Version Negotiation --
 
 pub fn negotiate_version_match_test() {
-  let result =
-    session_logic.negotiate_version(["^0.1.0", "^1.0.0"], ["^0.1.0"])
+  let result = session_logic.negotiate_version(["^0.1.0", "^1.0.0"], ["^0.1.0"])
   result |> expect.to_equal("0.1.0")
 }
 
 pub fn negotiate_version_1_0_test() {
-  let result =
-    session_logic.negotiate_version(["^0.1.0", "^1.0.0"], ["^1.0.0"])
+  let result = session_logic.negotiate_version(["^0.1.0", "^1.0.0"], ["^1.0.0"])
   result |> expect.to_equal("1.0.0")
 }
 
 pub fn negotiate_version_fallback_test() {
-  let result =
-    session_logic.negotiate_version(["^0.1.0", "^1.0.0"], ["^2.0.0"])
+  let result = session_logic.negotiate_version(["^0.1.0", "^1.0.0"], ["^2.0.0"])
   result |> expect.to_equal("0.1.0")
 }
 
