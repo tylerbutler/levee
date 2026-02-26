@@ -97,7 +97,7 @@ levee-example → levee-driver
 | `documents/supervisor.ex` | DynamicSupervisor for document sessions |
 | `protocol/bridge.ex` | Elixir ↔ Gleam interop for protocol logic |
 | `storage/behaviour.ex` | Storage interface (behaviour) |
-| `storage/ets.ex` | ETS-based storage implementation |
+| `storage/gleam_ets.ex` | Gleam-based ETS storage backend |
 
 ### Web Layer (`server/lib/levee_web/`)
 

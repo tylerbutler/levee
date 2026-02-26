@@ -21,8 +21,5 @@ Enum.each(gleam_paths, fn path ->
 end)
 
 # Set up database sandbox mode if using PostgreSQL backend
-if Application.get_env(:levee, :storage_backend) == Levee.Storage.Postgres do
-  Ecto.Adapters.SQL.Sandbox.mode(Levee.Store, :manual)
-end
 
 ExUnit.start()

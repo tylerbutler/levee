@@ -68,19 +68,7 @@ defmodule Levee.Application do
 
   # Return the appropriate storage backend children based on configuration
   defp storage_children do
-    case Application.get_env(:levee, :storage_backend, Levee.Storage.ETS) do
-      Levee.Storage.Postgres ->
-        # PostgreSQL backend - start Store
-        [Levee.Store]
-
-      Levee.Storage.ETS ->
-        # ETS backend (default)
-        [Levee.Storage.ETS]
-
-      _other ->
-        # Default to ETS
-        [Levee.Storage.ETS]
-    end
+    [Levee.Storage.GleamETS]
   end
 
   # Load Gleam compiled BEAM files into the code path
@@ -89,7 +77,7 @@ defmodule Levee.Application do
     # In releases, Gleam packages are copied to /app/<package>.
     project_root = File.cwd!()
 
-    gleam_packages = ["levee_protocol", "levee_auth", "levee_oauth"]
+    gleam_packages = ["levee_protocol", "levee_auth", "levee_oauth", "levee_storage"]
 
     base_paths =
       Enum.flat_map(gleam_packages, fn pkg ->
