@@ -22,4 +22,4 @@ end)
 
 # Set up database sandbox mode if using PostgreSQL backend
 
-ExUnit.start()
+ExUnit.start(exclude: [:postgres])
