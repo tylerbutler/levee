@@ -29,7 +29,8 @@ defmodule Levee.Auth.GleamBridge do
               :invite,
               :token,
               :scopes,
-              :session_store
+              :session_store,
+              :tenant_secrets
             ]}
 
   # ─────────────────────────────────────────────────────────────────────────────
