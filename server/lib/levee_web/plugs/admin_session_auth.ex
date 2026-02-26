@@ -10,7 +10,6 @@ defmodule LeveeWeb.Plugs.AdminSessionAuth do
 
   import Plug.Conn
 
-  alias Levee.Auth.SessionStore
   alias Levee.Auth.GleamBridge
 
   @behaviour Plug
@@ -21,9 +20,9 @@ defmodule LeveeWeb.Plugs.AdminSessionAuth do
   @impl true
   def call(conn, _opts) do
     with {:ok, session_id} <- extract_token(conn),
-         {:ok, session} <- SessionStore.get_session(session_id),
+         {:ok, session} <- GleamBridge.get_session(session_id),
          true <- GleamBridge.is_session_valid?(session),
-         {:ok, user} <- SessionStore.get_user(session.user_id),
+         {:ok, user} <- GleamBridge.get_user(session.user_id),
          true <- user.is_admin do
       conn
       |> assign(:current_user, user)

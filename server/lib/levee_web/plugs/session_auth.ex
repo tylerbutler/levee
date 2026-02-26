@@ -2,14 +2,13 @@ defmodule LeveeWeb.Plugs.SessionAuth do
   @moduledoc """
   Authentication plug for session-based auth routes.
 
-  Validates Bearer tokens as session IDs against the SessionStore.
+  Validates Bearer tokens as session IDs against the GleamBridge.
   Used for auth endpoints like /api/auth/me and /api/auth/logout
   that require a valid session but not a JWT with tenant/document context.
   """
 
   import Plug.Conn
 
-  alias Levee.Auth.SessionStore
   alias Levee.Auth.GleamBridge
 
   @behaviour Plug
@@ -20,9 +19,9 @@ defmodule LeveeWeb.Plugs.SessionAuth do
   @impl true
   def call(conn, _opts) do
     with {:ok, session_id} <- extract_token(conn),
-         {:ok, session} <- SessionStore.get_session(session_id),
+         {:ok, session} <- GleamBridge.get_session(session_id),
          true <- GleamBridge.is_session_valid?(session),
-         {:ok, user} <- SessionStore.get_user(session.user_id) do
+         {:ok, user} <- GleamBridge.get_user(session.user_id) do
       conn
       |> assign(:current_user, user)
       |> assign(:current_session, session)
