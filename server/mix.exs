@@ -20,7 +20,7 @@ defmodule Levee.MixProject do
   def application do
     [
       mod: {Levee.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      extra_applications: [:logger, :runtime_tools, :inets, :ssl]
     ]
   end
 
@@ -50,9 +50,6 @@ defmodule Levee.MixProject do
       {:jose, "~> 1.11"},
       # CORS support
       {:cors_plug, "~> 3.0"},
-      # OAuth authentication
-      {:ueberauth, "~> 0.10"},
-      {:ueberauth_github, "~> 0.8"},
       # Database (optional PostgreSQL backend)
       {:ecto_sql, "~> 3.12"},
       {:postgrex, "~> 0.19"},
@@ -79,7 +76,7 @@ defmodule Levee.MixProject do
   end
 
   defp gleam_build(_args) do
-    gleam_projects = ["levee_protocol", "levee_auth"]
+    gleam_projects = ["levee_protocol", "levee_auth", "levee_oauth"]
 
     Enum.each(gleam_projects, fn gleam_path ->
       if File.dir?(gleam_path) do

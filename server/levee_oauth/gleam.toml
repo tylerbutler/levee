@@ -1,0 +1,15 @@
+name = "levee_oauth"
+version = "0.1.0"
+target = "erlang"
+description = "OAuth authentication for Levee using vestibule"
+
+[dependencies]
+gleam_stdlib = ">= 0.48.0 and < 2.0.0"
+gleam_otp = ">= 0.14.0 and < 2.0.0"
+gleam_erlang = ">= 0.34.0 and < 2.0.0"
+gleam_time = ">= 1.0.0 and < 2.0.0"
+envoy = ">= 1.1.0 and < 2.0.0"
+vestibule = { git = "https://github.com/tylerbutler/vestibule.git", ref = "main" }
+
+[dev-dependencies]
+startest = ">= 0.8.0 and < 1.0.0"

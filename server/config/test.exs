@@ -27,8 +27,3 @@ config :phoenix, :plug_init_mode, :runtime
 # Sort query params output of verified routes for robust url comparisons
 config :phoenix,
   sort_verified_routes_query_params: true
-
-# Disable ueberauth in tests (we mock the callbacks)
-config :ueberauth, Ueberauth.Strategy.Github.OAuth,
-  client_id: "test_client_id",
-  client_secret: "test_client_secret"
