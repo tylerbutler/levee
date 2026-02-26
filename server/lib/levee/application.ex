@@ -24,7 +24,7 @@ defmodule Levee.Application do
           # Registry for looking up document sessions by {tenant_id, document_id}
           {Registry, keys: :unique, name: Levee.SessionRegistry},
           # Tenant secrets for JWT authentication
-          Levee.Auth.TenantSecrets,
+          Levee.Auth.TenantSecretsSupervisor,
           # In-memory user/session store (Gleam actor, dev/test only)
           Levee.Auth.SessionStoreSupervisor,
           # OAuth CSRF state store (Gleam Actor)
@@ -111,7 +111,7 @@ defmodule Levee.Application do
     end
 
     # Verify critical Gleam modules loaded successfully
-    required_modules = [:levee_protocol, :password_ffi]
+    required_modules = [:levee_protocol, :password_ffi, :tenant_secrets]
 
     Enum.each(required_modules, fn mod ->
       case :code.ensure_loaded(mod) do
