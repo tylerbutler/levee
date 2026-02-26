@@ -154,14 +154,13 @@ fn do_pbkdf2_sha256(
 @external(erlang, "base64", "encode")
 fn erlang_base64_encode(data: BitArray) -> String
 
-@external(erlang, "base64", "decode")
-fn erlang_base64_decode(data: String) -> BitArray
-
 fn base64_encode(data: BitArray) -> String {
   erlang_base64_encode(data)
 }
 
 fn base64_decode(data: String) -> Result(BitArray, Nil) {
-  // base64:decode can throw on invalid input
-  Ok(erlang_base64_decode(data))
+  safe_base64_decode(data)
 }
+
+@external(erlang, "password_ffi", "safe_base64_decode")
+fn safe_base64_decode(data: String) -> Result(BitArray, Nil)

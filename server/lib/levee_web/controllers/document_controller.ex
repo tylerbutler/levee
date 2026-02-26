@@ -10,7 +10,7 @@ defmodule LeveeWeb.DocumentController do
 
   use LeveeWeb, :controller
 
-  alias Levee.Storage.ETS, as: Storage
+  alias Levee.Storage
   alias Levee.Documents.Registry
 
   @doc """

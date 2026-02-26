@@ -53,9 +53,10 @@ COPY lib lib
 COPY priv priv
 COPY rel rel
 
-# Copy admin SPA output to priv/static/admin (after COPY priv to avoid overwrite)
-# The Gleam JS build outputs to build/dev/javascript/
-RUN mkdir -p priv/static/admin && \
+# Copy admin SPA output to priv/static/admin
+# Remove any stale admin assets first, then copy fresh Gleam JS build
+RUN rm -rf priv/static/admin && \
+    mkdir -p priv/static/admin && \
     cp -r levee_admin/build/dev/javascript/* priv/static/admin/ && \
     cp levee_admin/index.html priv/static/admin/index.html
 
@@ -85,9 +86,11 @@ COPY --from=builder /build/_build/prod/rel/levee ./
 # levee_protocol and its dependencies
 COPY --from=builder /build/levee_protocol/build/dev/erlang/levee_protocol/ebin ./levee_protocol/build/dev/erlang/levee_protocol/ebin
 COPY --from=builder /build/levee_protocol/build/dev/erlang/gleam_stdlib/ebin ./levee_protocol/build/dev/erlang/gleam_stdlib/ebin
+COPY --from=builder /build/levee_protocol/build/dev/erlang/gleam_json/ebin ./levee_protocol/build/dev/erlang/gleam_json/ebin
 
 # levee_auth and its dependencies
 COPY --from=builder /build/levee_auth/build/dev/erlang/levee_auth/ebin ./levee_auth/build/dev/erlang/levee_auth/ebin
+COPY --from=builder /build/levee_auth/build/dev/erlang/gleam_stdlib/ebin ./levee_auth/build/dev/erlang/gleam_stdlib/ebin
 COPY --from=builder /build/levee_auth/build/dev/erlang/gleam_crypto/ebin ./levee_auth/build/dev/erlang/gleam_crypto/ebin
 COPY --from=builder /build/levee_auth/build/dev/erlang/gleam_json/ebin ./levee_auth/build/dev/erlang/gleam_json/ebin
 COPY --from=builder /build/levee_auth/build/dev/erlang/gleam_time/ebin ./levee_auth/build/dev/erlang/gleam_time/ebin

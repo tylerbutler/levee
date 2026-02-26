@@ -39,9 +39,10 @@ jobs:
           path: |
             server/levee_protocol/build
             server/levee_auth/build
+            server/levee_oauth/build
             server/levee_admin/build
             ~/.cache/gleam
-          key: gleam-${{ runner.os }}-${{ hashFiles('server/levee_protocol/gleam.toml', 'server/levee_protocol/manifest.toml', 'server/levee_auth/gleam.toml', 'server/levee_auth/manifest.toml', 'server/levee_admin/gleam.toml', 'server/levee_admin/manifest.toml') }}
+          key: gleam-${{ runner.os }}-${{ hashFiles('server/levee_protocol/gleam.toml', 'server/levee_protocol/manifest.toml', 'server/levee_auth/gleam.toml', 'server/levee_auth/manifest.toml', 'server/levee_oauth/gleam.toml', 'server/levee_oauth/manifest.toml', 'server/levee_admin/gleam.toml', 'server/levee_admin/manifest.toml') }}
           restore-keys: |
             gleam-${{ runner.os }}-
 
@@ -83,9 +84,10 @@ jobs:
           path: |
             server/levee_protocol/build
             server/levee_auth/build
+            server/levee_oauth/build
             server/levee_admin/build
             ~/.cache/gleam
-          key: gleam-${{ runner.os }}-${{ hashFiles('server/levee_protocol/gleam.toml', 'server/levee_protocol/manifest.toml', 'server/levee_auth/gleam.toml', 'server/levee_auth/manifest.toml', 'server/levee_admin/gleam.toml', 'server/levee_admin/manifest.toml') }}
+          key: gleam-${{ runner.os }}-${{ hashFiles('server/levee_protocol/gleam.toml', 'server/levee_protocol/manifest.toml', 'server/levee_auth/gleam.toml', 'server/levee_auth/manifest.toml', 'server/levee_oauth/gleam.toml', 'server/levee_oauth/manifest.toml', 'server/levee_admin/gleam.toml', 'server/levee_admin/manifest.toml') }}
           restore-keys: |
             gleam-${{ runner.os }}-
 

@@ -31,6 +31,11 @@ defmodule LeveeWeb.Router do
     plug Auth, scopes: ["doc:read", "summary:write"]
   end
 
+  # Session-based auth for auth management routes (me, logout)
+  pipeline :session_auth do
+    plug LeveeWeb.Plugs.SessionAuth
+  end
+
   # Public API routes (health checks, etc.)
   scope "/", LeveeWeb do
     pipe_through :api
@@ -44,6 +49,12 @@ defmodule LeveeWeb.Router do
 
     post "/register", AuthController, :register
     post "/login", AuthController, :login
+  end
+
+  # Auth API routes (require valid session)
+  scope "/api/auth", LeveeWeb do
+    pipe_through [:api, :session_auth]
+
     post "/logout", AuthController, :logout
     get "/me", AuthController, :me
   end
@@ -112,11 +123,52 @@ defmodule LeveeWeb.Router do
     patch "/refs/*ref", GitController, :update_ref
   end
 
-  # Admin UI - SPA catch-all (serves index.html for all /admin/* paths)
+  # Admin API routes (requires LEVEE_ADMIN_KEY)
+  pipeline :admin_auth do
+    plug :accepts, ["json"]
+    plug LeveeWeb.Plugs.AdminAuth
+  end
+
+  scope "/api/admin", LeveeWeb do
+    pipe_through :admin_auth
+
+    get "/tenants", TenantAdminController, :index
+    post "/tenants", TenantAdminController, :create
+    get "/tenants/:id", TenantAdminController, :show
+    delete "/tenants/:id", TenantAdminController, :delete
+    post "/tenants/:id/secrets/:slot", TenantAdminController, :regenerate_secret
+  end
+
+  # Session-auth admin routes (for admin UI SPA)
+  pipeline :admin_session do
+    plug :accepts, ["json"]
+    plug LeveeWeb.Plugs.AdminSessionAuth
+  end
+
+  scope "/api/tenants", LeveeWeb do
+    pipe_through :admin_session
+
+    get "/", TenantAdminController, :index
+    post "/", TenantAdminController, :create
+    get "/:id", TenantAdminController, :show
+    delete "/:id", TenantAdminController, :delete
+    post "/:id/secrets/:slot", TenantAdminController, :regenerate_secret
+  end
+
+  # Browser pipeline for HTML routes
   pipeline :browser do
     plug :accepts, ["html"]
   end
 
+  # OAuth authentication routes
+  scope "/auth", LeveeWeb do
+    pipe_through :browser
+
+    get "/:provider", OAuthController, :request
+    get "/:provider/callback", OAuthController, :callback
+  end
+
+  # Admin UI - SPA catch-all (serves index.html for all /admin/* paths)
   scope "/admin", LeveeWeb do
     pipe_through :browser
 

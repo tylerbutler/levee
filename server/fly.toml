@@ -4,9 +4,6 @@ primary_region = "iad"
 [build]
   dockerfile = "Dockerfile"
 
-[deploy]
-  release_command = "bin/levee eval 'Levee.Release.migrate()'"
-
 [env]
   PHX_HOST = "levee.fly.dev"
   PHX_SERVER = "true"

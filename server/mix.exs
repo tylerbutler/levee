@@ -20,7 +20,7 @@ defmodule Levee.MixProject do
   def application do
     [
       mod: {Levee.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      extra_applications: [:logger, :runtime_tools, :inets, :ssl]
     ]
   end
 
@@ -50,9 +50,11 @@ defmodule Levee.MixProject do
       {:jose, "~> 1.11"},
       # CORS support
       {:cors_plug, "~> 3.0"},
-      # Database
+      # Database (optional PostgreSQL backend)
       {:ecto_sql, "~> 3.12"},
       {:postgrex, "~> 0.19"},
+      # Tenant ID generation
+      {:unique_names_generator, "~> 0.2.0"},
       # WebSocket test client
       {:websockex, "~> 0.4", only: :test}
     ]
@@ -66,15 +68,17 @@ defmodule Levee.MixProject do
   # See the documentation for `Mix` for more info on aliases.
   defp aliases do
     [
-      setup: ["deps.get", "gleam.build"],
+      setup: ["deps.get", "gleam.build", "ecto.setup"],
       "gleam.build": &gleam_build/1,
       compile: ["gleam.build", "compile"],
-      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
+      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"],
+      "ecto.setup": ["ecto.create", "ecto.migrate"],
+      "ecto.reset": ["ecto.drop", "ecto.setup"]
     ]
   end
 
   defp gleam_build(_args) do
-    gleam_projects = ["levee_protocol", "levee_auth", "../beryl", "../levee_channels"]
+    gleam_projects = ["levee_protocol", "levee_auth", "levee_oauth", "../beryl", "../levee_channels"]
 
     Enum.each(gleam_projects, fn gleam_path ->
       if File.dir?(gleam_path) do

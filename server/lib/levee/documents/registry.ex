@@ -22,14 +22,18 @@ defmodule Levee.Documents.Registry do
         {:ok, pid}
 
       [] ->
-        case DynamicSupervisor.start_child(
-               Levee.Documents.Supervisor,
-               {Session, {tenant_id, document_id}}
-             ) do
-          {:ok, pid} -> {:ok, pid}
-          {:error, {:already_started, pid}} -> {:ok, pid}
-          {:error, reason} -> {:error, reason}
-        end
+        start_session(tenant_id, document_id)
+    end
+  end
+
+  defp start_session(tenant_id, document_id) do
+    case DynamicSupervisor.start_child(
+           Levee.Documents.Supervisor,
+           {Session, {tenant_id, document_id}}
+         ) do
+      {:ok, pid} -> {:ok, pid}
+      {:error, {:already_started, pid}} -> {:ok, pid}
+      {:error, reason} -> {:error, reason}
     end
   end
 

@@ -2,11 +2,8 @@ import Config
 
 config :levee, env: :test
 
-# Disable database by default in tests (enable when postgres is available)
-config :levee, start_repo: false
-
-# Configure your database
-config :levee, Levee.Repo,
+# Configure the Store for test
+config :levee, Levee.Store,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",

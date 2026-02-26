@@ -7,7 +7,9 @@
 /// - Signal v1 (legacy) format: Simple broadcast with address/contents envelope
 /// - Signal v2 format: Enhanced format with targeting support (targetedClients, ignoredClients)
 /// - System signals: Join/Leave events (server-generated)
+import gleam/dict.{type Dict}
 import gleam/dynamic.{type Dynamic}
+import gleam/dynamic/decode
 import gleam/list
 import gleam/option.{type Option, None, Some}
 
@@ -86,15 +88,244 @@ pub type SignalV1Contents {
   )
 }
 
-/// Parse a v1 signal envelope from raw content
-/// The content is expected to be a map with address, contents, and sequence number
-pub fn parse_v1_envelope(
-  _content: Dynamic,
+/// Parse a v1 signal envelope from a map
+/// The map is expected to have address, contents, and clientBroadcastSignalSequenceNumber
+pub fn parse_v1_envelope_from_map(
+  raw: Dict(String, Dynamic),
 ) -> Result(SignalV1Envelope, SignalParseError) {
-  // This would normally use dynamic decoders, but for now we return an error
-  // as the actual parsing happens in Elixir
-  Error(InvalidFormat("V1 parsing should be done in Elixir"))
+  case dict.get(raw, "address"), dict.get(raw, "contents") {
+    Ok(addr_dyn), Ok(contents_dyn) -> {
+      let address = case decode.run(addr_dyn, decode.string) {
+        Ok(a) -> a
+        Error(_) -> ""
+      }
+
+      let contents_map = decode_map(contents_dyn)
+      let signal_type = case dict.get(contents_map, "type") {
+        Ok(t) ->
+          case decode.run(t, decode.string) {
+            Ok(s) -> s
+            Error(_) -> ""
+          }
+        Error(_) -> ""
+      }
+      let content = case dict.get(contents_map, "content") {
+        Ok(c) -> c
+        Error(_) -> coerce(Nil)
+      }
+
+      let seq_num = case dict.get(raw, "clientBroadcastSignalSequenceNumber") {
+        Ok(n) ->
+          case decode.run(n, decode.int) {
+            Ok(i) -> i
+            Error(_) -> 0
+          }
+        Error(_) -> 0
+      }
+
+      Ok(SignalV1Envelope(
+        address: address,
+        contents: SignalV1Contents(signal_type: signal_type, content: content),
+        client_broadcast_signal_sequence_number: seq_num,
+      ))
+    }
+    _, _ -> Error(MissingField("address or contents"))
+  }
 }
+
+// =============================================================================
+// Signal Normalization (v1/v2 → internal format)
+// =============================================================================
+
+/// Normalized signal format for internal use.
+/// All signal formats are converted to this before processing.
+pub type NormalizedSignal {
+  NormalizedSignal(
+    content: Dynamic,
+    signal_type: Option(String),
+    client_connection_number: Option(Int),
+    reference_sequence_number: Option(Int),
+    target_client_id: Option(String),
+    targeted_clients: Option(List(String)),
+    ignored_clients: Option(List(String)),
+  )
+}
+
+/// Normalize a raw signal map to the internal format.
+/// Detects v1 vs v2 based on the presence of "address" or "contents" keys.
+pub fn normalize_signal(raw: Dict(String, Dynamic)) -> NormalizedSignal {
+  let has_address = dict.has_key(raw, "address")
+  let has_contents = dict.has_key(raw, "contents")
+
+  case has_address || has_contents {
+    True -> normalize_v1(raw)
+    False -> normalize_v2(raw)
+  }
+}
+
+fn normalize_v1(raw: Dict(String, Dynamic)) -> NormalizedSignal {
+  let contents = case dict.get(raw, "contents") {
+    Ok(c) -> decode_map(c)
+    Error(_) -> dict.new()
+  }
+
+  let content_val = case dict.get(contents, "content") {
+    Ok(c) -> c
+    Error(_) -> coerce(Nil)
+  }
+
+  let signal_type = case dict.get(contents, "type") {
+    Ok(t) -> decode_optional_string(t)
+    Error(_) -> None
+  }
+
+  let conn_num = case dict.get(raw, "clientBroadcastSignalSequenceNumber") {
+    Ok(n) -> decode_optional_int(n)
+    Error(_) -> None
+  }
+
+  NormalizedSignal(
+    content: content_val,
+    signal_type: signal_type,
+    client_connection_number: conn_num,
+    reference_sequence_number: None,
+    target_client_id: None,
+    targeted_clients: None,
+    ignored_clients: None,
+  )
+}
+
+fn normalize_v2(raw: Dict(String, Dynamic)) -> NormalizedSignal {
+  // Check if this is a wrapper envelope with "signal" key
+  let inner = case dict.get(raw, "signal") {
+    Ok(s) -> {
+      let m = decode_map(s)
+      case dict.is_empty(m) {
+        True -> raw
+        False -> m
+      }
+    }
+    Error(_) -> raw
+  }
+
+  let content_val = case dict.get(inner, "content") {
+    Ok(c) -> c
+    Error(_) -> coerce(Nil)
+  }
+
+  let signal_type = case dict.get(inner, "type") {
+    Ok(t) -> decode_optional_string(t)
+    Error(_) -> None
+  }
+
+  let conn_num = case dict.get(inner, "clientConnectionNumber") {
+    Ok(n) -> decode_optional_int(n)
+    Error(_) -> None
+  }
+
+  let rsn = case dict.get(inner, "referenceSequenceNumber") {
+    Ok(n) -> decode_optional_int(n)
+    Error(_) -> None
+  }
+
+  let target_id = case dict.get(inner, "targetClientId") {
+    Ok(t) -> decode_optional_string(t)
+    Error(_) -> None
+  }
+
+  // Targeting from envelope level (not inner signal)
+  let targeted = case dict.get(raw, "targetedClients") {
+    Ok(t) -> decode_optional_string_list(t)
+    Error(_) -> None
+  }
+
+  let ignored = case dict.get(raw, "ignoredClients") {
+    Ok(i) -> decode_optional_string_list(i)
+    Error(_) -> None
+  }
+
+  NormalizedSignal(
+    content: content_val,
+    signal_type: signal_type,
+    client_connection_number: conn_num,
+    reference_sequence_number: rsn,
+    target_client_id: target_id,
+    targeted_clients: targeted,
+    ignored_clients: ignored,
+  )
+}
+
+/// Normalize a batch of signals (handles list, single map, or JSON string)
+pub fn normalize_signal_batch(batch: Dynamic) -> List(NormalizedSignal) {
+  // Try as list of maps
+  case decode.run(batch, decode.list(decode_string_keyed_map())) {
+    Ok(maps) -> list.map(maps, normalize_signal)
+    Error(_) -> {
+      // Try as single map
+      case decode.run(batch, decode_string_keyed_map()) {
+        Ok(m) -> [normalize_signal(m)]
+        Error(_) -> []
+      }
+    }
+  }
+}
+
+/// Convert a NormalizedSignal to a Dict for Elixir interop
+pub fn normalized_to_map(s: NormalizedSignal) -> Dict(String, Dynamic) {
+  dict.from_list([
+    #("content", s.content),
+    #("type", option_to_dynamic(s.signal_type)),
+    #("clientConnectionNumber", option_to_dynamic(s.client_connection_number)),
+    #("referenceSequenceNumber", option_to_dynamic(s.reference_sequence_number)),
+    #("targetClientId", option_to_dynamic(s.target_client_id)),
+    #("targetedClients", option_to_dynamic(s.targeted_clients)),
+    #("ignoredClients", option_to_dynamic(s.ignored_clients)),
+  ])
+}
+
+fn option_to_dynamic(opt: Option(a)) -> Dynamic {
+  case opt {
+    Some(v) -> coerce(v)
+    None -> coerce(Nil)
+  }
+}
+
+// Helper decoders
+
+fn decode_optional_string(d: Dynamic) -> Option(String) {
+  case decode.run(d, decode.string) {
+    Ok(s) -> Some(s)
+    Error(_) -> None
+  }
+}
+
+fn decode_optional_int(d: Dynamic) -> Option(Int) {
+  case decode.run(d, decode.int) {
+    Ok(n) -> Some(n)
+    Error(_) -> None
+  }
+}
+
+fn decode_optional_string_list(d: Dynamic) -> Option(List(String)) {
+  case decode.run(d, decode.list(decode.string)) {
+    Ok(l) -> Some(l)
+    Error(_) -> None
+  }
+}
+
+fn decode_map(d: Dynamic) -> Dict(String, Dynamic) {
+  case decode.run(d, decode_string_keyed_map()) {
+    Ok(m) -> m
+    Error(_) -> dict.new()
+  }
+}
+
+fn decode_string_keyed_map() -> decode.Decoder(Dict(String, Dynamic)) {
+  decode.dict(decode.string, decode.dynamic)
+}
+
+@external(erlang, "gleam_stdlib", "identity")
+fn coerce(value: a) -> Dynamic
 
 // =============================================================================
 // Signal V2 Format (Current)

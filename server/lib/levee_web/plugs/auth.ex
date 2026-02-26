@@ -39,6 +39,7 @@ defmodule LeveeWeb.Plugs.Auth do
   import Plug.Conn
 
   alias Levee.Auth.JWT
+  alias Levee.Protocol.Bridge
 
   require Logger
 
@@ -106,11 +107,11 @@ defmodule LeveeWeb.Plugs.Auth do
   """
   @spec validate_claims(JWT.token_claims(), Plug.Conn.t(), map()) :: :ok | {:error, term()}
   def validate_claims(claims, conn, opts) do
-    with :ok <- validate_expiration(claims),
+    with :ok <- Bridge.validate_claims_expiration(claims),
          {:ok, tenant_id} <- get_tenant_id(conn, opts),
-         :ok <- validate_tenant(claims, tenant_id),
+         :ok <- Bridge.validate_claims_tenant(claims, tenant_id),
          :ok <- validate_document(claims, conn, opts),
-         :ok <- validate_scopes(claims, opts) do
+         :ok <- Bridge.validate_claims_scopes(claims, opts.scopes) do
       :ok
     end
   end
@@ -126,55 +127,14 @@ defmodule LeveeWeb.Plugs.Auth do
     end
   end
 
-  defp validate_expiration(claims) do
-    if JWT.expired?(claims) do
-      {:error, :token_expired}
-    else
-      :ok
-    end
-  end
-
-  defp validate_tenant(claims, tenant_id) do
-    if claims.tenantId == tenant_id do
-      :ok
-    else
-      {:error, {:tenant_mismatch, claims.tenantId, tenant_id}}
-    end
-  end
+  defp validate_document(_claims, _conn, %{validate_document: false}), do: :ok
 
   defp validate_document(claims, conn, opts) do
-    if opts.validate_document do
-      param_name = opts.document_param
+    param_name = opts.document_param
 
-      case conn.params[param_name] || conn.path_params[param_name] do
-        nil ->
-          # No document in route, skip validation
-          :ok
-
-        document_id ->
-          if claims.documentId == document_id do
-            :ok
-          else
-            {:error, {:document_mismatch, claims.documentId, document_id}}
-          end
-      end
-    else
-      :ok
-    end
-  end
-
-  defp validate_scopes(claims, opts) do
-    required_scopes = opts.scopes
-
-    missing =
-      Enum.reject(required_scopes, fn scope ->
-        JWT.has_scope?(claims, scope)
-      end)
-
-    if Enum.empty?(missing) do
-      :ok
-    else
-      {:error, {:missing_scopes, missing}}
+    case conn.params[param_name] || conn.path_params[param_name] do
+      nil -> :ok
+      document_id -> Bridge.validate_claims_document(claims, document_id)
     end
   end
 

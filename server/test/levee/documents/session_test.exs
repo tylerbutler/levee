@@ -150,7 +150,7 @@ defmodule Levee.Documents.SessionTest do
       assert length(nacks) == 1
       nack = List.first(nacks)
       assert nack["content"]["code"] == 400
-      assert nack["content"]["message"] =~ "Invalid CSN"
+      assert nack["content"]["message"] =~ "Invalid client sequence number"
     end
 
     test "returns nack for unknown client", %{session: session} do

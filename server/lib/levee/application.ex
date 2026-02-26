@@ -10,20 +10,25 @@ defmodule Levee.Application do
     # Add Gleam compiled modules to the code path
     load_gleam_modules()
 
+    # Start storage backend based on configuration
+    storage_children = storage_children()
+
     children =
-      maybe_start_repo() ++
+      [
+        LeveeWeb.Telemetry,
+        {DNSCluster, query: Application.get_env(:levee, :dns_cluster_query) || :ignore},
+        {Phoenix.PubSub, name: Levee.PubSub}
+      ] ++
+        storage_children ++
         [
-          LeveeWeb.Telemetry,
-          {DNSCluster, query: Application.get_env(:levee, :dns_cluster_query) || :ignore},
-          {Phoenix.PubSub, name: Levee.PubSub},
-          # ETS-based storage backend (must start before other services)
-          Levee.Storage.ETS,
           # Registry for looking up document sessions by {tenant_id, document_id}
           {Registry, keys: :unique, name: Levee.SessionRegistry},
           # Tenant secrets for JWT authentication
           Levee.Auth.TenantSecrets,
           # In-memory user/session store (dev/test only, replaced by DB in prod)
           Levee.Auth.SessionStore,
+          # OAuth CSRF state store (Gleam Actor)
+          Levee.OAuth.StateStoreSupervisor,
           # DynamicSupervisor for document sessions
           Levee.Documents.Supervisor,
           # Beryl channels coordinator (must start before Endpoint)
@@ -63,82 +68,76 @@ defmodule Levee.Application do
     :ok
   end
 
-  # Project root captured at compile time for reliable path resolution
-  @app_root Path.expand("../..", __DIR__)
+  # Return the appropriate storage backend children based on configuration
+  defp storage_children do
+    case Application.get_env(:levee, :storage_backend, Levee.Storage.ETS) do
+      Levee.Storage.Postgres ->
+        # PostgreSQL backend - start Store
+        [Levee.Store]
+
+      Levee.Storage.ETS ->
+        # ETS backend (default)
+        [Levee.Storage.ETS]
+
+      _other ->
+        # Default to ETS
+        [Levee.Storage.ETS]
+    end
+  end
 
   # Load Gleam compiled BEAM files into the code path
   defp load_gleam_modules do
-    app_root = @app_root
+    # In dev/test, the project root is File.cwd!() (where mix.exs lives).
+    # In releases, Gleam packages are copied to /app/<package>.
+    project_root = File.cwd!()
+    repo_root = Path.expand("..", project_root)
 
-    # Try multiple possible locations for Gleam build output:
-    # 1. Development: relative to app root (mix compile)
-    # 2. Release: in /app/<package> (Docker)
-    repo_root = Path.expand("..", app_root)
+    # Packages inside server/
+    server_packages = ["levee_protocol", "levee_auth", "levee_oauth"]
+    # Packages at repo root (siblings of server/)
+    root_packages = ["beryl", "levee_channels"]
 
-    base_paths = [
-      Path.join([app_root, "levee_protocol", "build", "dev", "erlang"]),
-      Path.join([app_root, "levee_auth", "build", "dev", "erlang"]),
-      Path.join([repo_root, "beryl", "build", "dev", "erlang"]),
-      Path.join([repo_root, "levee_channels", "build", "dev", "erlang"]),
-      "/app/levee_protocol/build/dev/erlang",
-      "/app/levee_auth/build/dev/erlang",
-      "/app/beryl/build/dev/erlang",
-      "/app/levee_channels/build/dev/erlang"
-    ]
+    base_paths =
+      Enum.flat_map(server_packages, fn pkg ->
+        [
+          Path.join([project_root, pkg, "build", "dev", "erlang"]),
+          Path.join(["/app", pkg, "build", "dev", "erlang"])
+        ]
+      end) ++
+        Enum.flat_map(root_packages, fn pkg ->
+          [
+            Path.join([repo_root, pkg, "build", "dev", "erlang"]),
+            Path.join(["/app", pkg, "build", "dev", "erlang"])
+          ]
+        end)
 
-    gleam_modules = [
-      "levee_protocol",
-      "levee_auth",
-      "beryl",
-      "levee_channels",
-      "gleam_stdlib",
-      "gleam_crypto",
-      "gleam_json",
-      "gleam_time",
-      "gleam_erlang",
-      "gleam_otp",
-      "youid"
-    ]
-
-    # Add all ebin paths to the code path
-    for base <- base_paths, mod <- gleam_modules do
-      path = Path.join([base, mod, "ebin"]) |> Path.expand()
-
-      if File.dir?(path) do
-        :code.add_patha(String.to_charlist(path))
-      end
+    # Find all ebin directories under each base path and add them to the code path
+    for base <- base_paths, File.dir?(base) do
+      base
+      |> File.ls!()
+      |> Enum.map(&Path.join([base, &1, "ebin"]))
+      |> Enum.filter(&File.dir?/1)
+      |> Enum.each(fn ebin_path ->
+        :code.add_patha(String.to_charlist(ebin_path))
+      end)
     end
 
-    # Collect unique BEAM files across all paths, loading each module only once.
-    # Shared deps (gleam_stdlib, etc.) exist in multiple Gleam package builds;
-    # loading the same module twice causes :not_purged errors.
-    beam_files =
-      for base <- base_paths, mod <- gleam_modules, reduce: MapSet.new() do
-        acc ->
-          ebin_path = Path.join([base, mod, "ebin"]) |> Path.expand()
+    # Verify critical Gleam modules loaded successfully
+    required_modules = [:levee_protocol, :password_ffi]
 
-          if File.dir?(ebin_path) do
-            ebin_path
-            |> File.ls!()
-            |> Enum.filter(&String.ends_with?(&1, ".beam"))
-            |> Enum.map(&String.trim_trailing(&1, ".beam"))
-            |> Enum.reduce(acc, &MapSet.put(&2, &1))
-          else
-            acc
-          end
+    Enum.each(required_modules, fn mod ->
+      case :code.ensure_loaded(mod) do
+        {:module, ^mod} ->
+          :ok
+
+        {:error, reason} ->
+          require Logger
+
+          Logger.error(
+            "Failed to load required Gleam module #{mod}: #{inspect(reason)}. " <>
+              "Run 'just build-gleam' to compile Gleam packages."
+          )
       end
-
-    Enum.each(beam_files, fn module_name ->
-      :code.load_file(String.to_atom(module_name))
     end)
-  end
-
-  # Only start the Repo if database is configured and available
-  defp maybe_start_repo do
-    if Application.get_env(:levee, :start_repo, true) do
-      [Levee.Repo]
-    else
-      []
-    end
   end
 end
