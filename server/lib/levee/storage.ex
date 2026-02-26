@@ -18,7 +18,7 @@ defmodule Levee.Storage do
   Get the currently configured storage backend module.
   """
   def backend do
-    Application.get_env(:levee, :storage_backend, Levee.Storage.ETS)
+    Application.get_env(:levee, :storage_backend, Levee.Storage.GleamETS)
   end
 
   # Document operations
