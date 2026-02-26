@@ -9,6 +9,8 @@ import Config
 
 config :levee,
   generators: [timestamp_type: :utc_datetime],
+  ecto_repos: [Levee.Store],
+  # Storage backend: Levee.Storage.GleamETS (default) or Levee.Storage.Postgres
   storage_backend: Levee.Storage.GleamETS
 
 # Configure the endpoint
