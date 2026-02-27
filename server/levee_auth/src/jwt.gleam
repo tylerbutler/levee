@@ -107,13 +107,25 @@ pub fn verify(token: String, secret: String) -> Result(JwtPayload, JwtError) {
       let exp = gwt.get_expiration(from: jwt) |> option.from_result
       let jti = gwt.get_jwt_id(from: jwt) |> option.from_result
       let tenant_id =
-        gwt.get_payload_claim(from: jwt, claim: "tenant_id", decoder: decode.string)
+        gwt.get_payload_claim(
+          from: jwt,
+          claim: "tenant_id",
+          decoder: decode.string,
+        )
         |> option.from_result
       let document_id =
-        gwt.get_payload_claim(from: jwt, claim: "document_id", decoder: decode.string)
+        gwt.get_payload_claim(
+          from: jwt,
+          claim: "document_id",
+          decoder: decode.string,
+        )
         |> option.from_result
       let scopes =
-        gwt.get_payload_claim(from: jwt, claim: "scopes", decoder: decode.string)
+        gwt.get_payload_claim(
+          from: jwt,
+          claim: "scopes",
+          decoder: decode.string,
+        )
         |> option.from_result
 
       Ok(JwtPayload(

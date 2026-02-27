@@ -519,7 +519,11 @@ defmodule Levee.Documents.Session do
               sequenced_op = build_sequenced_op(op, client_id, assigned_sn, msn)
               # Add to history (newest first) and trim if needed
               updated_history =
-                :levee_protocol@session_logic.add_to_history(sequenced_op, acc_state.op_history, @max_history_size)
+                :levee_protocol@session_logic.add_to_history(
+                  sequenced_op,
+                  acc_state.op_history,
+                  @max_history_size
+                )
 
               new_state = %{
                 acc_state
@@ -566,7 +570,11 @@ defmodule Levee.Documents.Session do
         updated_history =
           :levee_protocol@session_logic.add_to_history(
             summary_ack,
-            :levee_protocol@session_logic.add_to_history(sequenced_summarize, acc_state.op_history, @max_history_size),
+            :levee_protocol@session_logic.add_to_history(
+              sequenced_summarize,
+              acc_state.op_history,
+              @max_history_size
+            ),
             @max_history_size
           )
 
@@ -654,7 +662,7 @@ defmodule Levee.Documents.Session do
       "metadata" => nil,
       "timestamp" => System.system_time(:millisecond),
       # System messages include data field
-      "data" => Jason.encode!(message_content)
+      "data" => IO.iodata_to_binary(:json.encode(message_content))
     }
 
     # Update sequence state to reflect the new SN
@@ -664,13 +672,18 @@ defmodule Levee.Documents.Session do
     # Re-register all clients with the new SN as their join RSN
     # This is needed because from_checkpoint creates a fresh state
     final_sequence_state =
-      Enum.reduce(:levee_protocol.connected_clients(sequence_state), updated_sequence_state, fn cid, acc ->
-        # Use new_sn since from_checkpoint reset the state to this sequence number
-        :levee_protocol.client_join(acc, cid, new_sn)
-      end)
+      Enum.reduce(
+        :levee_protocol.connected_clients(sequence_state),
+        updated_sequence_state,
+        fn cid, acc ->
+          # Use new_sn since from_checkpoint reset the state to this sequence number
+          :levee_protocol.client_join(acc, cid, new_sn)
+        end
+      )
 
     # Add to history
-    updated_history = :levee_protocol@session_logic.add_to_history(system_message, history, @max_history_size)
+    updated_history =
+      :levee_protocol@session_logic.add_to_history(system_message, history, @max_history_size)
 
     {system_message, final_sequence_state, updated_history}
   end
