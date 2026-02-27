@@ -20,6 +20,22 @@ jobs:
   server-test:
     name: Server Tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: levee
+          POSTGRES_PASSWORD: levee
+          POSTGRES_DB: levee_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U levee -d levee_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://levee:levee@localhost:5432/levee_test
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
@@ -62,7 +78,9 @@ jobs:
         run: just setup-server
 
       - name: Run tests
-        run: just test-server
+        run: |
+          just test-server
+          cd server && mix test --include postgres
 
   server-lint:
     name: Server Lint
