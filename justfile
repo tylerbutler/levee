@@ -23,6 +23,7 @@ build-server: build-gleam build-admin build-elixir
 build-gleam:
     cd server/levee_protocol && gleam build --target erlang
     cd server/levee_auth && gleam build --target erlang
+    cd server/levee_storage && gleam build --target erlang
     cd server/levee_oauth && gleam build --target erlang
     cd server/levee_admin && gleam build --target javascript
 
@@ -42,8 +43,11 @@ build-client:
 
 # === TESTING ===
 
-# Run all tests (server + client + postgres)
-test: test-server test-client test-pg
+# Run all tests (server + client)
+test: test-server test-client
+
+# Run all tests including PostgreSQL backend
+test-all: test-server test-client test-pg
 
 # Run all server tests
 test-server: test-gleam test-elixir
@@ -75,6 +79,7 @@ format-server: format-gleam format-elixir
 format-gleam:
     cd server/levee_protocol && gleam format
     cd server/levee_auth && gleam format
+    cd server/levee_storage && gleam format
     cd server/levee_oauth && gleam format
     cd server/levee_admin && gleam format
 
@@ -96,6 +101,7 @@ lint-server: lint-gleam lint-elixir
 lint-gleam:
     cd server/levee_protocol && gleam format --check
     cd server/levee_auth && gleam format --check
+    cd server/levee_storage && gleam format --check
     cd server/levee_oauth && gleam format --check
     cd server/levee_admin && gleam format --check
 
@@ -122,6 +128,7 @@ clean-server: clean-gleam clean-elixir
 clean-gleam:
     cd server/levee_protocol && rm -rf build
     cd server/levee_auth && rm -rf build
+    cd server/levee_storage && rm -rf build
     cd server/levee_oauth && rm -rf build
     cd server/levee_admin && rm -rf build
     rm -rf server/priv/static/admin
@@ -178,6 +185,7 @@ setup-server: setup-gleam setup-elixir
 setup-gleam:
     cd server/levee_protocol && gleam deps download
     cd server/levee_auth && gleam deps download
+    cd server/levee_storage && gleam deps download
     cd server/levee_oauth && gleam deps download
     cd server/levee_admin && gleam deps download
 
