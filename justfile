@@ -42,8 +42,8 @@ build-client:
 
 # === TESTING ===
 
-# Run all tests (server + client)
-test: test-server test-client
+# Run all tests (server + client + postgres)
+test: test-server test-client test-pg
 
 # Run all server tests
 test-server: test-gleam test-elixir
