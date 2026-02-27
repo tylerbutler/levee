@@ -449,4 +449,12 @@ defmodule Levee.Storage.GleamPG do
   defp unwrap_option(:none), do: nil
   defp unwrap_option({:some, value}), do: value
   defp unwrap_option(value), do: value
+
+  @doc "Truncate all storage tables. Used in tests for isolation."
+  def truncate_all do
+    :levee_storage@pg_pool.execute_raw(
+      conn(),
+      "TRUNCATE documents, deltas, blobs, trees, tree_entries, commits, refs, summaries CASCADE"
+    )
+  end
 end

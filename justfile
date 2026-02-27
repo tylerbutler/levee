@@ -134,6 +134,31 @@ clean-elixir:
 clean-client:
     cd client && pnpm clean
 
+# === DATABASE ===
+
+# Default DATABASE_URL for local Docker PostgreSQL
+export DATABASE_URL := env("DATABASE_URL", "postgres://levee:levee@localhost:5432/levee_test")
+
+# Start PostgreSQL in Docker
+db-start:
+    docker compose up -d postgres
+    @echo "Waiting for PostgreSQL..."
+    @docker compose exec postgres sh -c 'until pg_isready -U levee -d levee_test; do sleep 0.5; done' 2>/dev/null
+    @echo "PostgreSQL is ready at $DATABASE_URL"
+
+# Stop PostgreSQL
+db-stop:
+    docker compose down
+
+# Reset the test database (drop all tables, re-run migrations)
+db-reset:
+    docker compose exec postgres psql -U levee -d levee_test -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+    @echo "Database reset."
+
+# Run Elixir tests including PostgreSQL backend tests
+test-pg: db-start
+    cd server && DATABASE_URL="$DATABASE_URL" mix test --include postgres
+
 # === CI ===
 
 # Full validation workflow (server + client)

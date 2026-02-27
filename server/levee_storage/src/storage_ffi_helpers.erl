@@ -19,11 +19,17 @@ json_from_map(Map) when is_map(Map) ->
 
 %% @doc Encode a Dynamic value (Elixir map/list/etc) to a JSON binary string.
 dynamic_to_json_string(nil) -> nil;
+dynamic_to_json_string(none) -> nil;
+dynamic_to_json_string({some, Val}) ->
+    'Elixir.Jason':'encode!'(Val);
 dynamic_to_json_string(Val) ->
     'Elixir.Jason':'encode!'(Val).
 
 %% @doc Decode a JSON binary string back to a Dynamic value (Elixir map/list).
 json_string_to_dynamic(nil) -> nil;
+json_string_to_dynamic(none) -> nil;
+json_string_to_dynamic({some, Bin}) when is_binary(Bin) ->
+    'Elixir.Jason':'decode!'(Bin);
 json_string_to_dynamic(Bin) when is_binary(Bin) ->
     'Elixir.Jason':'decode!'(Bin).
 
