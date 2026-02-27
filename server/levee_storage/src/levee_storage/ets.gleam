@@ -17,9 +17,9 @@ import gleam/order
 import gleam/result
 import gleam/string
 import levee_storage/types.{
-  type Blob, type Commit, type Delta, type Document, type Ref,
-  type StorageError, type Summary, type Tree, type TreeEntry, AlreadyExists,
-  Blob, Commit, Document, NotFound, Ref, Summary, Tree, TreeEntry,
+  type Blob, type Commit, type Delta, type Document, type Ref, type StorageError,
+  type Summary, type Tree, type TreeEntry, AlreadyExists, Blob, Commit, Document,
+  NotFound, Ref, Summary, Tree, TreeEntry,
 }
 
 // ---------------------------------------------------------------------------
@@ -43,16 +43,11 @@ pub type Tables {
 pub fn init() -> Tables {
   let assert Ok(documents) =
     uset.new(name: "levee_documents", access: bravo.Public)
-  let assert Ok(deltas) =
-    oset.new(name: "levee_deltas", access: bravo.Public)
-  let assert Ok(blobs) =
-    uset.new(name: "levee_blobs", access: bravo.Public)
-  let assert Ok(trees) =
-    uset.new(name: "levee_trees", access: bravo.Public)
-  let assert Ok(commits) =
-    uset.new(name: "levee_commits", access: bravo.Public)
-  let assert Ok(refs) =
-    uset.new(name: "levee_refs", access: bravo.Public)
+  let assert Ok(deltas) = oset.new(name: "levee_deltas", access: bravo.Public)
+  let assert Ok(blobs) = uset.new(name: "levee_blobs", access: bravo.Public)
+  let assert Ok(trees) = uset.new(name: "levee_trees", access: bravo.Public)
+  let assert Ok(commits) = uset.new(name: "levee_commits", access: bravo.Public)
+  let assert Ok(refs) = uset.new(name: "levee_refs", access: bravo.Public)
   let assert Ok(summaries) =
     oset.new(name: "levee_summaries", access: bravo.Public)
 

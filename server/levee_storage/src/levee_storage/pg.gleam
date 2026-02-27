@@ -382,7 +382,11 @@ pub fn get_tree(
   }
 }
 
-fn expand_tree_recursive(conn: Connection, tenant_id: String, tree: Tree) -> Tree {
+fn expand_tree_recursive(
+  conn: Connection,
+  tenant_id: String,
+  tree: Tree,
+) -> Tree {
   let expanded =
     list.flat_map(tree.tree, fn(entry) {
       case entry.entry_type {
