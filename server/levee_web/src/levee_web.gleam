@@ -28,6 +28,7 @@ pub fn main() {
       static_path: "../priv/static",
       tenant_secrets: None,
       session_store: None,
+      storage: None,
     )
 
   // Start HTTP server
