@@ -22,6 +22,15 @@ end
 
 config :levee, LeveeWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
+# PostgreSQL storage backend configuration
+# Set DATABASE_URL to enable the PostgreSQL backend:
+#   DATABASE_URL=postgres://user:pass@host:5432/levee
+# Then set the storage backend in your config:
+#   config :levee, :storage_backend, Levee.Storage.GleamPG
+if database_url = System.get_env("DATABASE_URL") do
+  config :levee, :database_url, database_url
+end
+
 # GitHub OAuth credentials are read directly from environment variables
 # by the Gleam levee_oauth package:
 #   GITHUB_CLIENT_ID - GitHub OAuth App client ID

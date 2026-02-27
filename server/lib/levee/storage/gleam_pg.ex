@@ -19,6 +19,7 @@ defmodule Levee.Storage.GleamPG do
             [
               :levee_storage,
               :levee_storage@pg,
+              :levee_storage@pg_pool,
               :levee_storage@types
             ]}
 
@@ -31,11 +32,49 @@ defmodule Levee.Storage.GleamPG do
   end
 
   @impl GenServer
-  def init(_opts) do
-    # Phase 1: Store nil as placeholder connection.
-    # Phase 2 will parse DATABASE_URL, start pgo.Connection, and run migrations.
-    :persistent_term.put(:levee_storage_pg_conn, nil)
-    {:ok, %{conn: nil}}
+  def init(opts) do
+    database_url =
+      Keyword.get(opts, :database_url) ||
+        Application.get_env(:levee, :database_url) ||
+        System.get_env("DATABASE_URL")
+
+    case database_url do
+      nil ->
+        # No DATABASE_URL configured — start with nil connection (will fail on queries)
+        :persistent_term.put(:levee_storage_pg_conn, nil)
+        {:ok, %{conn: nil}}
+
+      url ->
+        # Parse URL and start pog connection pool via the Gleam module
+        gleam_pg = :levee_storage@pg_pool
+        conn = gleam_pg.start_from_url(url)
+        :persistent_term.put(:levee_storage_pg_conn, conn)
+
+        # Run migrations
+        run_migrations(conn)
+
+        {:ok, %{conn: conn}}
+    end
+  end
+
+  defp run_migrations(conn) do
+    migration_file =
+      Path.join(:code.priv_dir(:levee), "repo/migrations/001_create_storage_tables.sql")
+
+    if File.exists?(migration_file) do
+      sql = File.read!(migration_file)
+
+      # Execute each statement separately (split on semicolons at end of line)
+      sql
+      |> String.split(~r/;\s*\n/, trim: true)
+      |> Enum.each(fn stmt ->
+        stmt = String.trim(stmt)
+
+        if stmt != "" do
+          :levee_storage@pg_pool.execute_raw(conn, stmt)
+        end
+      end)
+    end
   end
 
   defp conn do
