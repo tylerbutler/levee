@@ -5,9 +5,9 @@
 
 import beryl
 import beryl/coordinator
-import levee_channels/document_channel
 import gleam/dynamic.{type Dynamic}
 import gleam/erlang/process
+import levee_channels/document_channel
 
 /// Start the beryl channels system and register the document channel handler.
 ///

@@ -132,9 +132,7 @@ pub fn new() -> ChannelHandler {
     pattern: topic.parse_pattern("document:*"),
     join: join,
     handle_in: handle_in,
-    handle_binary: fn(_data, ctx) {
-      NoReplyErased(assigns: ctx.assigns)
-    },
+    handle_binary: fn(_data, ctx) { NoReplyErased(assigns: ctx.assigns) },
     terminate: terminate,
   )
 }

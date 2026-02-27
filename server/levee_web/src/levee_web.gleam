@@ -67,9 +67,7 @@ pub fn main() {
     |> mist.port(port)
     |> mist.start
 
-  io.println(
-    "Levee server running on http://localhost:" <> int.to_string(port),
-  )
+  io.println("Levee server running on http://localhost:" <> int.to_string(port))
 
   process.sleep_forever()
 }
