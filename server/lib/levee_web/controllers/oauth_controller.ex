@@ -2,7 +2,6 @@ defmodule LeveeWeb.OAuthController do
   use LeveeWeb, :controller
 
   alias Levee.Auth.GleamBridge
-  alias Levee.Auth.SessionStore
 
   @compile {:no_warn_undefined, [:levee_oauth]}
 
@@ -138,7 +137,7 @@ defmodule LeveeWeb.OAuthController do
     email_str = unwrap_option(email) || ""
 
     user =
-      case SessionStore.find_user_by_github_id(github_id) do
+      case GleamBridge.find_user_by_github_id(github_id) do
         {:ok, existing_user} ->
           existing_user
 
@@ -147,18 +146,18 @@ defmodule LeveeWeb.OAuthController do
 
           # Auto-promote first user to admin
           new_user =
-            if SessionStore.user_count() == 0 do
+            if GleamBridge.user_count() == 0 do
               Map.put(new_user, :is_admin, true)
             else
               new_user
             end
 
-          SessionStore.store_user(new_user)
+          GleamBridge.store_user(new_user)
           new_user
       end
 
     session = GleamBridge.create_session(user.id, nil)
-    SessionStore.store_session(session)
+    GleamBridge.store_session(session)
 
     redirect_url = get_redirect_url(conn, session.id)
     redirect(conn, external: redirect_url)

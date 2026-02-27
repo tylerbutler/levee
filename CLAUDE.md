@@ -97,7 +97,8 @@ levee-example → levee-driver
 | `documents/supervisor.ex` | DynamicSupervisor for document sessions |
 | `protocol/bridge.ex` | Elixir ↔ Gleam interop for protocol logic |
 | `storage/behaviour.ex` | Storage interface (behaviour) |
-| `storage/ets.ex` | ETS-based storage implementation |
+| `storage/gleam_ets.ex` | Gleam ETS storage bridge (default backend) |
+| `storage/ets.ex` | Legacy ETS storage (Elixir, fallback) |
 
 ### Web Layer (`server/lib/levee_web/`)
 
@@ -115,6 +116,7 @@ levee-example → levee-driver
 
 - **levee_protocol/** - Protocol message types, sequencing, validation, schema generation
 - **levee_auth/** - JWT, password hashing, tenant/user management
+- **levee_storage/** - Storage types and ETS backend (bravo for typed ETS access)
 - **levee_admin/** - Lustre SPA for admin UI
 
 ### Gleam Testing (startest)

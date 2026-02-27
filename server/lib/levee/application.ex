@@ -24,9 +24,9 @@ defmodule Levee.Application do
           # Registry for looking up document sessions by {tenant_id, document_id}
           {Registry, keys: :unique, name: Levee.SessionRegistry},
           # Tenant secrets for JWT authentication
-          Levee.Auth.TenantSecrets,
-          # In-memory user/session store (dev/test only, replaced by DB in prod)
-          Levee.Auth.SessionStore,
+          Levee.Auth.TenantSecretsSupervisor,
+          # In-memory user/session store (Gleam actor, dev/test only)
+          Levee.Auth.SessionStoreSupervisor,
           # OAuth CSRF state store (Gleam Actor)
           Levee.OAuth.StateStoreSupervisor,
           # DynamicSupervisor for document sessions
@@ -70,18 +70,26 @@ defmodule Levee.Application do
 
   # Return the appropriate storage backend children based on configuration
   defp storage_children do
-    case Application.get_env(:levee, :storage_backend, Levee.Storage.ETS) do
+    case Application.get_env(:levee, :storage_backend, Levee.Storage.GleamETS) do
       Levee.Storage.Postgres ->
         # PostgreSQL backend - start Store
         [Levee.Store]
 
+      Levee.Storage.GleamPG ->
+        # Gleam PG backend (PostgreSQL via gleam_pgo)
+        [Levee.Storage.GleamPG]
+
+      Levee.Storage.GleamETS ->
+        # Gleam ETS backend (default)
+        [Levee.Storage.GleamETS]
+
       Levee.Storage.ETS ->
-        # ETS backend (default)
+        # Legacy ETS backend
         [Levee.Storage.ETS]
 
       _other ->
-        # Default to ETS
-        [Levee.Storage.ETS]
+        # Default to Gleam ETS
+        [Levee.Storage.GleamETS]
     end
   end
 
@@ -94,7 +102,7 @@ defmodule Levee.Application do
     workspace_root = Path.expand("../..", project_root)
 
     # Packages inside server/
-    server_packages = ["levee_protocol", "levee_auth", "levee_oauth"]
+    server_packages = ["levee_protocol", "levee_auth", "levee_oauth", "levee_storage"]
     # Packages at repo root (siblings of server/)
     repo_packages = ["levee_channels"]
     # Packages at workspace root (separate repos)
@@ -132,7 +140,7 @@ defmodule Levee.Application do
     end
 
     # Verify critical Gleam modules loaded successfully
-    required_modules = [:levee_protocol, :password_ffi]
+    required_modules = [:levee_protocol, :password_ffi, :tenant_secrets]
 
     Enum.each(required_modules, fn mod ->
       case :code.ensure_loaded(mod) do

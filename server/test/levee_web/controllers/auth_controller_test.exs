@@ -2,11 +2,10 @@ defmodule LeveeWeb.AuthControllerTest do
   use LeveeWeb.ConnCase
 
   alias Levee.Auth.GleamBridge
-  alias Levee.Auth.SessionStore
 
   setup do
     # Clear the session store before each test
-    SessionStore.clear()
+    GleamBridge.clear_session_store()
     :ok
   end
 
@@ -65,7 +64,7 @@ defmodule LeveeWeb.AuthControllerTest do
       {:ok, user} =
         GleamBridge.create_user("login@example.com", "correct_password", "Login User")
 
-      SessionStore.store_user(user)
+      GleamBridge.store_user(user)
 
       {:ok, user: user}
     end
@@ -117,11 +116,11 @@ defmodule LeveeWeb.AuthControllerTest do
       {:ok, user} =
         GleamBridge.create_user("me@example.com", "password123", "Me User")
 
-      SessionStore.store_user(user)
+      GleamBridge.store_user(user)
 
       # Create a session for the user
       session = GleamBridge.create_session(user.id, nil)
-      SessionStore.store_session(session)
+      GleamBridge.store_session(session)
 
       {:ok, user: user, session: session}
     end
@@ -149,10 +148,10 @@ defmodule LeveeWeb.AuthControllerTest do
       {:ok, user} =
         GleamBridge.create_user("logout@example.com", "password123", "Logout User")
 
-      SessionStore.store_user(user)
+      GleamBridge.store_user(user)
 
       session = GleamBridge.create_session(user.id, nil)
-      SessionStore.store_session(session)
+      GleamBridge.store_session(session)
 
       {:ok, user: user, session: session}
     end

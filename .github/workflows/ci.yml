@@ -20,6 +20,22 @@ jobs:
   server-test:
     name: Server Tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: levee
+          POSTGRES_PASSWORD: levee
+          POSTGRES_DB: levee_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U levee -d levee_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://levee:levee@localhost:5432/levee_test
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
@@ -30,6 +46,7 @@ jobs:
           erlang-version: '28.3'
           gleam-version: '1.14.0'
           elixir-version: '1.18.4'
+          rebar-version: '3'
           working-directory: server
           run-deps: false
 
@@ -41,8 +58,9 @@ jobs:
             server/levee_auth/build
             server/levee_oauth/build
             server/levee_admin/build
+            server/levee_storage/build
             ~/.cache/gleam
-          key: gleam-${{ runner.os }}-${{ hashFiles('server/levee_protocol/gleam.toml', 'server/levee_protocol/manifest.toml', 'server/levee_auth/gleam.toml', 'server/levee_auth/manifest.toml', 'server/levee_oauth/gleam.toml', 'server/levee_oauth/manifest.toml', 'server/levee_admin/gleam.toml', 'server/levee_admin/manifest.toml') }}
+          key: gleam-${{ runner.os }}-${{ hashFiles('server/levee_protocol/gleam.toml', 'server/levee_protocol/manifest.toml', 'server/levee_auth/gleam.toml', 'server/levee_auth/manifest.toml', 'server/levee_oauth/gleam.toml', 'server/levee_oauth/manifest.toml', 'server/levee_admin/gleam.toml', 'server/levee_admin/manifest.toml', 'server/levee_storage/gleam.toml', 'server/levee_storage/manifest.toml') }}
           restore-keys: |
             gleam-${{ runner.os }}-
 
@@ -60,7 +78,9 @@ jobs:
         run: just setup-server
 
       - name: Run tests
-        run: just test-server
+        run: |
+          just test-server
+          cd server && mix test --include postgres
 
   server-lint:
     name: Server Lint
@@ -75,6 +95,7 @@ jobs:
           erlang-version: '28.3'
           gleam-version: '1.14.0'
           elixir-version: '1.18.4'
+          rebar-version: '3'
           working-directory: server
           run-deps: false
 
@@ -86,8 +107,9 @@ jobs:
             server/levee_auth/build
             server/levee_oauth/build
             server/levee_admin/build
+            server/levee_storage/build
             ~/.cache/gleam
-          key: gleam-${{ runner.os }}-${{ hashFiles('server/levee_protocol/gleam.toml', 'server/levee_protocol/manifest.toml', 'server/levee_auth/gleam.toml', 'server/levee_auth/manifest.toml', 'server/levee_oauth/gleam.toml', 'server/levee_oauth/manifest.toml', 'server/levee_admin/gleam.toml', 'server/levee_admin/manifest.toml') }}
+          key: gleam-${{ runner.os }}-${{ hashFiles('server/levee_protocol/gleam.toml', 'server/levee_protocol/manifest.toml', 'server/levee_auth/gleam.toml', 'server/levee_auth/manifest.toml', 'server/levee_oauth/gleam.toml', 'server/levee_oauth/manifest.toml', 'server/levee_admin/gleam.toml', 'server/levee_admin/manifest.toml', 'server/levee_storage/gleam.toml', 'server/levee_storage/manifest.toml') }}
           restore-keys: |
             gleam-${{ runner.os }}-
 

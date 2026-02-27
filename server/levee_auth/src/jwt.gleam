@@ -1,14 +1,12 @@
-//// Minimal JWT implementation using HMAC-SHA256.
+//// JWT implementation using gwt (HS256).
 ////
-//// Implements HS256 signed JWTs without external dependencies.
+//// Wraps the gwt library to provide Levee-specific JWT operations.
 
-import gleam/bit_array
-import gleam/crypto
 import gleam/dynamic/decode
 import gleam/json
 import gleam/option.{type Option, None, Some}
 import gleam/result
-import gleam/string
+import gwt
 
 /// JWT parsing/verification errors.
 pub type JwtError {
@@ -38,52 +36,97 @@ pub type JwtPayload {
 /// Takes a payload as a JSON value and a secret key.
 /// Returns a signed JWT string in the format: header.payload.signature
 pub fn sign(payload: json.Json, secret: String) -> String {
-  let header =
-    json.object([#("alg", json.string("HS256")), #("typ", json.string("JWT"))])
+  // We need to extract values from the JSON to set them as gwt claims.
+  // Since we receive a json.Json value, we encode it to string, then decode
+  // the fields back out to set on the builder.
+  let json_str = json.to_string(payload)
+  let decoded =
+    json.parse(json_str, payload_decoder())
+    |> result.unwrap(JwtPayload(
+      sub: None,
+      iss: None,
+      iat: None,
+      exp: None,
+      jti: None,
+      tenant_id: None,
+      document_id: None,
+      scopes: None,
+    ))
 
-  let header_b64 = header |> json.to_string |> base64url_encode
-  let payload_b64 = payload |> json.to_string |> base64url_encode
-  let message = header_b64 <> "." <> payload_b64
+  let builder = gwt.new()
 
-  let signature =
-    crypto.hmac(<<message:utf8>>, crypto.Sha256, <<secret:utf8>>)
-    |> base64url_encode_bits
+  // Set standard claims
+  let builder = case decoded.sub {
+    Some(v) -> gwt.set_subject(builder, v)
+    None -> builder
+  }
+  let builder = case decoded.iss {
+    Some(v) -> gwt.set_issuer(builder, v)
+    None -> builder
+  }
+  let builder = case decoded.iat {
+    Some(v) -> gwt.set_issued_at(builder, v)
+    None -> builder
+  }
+  let builder = case decoded.exp {
+    Some(v) -> gwt.set_expiration(builder, v)
+    None -> builder
+  }
+  let builder = case decoded.jti {
+    Some(v) -> gwt.set_jwt_id(builder, v)
+    None -> builder
+  }
 
-  message <> "." <> signature
+  // Set custom claims
+  let builder = case decoded.tenant_id {
+    Some(v) -> gwt.set_payload_claim(builder, "tenant_id", json.string(v))
+    None -> builder
+  }
+  let builder = case decoded.document_id {
+    Some(v) -> gwt.set_payload_claim(builder, "document_id", json.string(v))
+    None -> builder
+  }
+  let builder = case decoded.scopes {
+    Some(v) -> gwt.set_payload_claim(builder, "scopes", json.string(v))
+    None -> builder
+  }
+
+  gwt.to_signed_string(builder, gwt.HS256, secret)
 }
 
 /// Verify a JWT token and extract the payload.
 ///
 /// Returns the decoded payload with common JWT claims.
 pub fn verify(token: String, secret: String) -> Result(JwtPayload, JwtError) {
-  case string.split(token, ".") {
-    [header_b64, payload_b64, signature_b64] -> {
-      // Verify signature
-      let message = header_b64 <> "." <> payload_b64
-      let expected_sig =
-        crypto.hmac(<<message:utf8>>, crypto.Sha256, <<secret:utf8>>)
-        |> base64url_encode_bits
+  case gwt.from_signed_string(token, secret) {
+    Error(_) -> Error(InvalidSignature)
+    Ok(jwt) -> {
+      let sub = gwt.get_subject(from: jwt) |> option.from_result
+      let iss = gwt.get_issuer(from: jwt) |> option.from_result
+      let iat = gwt.get_issued_at(from: jwt) |> option.from_result
+      let exp = gwt.get_expiration(from: jwt) |> option.from_result
+      let jti = gwt.get_jwt_id(from: jwt) |> option.from_result
+      let tenant_id =
+        gwt.get_payload_claim(from: jwt, claim: "tenant_id", decoder: decode.string)
+        |> option.from_result
+      let document_id =
+        gwt.get_payload_claim(from: jwt, claim: "document_id", decoder: decode.string)
+        |> option.from_result
+      let scopes =
+        gwt.get_payload_claim(from: jwt, claim: "scopes", decoder: decode.string)
+        |> option.from_result
 
-      // Use constant-time comparison to prevent timing attacks
-      let sig_match =
-        crypto.secure_compare(<<signature_b64:utf8>>, <<expected_sig:utf8>>)
-      case sig_match {
-        False -> Error(InvalidSignature)
-        True -> {
-          // Decode payload
-          use payload_json <- result.try(
-            base64url_decode(payload_b64)
-            |> result.replace_error(InvalidBase64),
-          )
-          use payload <- result.try(
-            json.parse(payload_json, payload_decoder())
-            |> result.replace_error(InvalidJson),
-          )
-          Ok(payload)
-        }
-      }
+      Ok(JwtPayload(
+        sub: sub,
+        iss: iss,
+        iat: iat,
+        exp: exp,
+        jti: jti,
+        tenant_id: tenant_id,
+        document_id: document_id,
+        scopes: scopes,
+      ))
     }
-    _ -> Error(InvalidFormat)
   }
 }
 
@@ -128,7 +171,7 @@ pub fn get_optional_string(
   }
 }
 
-// Decoder for JWT payload
+// Decoder for JWT payload (used internally by sign to extract fields from JSON)
 fn payload_decoder() -> decode.Decoder(JwtPayload) {
   use sub <- decode.optional_field("sub", None, decode.optional(decode.string))
   use iss <- decode.optional_field("iss", None, decode.optional(decode.string))
@@ -160,38 +203,4 @@ fn payload_decoder() -> decode.Decoder(JwtPayload) {
     document_id: document_id,
     scopes: scopes,
   ))
-}
-
-// Base64URL encoding (RFC 4648)
-
-fn base64url_encode(input: String) -> String {
-  base64url_encode_bits(<<input:utf8>>)
-}
-
-fn base64url_encode_bits(input: BitArray) -> String {
-  input
-  |> bit_array.base64_encode(True)
-  |> string.replace("+", "-")
-  |> string.replace("/", "_")
-  |> string.replace("=", "")
-}
-
-fn base64url_decode(input: String) -> Result(String, Nil) {
-  // Add padding back
-  let padded = case string.length(input) % 4 {
-    2 -> input <> "=="
-    3 -> input <> "="
-    _ -> input
-  }
-
-  // Convert URL-safe chars back to standard base64
-  let standard =
-    padded
-    |> string.replace("-", "+")
-    |> string.replace("_", "/")
-
-  case bit_array.base64_decode(standard) {
-    Ok(bits) -> bit_array.to_string(bits)
-    Error(_) -> Error(Nil)
-  }
 }

@@ -1,9 +1,18 @@
 amends "package://github.com/jdx/hk/releases/download/v1.32.0/hk@1.32.0#/Config.pkl"
 import "package://github.com/jdx/hk/releases/download/v1.32.0/hk@1.32.0#/Builtins.pkl"
 
-// Elixir linters for Levee (run from server/ directory)
+// Gleam formatting
+local gleam_linters = new Mapping<String, Step> {
+    ["gleam_fmt"] {
+        glob = "server/**/*.gleam"
+        batch = true
+        fix = "just format-gleam"
+        check = "just lint-gleam"
+    }
+}
+
+// Elixir linters
 local elixir_linters = new Mapping<String, Step> {
-    // Format Elixir code with mix format
     ["mix_fmt"] {
         glob = "server/**/*.ex"
         batch = true
@@ -11,11 +20,20 @@ local elixir_linters = new Mapping<String, Step> {
         check = "cd server && mix format --check-formatted"
     }
 
-    // Compile with warnings as errors
     ["mix_compile"] {
         glob = "server/**/*.ex"
         batch = true
         check = "cd server && mix compile --warnings-as-errors"
+    }
+}
+
+// Client formatting
+local client_linters = new Mapping<String, Step> {
+    ["biome_fmt"] {
+        glob = "client/**/*.{ts,tsx,js,json}"
+        batch = true
+        fix = "just format-client"
+        check = "just lint-client"
     }
 }
 
@@ -38,20 +56,23 @@ local config_linters = new Mapping<String, Step> {
 }
 
 hooks {
-    // Pre-commit: format and compile checks (fast, blocks commit on failure)
+    // Pre-commit: format all code and stage fixes
     ["pre-commit"] {
-        fix = true    // auto-fix formatting issues
-        stage = true  // auto-stage fixed files
-        stash = "git" // stash unstaged changes while running fixes
+        fix = true
+        stage = true
+        stash = "git"
         steps {
+            ...gleam_linters
             ...elixir_linters
+            ...client_linters
             ...config_linters
         }
     }
 
-    // Pre-push: run full test suite (slower, blocks push on failure)
+    // Pre-push: run full test suite
     ["pre-push"] {
         steps {
+            ...gleam_linters
             ...elixir_linters
             ...test_linters
         }
@@ -61,7 +82,9 @@ hooks {
     ["fix"] {
         fix = true
         steps {
+            ...gleam_linters
             ...elixir_linters
+            ...client_linters
             ...config_linters
         }
     }
@@ -69,9 +92,10 @@ hooks {
     // Manual check command: hk check (add --slow for tests)
     ["check"] {
         steps {
+            ...gleam_linters
             ...elixir_linters
+            ...client_linters
             ...config_linters
-            // Tests only run with --slow flag
             ["mix_test"] {
                 glob = "server/**/*.ex"
                 batch = true

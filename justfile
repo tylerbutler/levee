@@ -23,6 +23,7 @@ build-server: build-gleam build-admin build-elixir
 build-gleam:
     cd server/levee_protocol && gleam build --target erlang
     cd server/levee_auth && gleam build --target erlang
+    cd server/levee_storage && gleam build --target erlang
     cd server/levee_oauth && gleam build --target erlang
     cd ../beryl && gleam build --target erlang
     cd levee_channels && gleam build --target erlang
@@ -46,6 +47,9 @@ build-client:
 
 # Run all tests (server + client)
 test: test-server test-client
+
+# Run all tests including PostgreSQL backend
+test-all: test-server test-client test-pg
 
 # Run all server tests
 test-server: test-gleam test-elixir
@@ -78,6 +82,7 @@ format-server: format-gleam format-elixir
 format-gleam:
     cd server/levee_protocol && gleam format
     cd server/levee_auth && gleam format
+    cd server/levee_storage && gleam format
     cd server/levee_oauth && gleam format
     cd server/levee_admin && gleam format
 
@@ -99,6 +104,7 @@ lint-server: lint-gleam lint-elixir
 lint-gleam:
     cd server/levee_protocol && gleam format --check
     cd server/levee_auth && gleam format --check
+    cd server/levee_storage && gleam format --check
     cd server/levee_oauth && gleam format --check
     cd server/levee_admin && gleam format --check
 
@@ -125,6 +131,7 @@ clean-server: clean-gleam clean-elixir
 clean-gleam:
     cd server/levee_protocol && rm -rf build
     cd server/levee_auth && rm -rf build
+    cd server/levee_storage && rm -rf build
     cd server/levee_oauth && rm -rf build
     cd server/levee_admin && rm -rf build
     rm -rf server/priv/static/admin
@@ -136,6 +143,31 @@ clean-elixir:
 # Clean client build artifacts
 clean-client:
     cd client && pnpm clean
+
+# === DATABASE ===
+
+# Default DATABASE_URL for local Docker PostgreSQL
+export DATABASE_URL := env("DATABASE_URL", "postgres://levee:levee@localhost:5432/levee_test")
+
+# Start PostgreSQL in Docker
+db-start:
+    docker compose up -d postgres
+    @echo "Waiting for PostgreSQL..."
+    @docker compose exec postgres sh -c 'until pg_isready -U levee -d levee_test; do sleep 0.5; done' 2>/dev/null
+    @echo "PostgreSQL is ready at $DATABASE_URL"
+
+# Stop PostgreSQL
+db-stop:
+    docker compose down
+
+# Reset the test database (drop all tables, re-run migrations)
+db-reset:
+    docker compose exec postgres psql -U levee -d levee_test -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+    @echo "Database reset."
+
+# Run Elixir tests including PostgreSQL backend tests
+test-pg: db-start
+    cd server && DATABASE_URL="$DATABASE_URL" mix test --include postgres
 
 # === CI ===
 
@@ -156,6 +188,7 @@ setup-server: setup-gleam setup-elixir
 setup-gleam:
     cd server/levee_protocol && gleam deps download
     cd server/levee_auth && gleam deps download
+    cd server/levee_storage && gleam deps download
     cd server/levee_oauth && gleam deps download
     cd server/levee_admin && gleam deps download
 
