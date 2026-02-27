@@ -17,9 +17,9 @@ import gleam/order
 import gleam/result
 import gleam/string
 import levee_storage/types.{
-  type Blob, type Commit, type Delta, type Document, type Ref,
-  type StorageError, type Summary, type Tree, type TreeEntry, AlreadyExists,
-  Blob, Commit, Document, NotFound, Ref, Summary, Tree, TreeEntry,
+  type Blob, type Commit, type Delta, type Document, type Ref, type StorageError,
+  type Summary, type Tree, type TreeEntry, AlreadyExists, Blob, Commit, Document,
+  NotFound, Ref, Summary, Tree, TreeEntry,
 }
 
 // ---------------------------------------------------------------------------
@@ -43,16 +43,11 @@ pub type Tables {
 pub fn init() -> Tables {
   let assert Ok(documents) =
     uset.new(name: "levee_documents", access: bravo.Public)
-  let assert Ok(deltas) =
-    oset.new(name: "levee_deltas", access: bravo.Public)
-  let assert Ok(blobs) =
-    uset.new(name: "levee_blobs", access: bravo.Public)
-  let assert Ok(trees) =
-    uset.new(name: "levee_trees", access: bravo.Public)
-  let assert Ok(commits) =
-    uset.new(name: "levee_commits", access: bravo.Public)
-  let assert Ok(refs) =
-    uset.new(name: "levee_refs", access: bravo.Public)
+  let assert Ok(deltas) = oset.new(name: "levee_deltas", access: bravo.Public)
+  let assert Ok(blobs) = uset.new(name: "levee_blobs", access: bravo.Public)
+  let assert Ok(trees) = uset.new(name: "levee_trees", access: bravo.Public)
+  let assert Ok(commits) = uset.new(name: "levee_commits", access: bravo.Public)
+  let assert Ok(refs) = uset.new(name: "levee_refs", access: bravo.Public)
   let assert Ok(summaries) =
     oset.new(name: "levee_summaries", access: bravo.Public)
 
@@ -489,19 +484,13 @@ fn update_document_latest_summary(
   tables: Tables,
   tenant_id: String,
   document_id: String,
-  summary: Summary,
+  _summary: Summary,
 ) -> Nil {
   let key = #(tenant_id, document_id)
   case uset.lookup(from: tables.documents, at: key) {
     Ok(doc) -> {
       let updated = Document(..doc, updated_at: coerce(utc_now()))
-      // Merge extra summary metadata fields via Erlang map merge
-      let merged: Document =
-        map_merge(
-          updated,
-          make_summary_meta(summary.handle, summary.sequence_number),
-        )
-      let _ = uset.insert(into: tables.documents, key: key, value: merged)
+      let _ = uset.insert(into: tables.documents, key: key, value: updated)
       Nil
     }
     Error(_) -> Nil
@@ -548,16 +537,10 @@ fn byte_size(binary: a) -> Int
 @external(erlang, "Elixir.DateTime", "utc_now")
 fn utc_now() -> Dynamic
 
-@external(erlang, "maps", "merge")
-fn map_merge(base: a, overlay: b) -> a
-
 /// Identity coercion — trusts runtime type is correct.
 @external(erlang, "storage_ffi_helpers", "identity")
 fn coerce(val: a) -> b
 
-@external(erlang, "storage_ffi_helpers", "make_summary_meta")
-fn make_summary_meta(handle: String, sequence_number: Int) -> Dynamic
-
-/// Wrap a Dynamic as a gleam/json.Json value for serialization.
-@external(erlang, "storage_ffi_helpers", "identity")
+/// Wrap a Dynamic map as a gleam/json.Json value by JSON-encoding it via Jason.
+@external(erlang, "storage_ffi_helpers", "json_from_map")
 fn json_from_dynamic(val: Dynamic) -> json.Json

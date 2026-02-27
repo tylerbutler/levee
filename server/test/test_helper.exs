@@ -11,7 +11,16 @@ gleam_paths = [
   Path.join([app_root, "levee_auth", "build", "dev", "erlang", "gleam_crypto", "ebin"]),
   Path.join([app_root, "levee_auth", "build", "dev", "erlang", "gleam_json", "ebin"]),
   Path.join([app_root, "levee_auth", "build", "dev", "erlang", "gleam_time", "ebin"]),
-  Path.join([app_root, "levee_auth", "build", "dev", "erlang", "youid", "ebin"])
+  Path.join([app_root, "levee_auth", "build", "dev", "erlang", "youid", "ebin"]),
+  # levee_storage paths (for PG backend)
+  Path.join([app_root, "levee_storage", "build", "dev", "erlang", "levee_storage", "ebin"]),
+  Path.join([app_root, "levee_storage", "build", "dev", "erlang", "pog", "ebin"]),
+  Path.join([app_root, "levee_storage", "build", "dev", "erlang", "pgo", "ebin"]),
+  Path.join([app_root, "levee_storage", "build", "dev", "erlang", "pg_types", "ebin"]),
+  Path.join([app_root, "levee_storage", "build", "dev", "erlang", "backoff", "ebin"]),
+  Path.join([app_root, "levee_storage", "build", "dev", "erlang", "opentelemetry_api", "ebin"]),
+  Path.join([app_root, "levee_storage", "build", "dev", "erlang", "gleam_otp", "ebin"]),
+  Path.join([app_root, "levee_storage", "build", "dev", "erlang", "gleam_erlang", "ebin"])
 ]
 
 Enum.each(gleam_paths, fn path ->
@@ -20,6 +29,12 @@ Enum.each(gleam_paths, fn path ->
   end
 end)
 
-# Set up database sandbox mode if using PostgreSQL backend
+# Start the pgo application if DATABASE_URL is set (needed for PG storage tests)
+if System.get_env("DATABASE_URL") do
+  Application.ensure_all_started(:backoff)
+  Application.ensure_all_started(:opentelemetry_api)
+  Application.ensure_all_started(:pg_types)
+  Application.ensure_all_started(:pgo)
+end
 
-ExUnit.start()
+ExUnit.start(exclude: [:postgres])

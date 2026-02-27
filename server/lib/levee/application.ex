@@ -73,6 +73,10 @@ defmodule Levee.Application do
         # PostgreSQL backend - start Store
         [Levee.Store]
 
+      Levee.Storage.GleamPG ->
+        # Gleam PG backend (PostgreSQL via gleam_pgo)
+        [Levee.Storage.GleamPG]
+
       Levee.Storage.GleamETS ->
         # Gleam ETS backend (default)
         [Levee.Storage.GleamETS]
