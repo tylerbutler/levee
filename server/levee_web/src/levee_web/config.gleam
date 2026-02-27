@@ -20,7 +20,7 @@ pub fn get_secret_key_base() -> String {
 }
 
 /// Get the path to static files (priv/static).
-pub fn get_static_path() -> Result(String, Nil) {
-  // In dev, relative to the levee_web package
-  Ok("../priv/static")
+pub fn get_static_path() -> String {
+  envoy.get("LEVEE_STATIC_PATH")
+  |> result.unwrap("../priv/static")
 }
