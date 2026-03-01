@@ -1,5 +1,11 @@
 -module(levee_web_ffi).
--export([start_session_infra/0, random_hex_bytes/1, dynamic_to_json/1]).
+-export([start_session_infra/0, store_tenant_secrets_ref/1, random_hex_bytes/1, dynamic_to_json/1]).
+
+%% Store the tenant_secrets actor Subject in persistent_term for global access.
+%% This allows the channel FFI to look up tenant secrets without needing the Subject.
+store_tenant_secrets_ref(Subject) ->
+    persistent_term:put(levee_tenant_secrets, Subject),
+    nil.
 
 %% Start the Elixir Registry and DynamicSupervisor for document sessions.
 %% These are required by the Session GenServer (still in Elixir).

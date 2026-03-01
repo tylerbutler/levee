@@ -14,26 +14,43 @@
     notify_handler_session/2
 ]).
 
-%% JWT functions
+%% JWT functions — uses Gleam levee_auth modules via persistent_term for tenant secret lookup.
+
 jwt_verify(Token, TenantId) ->
-    'Elixir.Levee.Auth.JWT':verify(Token, TenantId).
+    TsActor = persistent_term:get(levee_tenant_secrets),
+    case tenant_secrets:get_secret(TsActor, TenantId) of
+        {ok, Secret} ->
+            'levee_auth@token':verify(Token, Secret);
+        {error, _} ->
+            {error, tenant_not_found}
+    end.
 
 jwt_expired(Claims) ->
-    'Elixir.Levee.Auth.JWT':'expired?'(Claims).
+    'levee_auth@token':is_expired(Claims).
 
 jwt_has_read_scope(Claims) ->
-    'Elixir.Levee.Auth.JWT':'has_read_scope?'(Claims).
+    'levee_auth@token':has_scope(Claims, doc_read).
 
 jwt_has_write_scope(Claims) ->
-    'Elixir.Levee.Auth.JWT':'has_write_scope?'(Claims).
+    'levee_auth@token':has_scope(Claims, doc_write).
 
-%% Registry functions
+%% Registry functions — inlined from deleted Levee.Documents.Registry
+
 registry_get_or_create_session(TenantId, DocumentId) ->
-    'Elixir.Levee.Documents.Registry':get_or_create_session(TenantId, DocumentId).
+    Key = {TenantId, DocumentId},
+    case 'Elixir.Registry':lookup('Elixir.Levee.SessionRegistry', Key) of
+        [{Pid, _}] ->
+            {ok, Pid};
+        [] ->
+            ChildSpec = {'Elixir.Levee.Documents.Session', {TenantId, DocumentId}},
+            case 'Elixir.DynamicSupervisor':start_child('Elixir.Levee.Documents.Supervisor', ChildSpec) of
+                {ok, Pid} -> {ok, Pid};
+                {error, {already_started, Pid}} -> {ok, Pid};
+                {error, Reason} -> {error, Reason}
+            end
+    end.
 
 %% Session functions
-%% client_join now takes an explicit HandlerPid so the Session can
-%% send {:op, msg} and {:signal, msg} to the correct process
 session_client_join(SessionPid, ConnectMsg, HandlerPid) ->
     'Elixir.Levee.Documents.Session':client_join(SessionPid, ConnectMsg, HandlerPid).
 

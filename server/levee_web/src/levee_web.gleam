@@ -35,6 +35,7 @@ pub fn main() {
 
   // Tenant secrets actor
   let assert Ok(ts_actor) = tenant_secrets.start()
+  store_tenant_secrets_ref(ts_actor)
   io.println("  Auth: tenant secrets actor started")
 
   // Session store actor (in-memory user/session management)
@@ -76,6 +77,13 @@ pub fn main() {
 /// These are required by the Session GenServer (still in Elixir).
 @external(erlang, "levee_web_ffi", "start_session_infra")
 fn start_elixir_session_infra() -> Nil
+
+/// Store the tenant_secrets actor Subject in persistent_term for global access.
+/// This allows the channel FFI to verify JWTs without needing the Subject directly.
+@external(erlang, "levee_web_ffi", "store_tenant_secrets_ref")
+fn store_tenant_secrets_ref(
+  actor: process.Subject(tenant_secrets.Message),
+) -> Nil
 
 /// Register a dev tenant if LEVEE_TENANT_ID is set.
 fn register_dev_tenant(ts_actor: process.Subject(tenant_secrets.Message)) -> Nil {

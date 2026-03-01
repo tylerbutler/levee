@@ -3,8 +3,8 @@ defmodule Levee.MixProject do
   Minimal mix project for compiling the document Session GenServer.
 
   The main web server runs via `gleam run` in levee_web/.
-  This mix project only exists to compile session.ex, registry.ex,
-  and supervisor.ex into BEAM modules that levee_web loads via FFI.
+  This mix project only exists to compile session.ex into a BEAM module
+  that levee_web loads via FFI.
 
   Will be removed when the Session GenServer is ported to Gleam.
   """

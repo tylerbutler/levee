@@ -35,7 +35,8 @@ defmodule Levee.Documents.Session do
               :levee_protocol@sequencing,
               :levee_protocol@nack,
               :levee_protocol@session_logic,
-              :levee_protocol@signals
+              :levee_protocol@signals,
+              :levee_storage@ets
             ]}
 
   require Logger
@@ -175,7 +176,7 @@ defmodule Levee.Documents.Session do
   end
 
   defp load_latest_summary(tenant_id, document_id) do
-    case Levee.Storage.get_latest_summary(tenant_id, document_id) do
+    case :levee_storage@ets.get_latest_summary(tenant_id, document_id) do
       {:ok, summary} ->
         %{
           handle: summary.handle,
@@ -609,7 +610,7 @@ defmodule Levee.Documents.Session do
       message: message
     }
 
-    {:ok, _stored} = Levee.Storage.store_summary(tenant_id, document_id, summary)
+    {:ok, _stored} = :levee_storage@ets.store_summary(tenant_id, document_id, summary)
     {:ok, handle}
   end
 
