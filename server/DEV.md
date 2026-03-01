@@ -8,11 +8,9 @@ just setup-server     # Install Gleam + Elixir dependencies
 just build-server     # Build Gleam packages + Elixir
 just server           # Start dev server at localhost:4000
 
-# Or directly from server/
-cd server
-mix deps.get
-mix compile
-mix phx.server
+# Or directly
+cd server/levee_web
+gleam run
 ```
 
 ## Default Dev Tenant
@@ -41,7 +39,8 @@ Levee.Auth.TenantSecrets.register_tenant("my-tenant", "my-secret-key")
 
 Or via environment variables (loaded at startup):
 ```bash
-LEVEE_TENANT_ID=my-tenant LEVEE_TENANT_KEY=my-secret-key mix phx.server
+cd server/levee_web
+LEVEE_TENANT_ID=my-tenant LEVEE_TENANT_KEY=my-secret-key gleam run
 ```
 
 ## Running Tests

@@ -29,7 +29,7 @@ just format-client    # Format client code
 levee/
 ├── server/                     # Elixir/Gleam server
 │   ├── mix.exs                 # Elixir project config
-│   ├── config/                 # Phoenix configuration
+│   ├── config/                 # Application configuration
 │   ├── lib/                    # Elixir source code
 │   │   ├── levee/              # Core application
 │   │   └── levee_web/          # Web layer (routes, channels)
@@ -46,7 +46,7 @@ levee/
 │   ├── vitest.config.ts        # Shared test config
 │   ├── biome.jsonc             # Formatting/linting config
 │   └── packages/
-│       ├── levee-driver/       # Phoenix Channels Fluid driver
+│       ├── levee-driver/       # WebSocket Fluid driver
 │       ├── levee-client/       # High-level client API
 │       ├── levee-example/      # DiceRoller example app
 │       └── levee-presence-tracker/  # Presence tracking example
@@ -74,7 +74,7 @@ Levee provides real-time collaborative editing with:
 
 ### Request Flow
 ```
-Client → Phoenix Router → Auth Plug (JWT) → Controller/Channel → Session GenServer → Storage
+Client → Wisp Router → JWT Middleware → Handler/Channel → Session GenServer → Storage
 ```
 
 ### Client Package Dependency Graph
@@ -89,34 +89,30 @@ levee-example → levee-driver
 
 | File | Purpose |
 |------|---------|
-| `application.ex` | OTP supervision tree, starts all services |
-| `auth/tenant_secrets.ex` | GenServer managing tenant registration and secrets |
-| `auth/jwt.ex` | JWT signing/verification using tenant-specific keys |
 | `documents/session.ex` | Per-document GenServer, handles ops, broadcasts to clients |
-| `documents/registry.ex` | Registry for looking up sessions by `{tenant_id, doc_id}` |
-| `documents/supervisor.ex` | DynamicSupervisor for document sessions |
-| `protocol/bridge.ex` | Elixir ↔ Gleam interop for protocol logic |
-| `storage/behaviour.ex` | Storage interface (behaviour) |
-| `storage/gleam_ets.ex` | Gleam ETS storage bridge (default backend) |
-| `storage/ets.ex` | Legacy ETS storage (Elixir, fallback) |
 
-### Web Layer (`server/lib/levee_web/`)
+This is the only remaining Elixir file. Registry, Supervisor, and Storage wrappers
+have been ported to Gleam FFI. Auth, protocol, and storage are fully in Gleam.
+
+### Web Layer (Gleam — `server/levee_web/` and `levee_channels/`)
 
 | File | Purpose |
 |------|---------|
-| `router.ex` | HTTP routes and WebSocket endpoint |
-| `plugs/auth.ex` | JWT authentication plug, validates scopes |
-| `channels/document_channel.ex` | WebSocket channel for real-time ops |
-| `controllers/document_controller.ex` | Create/get documents REST API |
-| `controllers/delta_controller.ex` | Get deltas/ops REST API |
-| `controllers/git_controller.ex` | Git-like blob/tree/commit/ref APIs |
-| `controllers/admin_controller.ex` | Admin UI SPA catch-all |
+| `levee_web/src/levee_web/router.gleam` | HTTP routes (Wisp) |
+| `levee_web/src/levee_web/middleware/jwt_auth.gleam` | JWT authentication middleware |
+| `levee_web/src/levee_web/handlers/documents.gleam` | Create/get documents REST API |
+| `levee_web/src/levee_web/handlers/deltas.gleam` | Get deltas/ops REST API |
+| `levee_web/src/levee_web/handlers/git.gleam` | Git-like blob/tree/commit/ref APIs |
+| `levee_web/src/levee_web/handlers/admin_spa.gleam` | Admin UI SPA catch-all |
+| `levee_channels/src/levee_channels/document_channel.gleam` | WebSocket channel for real-time ops (Beryl) |
 
 ### Gleam Packages
 
 - **levee_protocol/** - Protocol message types, sequencing, validation, schema generation
 - **levee_auth/** - JWT, password hashing, tenant/user management
 - **levee_storage/** - Storage types and ETS backend (bravo for typed ETS access)
+- **levee_web/** - HTTP server (Wisp/Mist), routing, middleware, request handlers
+- **levee_channels/** - WebSocket channel handling (Beryl)
 - **levee_admin/** - Lustre SPA for admin UI
 
 ### Gleam Testing (startest)
@@ -131,7 +127,7 @@ levee_protocol uses **startest** (not gleeunit) for tests.
 cd server && mix test                                          # All tests
 cd server && mix test test/levee/documents/session_test.exs    # Single file
 cd server && mix test test/levee/documents/session_test.exs:42 # Specific line
-cd server && mix phx.server                                    # Dev server
+cd server/levee_web && gleam run                                # Dev server
 ```
 
 ## Client (`client/`)
@@ -144,7 +140,7 @@ cd server && mix phx.server                                    # Dev server
 
 | Package | Description |
 |---------|-------------|
-| `levee-driver` | Low-level Phoenix Channels Fluid Framework driver |
+| `levee-driver` | Low-level WebSocket Fluid Framework driver |
 | `levee-client` | High-level client wrapping the driver |
 | `levee-example` | DiceRoller example using driver directly |
 | `levee-presence-tracker` | Presence tracking example using client |
@@ -174,10 +170,10 @@ just generate-schema-ts
 ## Common Workflows
 
 ### Adding a New API Endpoint
-1. Add route to `server/lib/levee_web/router.ex`
-2. Create/update controller in `server/lib/levee_web/controllers/`
-3. Add tests in `server/test/levee_web/controllers/`
-4. Run `just test-elixir` to verify
+1. Add route to `server/levee_web/src/levee_web/router.gleam`
+2. Create/update handler in `server/levee_web/src/levee_web/handlers/`
+3. Add tests in `server/levee_web/test/`
+4. Run `just test-gleam` to verify
 
 ### Modifying Gleam Protocol
 1. Edit files in `server/levee_protocol/src/`
@@ -251,8 +247,7 @@ GET    /admin/*path                       SPA catch-all
 |----------|---------|
 | `LEVEE_TENANT_ID` | Auto-register tenant at startup |
 | `LEVEE_TENANT_KEY` | Secret for auto-registered tenant |
-| `SECRET_KEY_BASE` | Phoenix secret (production) |
-| `PHX_HOST` | Host for production |
+| `SECRET_KEY_BASE` | Wisp cookie signing secret (production) |
 | `PORT` | HTTP port (default: 4000) |
 
 ## Claude Code Integration

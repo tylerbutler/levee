@@ -25,10 +25,10 @@ just server   # Start dev server at localhost:4000
 
 ```
 levee/
-├── server/           # Elixir/Gleam server (Phoenix)
+├── server/           # Elixir/Gleam server (Wisp/Mist)
 ├── client/           # TypeScript client packages (pnpm workspace)
 │   └── packages/
-│       ├── levee-driver/            # Low-level Phoenix Channels Fluid driver
+│       ├── levee-driver/            # Low-level WebSocket Fluid driver
 │       ├── levee-client/            # High-level client API (fluid-static style)
 │       ├── levee-example/           # DiceRoller example app
 │       └── levee-presence-tracker/  # Presence tracking example
@@ -43,7 +43,7 @@ See [CLAUDE.md](CLAUDE.md) for detailed architecture documentation.
 ### Server
 
 ```bash
-just server           # Start Phoenix dev server (localhost:4000)
+just server           # Start dev server (localhost:4000)
 just iex              # Start with interactive Elixir shell
 just test-server      # Run Gleam + Elixir tests
 just build-server     # Build Gleam packages + Elixir

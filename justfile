@@ -216,17 +216,13 @@ start: server
 
 # Start server (builds Gleam + admin first)
 server: build-gleam build-admin
-    cd server && mix phx.server
-
-# Start server with IEx
-iex: build-gleam build-admin
-    cd server && iex -S mix phx.server
+    cd server/levee_web && gleam run
 
 # === CODE GENERATION ===
 
 # Generate JSON schema from Gleam protocol types
 generate-schema:
-    cd server && mix generate_schema
+    cd server/levee_protocol && gleam run -m generate_schema
 
 # Generate schema and copy to client driver package
 generate-schema-ts: generate-schema
