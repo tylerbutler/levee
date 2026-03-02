@@ -48,3 +48,5 @@ client/**/.coverage/
 
 **/.claude/settings.local.json
 server/levee_web/build/
+server/levee_session/build/
+server/levee_channels/build/

@@ -17,16 +17,15 @@ import gleam/io
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
-import gleam/result
 import levee_protocol
 import levee_protocol/sequencing
 import levee_session/ops
 import levee_session/signals
 import levee_session/state.{
-  type ClientInfo, type ClientJoinResult, type SessionMessage, type SessionState,
+  type ClientJoinResult, type SessionMessage, type SessionState,
   type SubmitOpsResult, ClientDown, ClientInfo, ClientJoin, ClientLeave,
-  GetOpsSince, GetStateSummary, GetSummaryContext, JoinError, JoinOk, OpsError,
-  OpsOk, SessionState, SubmitOps, SubmitSignals, UpdateClientRsn,
+  GetOpsSince, GetStateSummary, GetSummaryContext, JoinOk, OpsError, OpsOk,
+  SessionState, SubmitOps, SubmitSignals, UpdateClientRsn,
 }
 import levee_session/system
 

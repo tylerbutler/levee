@@ -20,16 +20,21 @@ pid_alive(Pid) -> is_process_alive(Pid).
 
 %% Load the latest summary from Gleam ETS storage.
 %% Returns {ok, SummaryContext} or {error, nil}.
+%% Wrapped in try/catch so it gracefully returns {error, nil} when
+%% the storage module isn't loaded or ETS tables aren't initialized.
 load_latest_summary(TenantId, DocumentId) ->
-    case 'levee_storage@ets':get_latest_summary(TenantId, DocumentId) of
-        {ok, Summary} ->
-            %% Summary is a Gleam record: {summary, Handle, TenantId, DocId, Sn, ...}
-            %% Extract handle and sequence_number
-            Handle = element(2, Summary),
-            Sn = element(5, Summary),
-            {ok, {summary_context, Handle, Sn}};
-        {error, _} ->
-            {error, nil}
+    try
+        case 'levee_storage@ets':get_latest_summary(TenantId, DocumentId) of
+            {ok, Summary} ->
+                Handle = element(2, Summary),
+                Sn = element(5, Summary),
+                {ok, {summary_context, Handle, Sn}};
+            {error, _} ->
+                {error, nil}
+        end
+    catch
+        error:undef -> {error, nil};
+        error:badarg -> {error, nil}
     end.
 
 %% Store a summary in Gleam ETS storage.
