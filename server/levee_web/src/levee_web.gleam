@@ -8,6 +8,7 @@ import gleam/int
 import gleam/io
 import gleam/option.{Some}
 import gleam/result
+import levee_session
 import levee_storage
 import levee_web/config
 import levee_web/context.{Context}
@@ -42,9 +43,10 @@ pub fn main() {
   let assert Ok(ss_actor) = session_store.start()
   io.println("  Auth: session store actor started")
 
-  // Elixir Registry + DynamicSupervisor for document sessions
-  start_elixir_session_infra()
-  io.println("  Documents: Registry + Supervisor started")
+  // Session registry (bravo ETS table for session lookup)
+  let session_registry = levee_session.init_registry()
+  store_session_registry_ref(session_registry)
+  io.println("  Documents: session registry initialized")
 
   // Register dev tenant if configured
   register_dev_tenant(ts_actor)
@@ -73,17 +75,15 @@ pub fn main() {
   process.sleep_forever()
 }
 
-/// Start the Elixir Registry and DynamicSupervisor for document sessions.
-/// These are required by the Session GenServer (still in Elixir).
-@external(erlang, "levee_web_ffi", "start_session_infra")
-fn start_elixir_session_infra() -> Nil
-
 /// Store the tenant_secrets actor Subject in persistent_term for global access.
-/// This allows the channel FFI to verify JWTs without needing the Subject directly.
 @external(erlang, "levee_web_ffi", "store_tenant_secrets_ref")
 fn store_tenant_secrets_ref(
   actor: process.Subject(tenant_secrets.Message),
 ) -> Nil
+
+/// Store the session registry in persistent_term for global access.
+@external(erlang, "levee_web_ffi", "store_session_registry_ref")
+fn store_session_registry_ref(registry: levee_session.SessionRegistry) -> Nil
 
 /// Register a dev tenant if LEVEE_TENANT_ID is set.
 fn register_dev_tenant(ts_actor: process.Subject(tenant_secrets.Message)) -> Nil {

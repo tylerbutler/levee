@@ -1,17 +1,15 @@
 -module(levee_web_ffi).
--export([start_session_infra/0, store_tenant_secrets_ref/1, random_hex_bytes/1, dynamic_to_json/1]).
+-export([store_tenant_secrets_ref/1, store_session_registry_ref/1,
+         random_hex_bytes/1, dynamic_to_json/1]).
 
 %% Store the tenant_secrets actor Subject in persistent_term for global access.
-%% This allows the channel FFI to look up tenant secrets without needing the Subject.
 store_tenant_secrets_ref(Subject) ->
     persistent_term:put(levee_tenant_secrets, Subject),
     nil.
 
-%% Start the Elixir Registry and DynamicSupervisor for document sessions.
-%% These are required by the Session GenServer (still in Elixir).
-start_session_infra() ->
-    {ok, _} = 'Elixir.Registry':start_link([{keys, unique}, {name, 'Elixir.Levee.SessionRegistry'}]),
-    {ok, _} = 'Elixir.DynamicSupervisor':start_link([{strategy, one_for_one}, {name, 'Elixir.Levee.Documents.Supervisor'}]),
+%% Store the session registry (bravo USet) in persistent_term for global access.
+store_session_registry_ref(Registry) ->
+    persistent_term:put(levee_session_registry, Registry),
     nil.
 
 %% Generate N random bytes as lowercase hex string.

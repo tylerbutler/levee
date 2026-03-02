@@ -1,6 +1,6 @@
 # CLAUDE.md - Levee
 
-Fluid Framework-compatible collaborative document service with an Elixir/Gleam server and TypeScript client packages.
+Fluid Framework-compatible collaborative document service with a Gleam server and TypeScript client packages.
 
 ## Quick Reference
 
@@ -13,7 +13,7 @@ just server           # Start dev server (localhost:4000)
 just iex              # Start with interactive shell
 
 # Server only
-just build-server     # Build Gleam + Elixir
+just build-server     # Build Gleam packages
 just test-server      # Run server tests
 just format-server    # Format server code
 
@@ -27,17 +27,15 @@ just format-client    # Format client code
 
 ```
 levee/
-├── server/                     # Elixir/Gleam server
-│   ├── mix.exs                 # Elixir project config
-│   ├── config/                 # Application configuration
-│   ├── lib/                    # Elixir source code
-│   │   ├── levee/              # Core application
-│   │   └── levee_web/          # Web layer (routes, channels)
-│   ├── test/                   # Elixir tests
-│   ├── priv/                   # Static assets, migrations
-│   ├── levee_protocol/         # Gleam protocol types
-│   ├── levee_auth/             # Gleam auth library
-│   └── levee_admin/            # Lustre admin UI
+├── server/                     # Gleam server
+│   ├── levee_protocol/         # Protocol types, sequencing, validation
+│   ├── levee_auth/             # JWT, password, tenant management
+│   ├── levee_storage/          # Storage types, ETS backend
+│   ├── levee_session/          # Document session actor
+│   ├── levee_web/              # HTTP server (Wisp/Mist)
+│   ├── levee_oauth/            # OAuth integration
+│   ├── levee_admin/            # Lustre admin UI
+│   └── priv/                   # Static assets
 ├── client/                     # TypeScript client packages
 │   ├── package.json            # pnpm workspace root
 │   ├── pnpm-workspace.yaml     # Workspace config
@@ -85,14 +83,7 @@ levee-example → levee-driver
 
 ## Server (`server/`)
 
-### Core Application (`server/lib/levee/`)
-
-| File | Purpose |
-|------|---------|
-| `documents/session.ex` | Per-document GenServer, handles ops, broadcasts to clients |
-
-This is the only remaining Elixir file. Registry, Supervisor, and Storage wrappers
-have been ported to Gleam FFI. Auth, protocol, and storage are fully in Gleam.
+### Gleam Packages
 
 ### Web Layer (Gleam — `server/levee_web/` and `levee_channels/`)
 
@@ -111,6 +102,7 @@ have been ported to Gleam FFI. Auth, protocol, and storage are fully in Gleam.
 - **levee_protocol/** - Protocol message types, sequencing, validation, schema generation
 - **levee_auth/** - JWT, password hashing, tenant/user management
 - **levee_storage/** - Storage types and ETS backend (bravo for typed ETS access)
+- **levee_session/** - Per-document session actor (client tracking, op sequencing, broadcasting)
 - **levee_web/** - HTTP server (Wisp/Mist), routing, middleware, request handlers
 - **levee_channels/** - WebSocket channel handling (Beryl)
 - **levee_admin/** - Lustre SPA for admin UI
@@ -124,9 +116,8 @@ levee_protocol uses **startest** (not gleeunit) for tests.
 ### Running Server Commands
 
 ```bash
-cd server && mix test                                          # All tests
-cd server && mix test test/levee/documents/session_test.exs    # Single file
-cd server && mix test test/levee/documents/session_test.exs:42 # Specific line
+just test-gleam                                                 # All Gleam tests
+cd server/levee_session && gleam test                           # Session tests
 cd server/levee_web && gleam run                                # Dev server
 ```
 
@@ -178,8 +169,7 @@ just generate-schema-ts
 ### Modifying Gleam Protocol
 1. Edit files in `server/levee_protocol/src/`
 2. Run `just build-gleam` to compile
-3. Update `server/lib/levee/protocol/bridge.ex` if Elixir interop changes
-4. Run `just test` to verify both Gleam and Elixir tests
+3. Run `just test` to verify
 5. If schema types changed, run `just generate-schema-ts`
 
 ### Rebuilding After Gleam Changes
@@ -220,26 +210,13 @@ GET    /admin                             Admin login page
 GET    /admin/*path                       SPA catch-all
 ```
 
-## Gleam/Elixir Interoperability
+## Gleam Module Naming
 
-### Module Naming
-
-| Gleam File | Erlang/Elixir Module |
-|------------|---------------------|
+| Gleam File | Erlang Module |
+|------------|---------------|
 | `levee_protocol.gleam` | `:levee_protocol` |
 | `sequencing.gleam` | `:levee_protocol@sequencing` |
-| `message.gleam` | `:levee_protocol@message` |
-
-### Type Conversions
-
-| Gleam | Elixir |
-|-------|--------|
-| `String` | binary `""` |
-| `Int` | integer |
-| `List(a)` | list `[]` |
-| `Dict(k, v)` | map `%{}` |
-| `Option(a)` | `nil` or value |
-| `Result(ok, err)` | `{:ok, val}` or `{:error, val}` |
+| `levee_session.gleam` | `:levee_session` |
 
 ## Environment Variables
 
@@ -258,7 +235,7 @@ GET    /admin/*path                       SPA catch-all
 |-------|---------|
 | `security-reviewer` | Security audit for auth, scopes, tenant isolation |
 | `test-helper` | Diagnose and fix test failures |
-| `gleam-bridge` | Gleam ↔ Elixir interoperability issues |
+| `gleam-bridge` | Gleam interoperability issues |
 
 ### Available Skills
 
@@ -267,4 +244,4 @@ GET    /admin/*path                       SPA catch-all
 | `api-doc` | Generate OpenAPI documentation from router |
 | `new-endpoint` | Guide for adding new REST endpoints |
 | `debug-channel` | Debug WebSocket channel issues |
-| `gleam-sync` | Rebuild Gleam protocol and reload Elixir modules |
+| `gleam-sync` | Rebuild Gleam protocol packages |

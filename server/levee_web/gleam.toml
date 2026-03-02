@@ -23,6 +23,7 @@ levee_auth = { path = "../levee_auth" }
 levee_storage = { path = "../levee_storage" }
 levee_channels = { path = "../../levee_channels" }
 levee_oauth = { path = "../levee_oauth" }
+levee_session = { path = "../levee_session" }
 
 [dev-dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"

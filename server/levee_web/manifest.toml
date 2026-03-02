@@ -33,6 +33,7 @@ packages = [
   { name = "levee_channels", version = "0.1.0", build_tools = ["gleam"], requirements = ["beryl", "gleam_erlang", "gleam_json", "gleam_stdlib"], source = "local", path = "../../levee_channels" },
   { name = "levee_oauth", version = "0.1.0", build_tools = ["gleam"], requirements = ["envoy", "gleam_erlang", "gleam_otp", "gleam_stdlib", "gleam_time", "vestibule"], source = "local", path = "../levee_oauth" },
   { name = "levee_protocol", version = "0.1.0", build_tools = ["gleam"], requirements = ["gleam_json", "gleam_stdlib"], source = "local", path = "../levee_protocol" },
+  { name = "levee_session", version = "0.1.0", build_tools = ["gleam"], requirements = ["bravo", "gleam_erlang", "gleam_json", "gleam_otp", "gleam_stdlib", "levee_protocol", "levee_storage"], source = "local", path = "../levee_session" },
   { name = "levee_storage", version = "0.1.0", build_tools = ["gleam"], requirements = ["bravo", "gleam_crypto", "gleam_erlang", "gleam_json", "gleam_otp", "gleam_stdlib", "pog"], source = "local", path = "../levee_storage" },
   { name = "logging", version = "1.3.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "logging", source = "hex", outer_checksum = "1098FBF10B54B44C2C7FDF0B01C1253CAFACDACABEFB4B0D027803246753E06D" },
   { name = "marceau", version = "1.3.0", build_tools = ["gleam"], requirements = [], otp_app = "marceau", source = "hex", outer_checksum = "2D1C27504BEF45005F5DFB18591F8610FB4BFA91744878210BDC464412EC44E9" },
@@ -67,6 +68,7 @@ levee_auth = { path = "../levee_auth" }
 levee_channels = { path = "../../levee_channels" }
 levee_oauth = { path = "../levee_oauth" }
 levee_protocol = { path = "../levee_protocol" }
+levee_session = { path = "../levee_session" }
 levee_storage = { path = "../levee_storage" }
 logging = { version = ">= 1.2.0 and < 2.0.0" }
 mist = { version = ">= 5.0.0 and < 6.0.0" }
