@@ -12,6 +12,10 @@ gleam_paths = [
   Path.join([app_root, "levee_auth", "build", "dev", "erlang", "gleam_json", "ebin"]),
   Path.join([app_root, "levee_auth", "build", "dev", "erlang", "gleam_time", "ebin"]),
   Path.join([app_root, "levee_auth", "build", "dev", "erlang", "youid", "ebin"]),
+  # beryl paths (external repo at workspace root)
+  Path.join([app_root, "..", "..", "beryl", "build", "dev", "erlang", "beryl", "ebin"]),
+  Path.join([app_root, "..", "..", "beryl", "build", "dev", "erlang", "gleam_otp", "ebin"]),
+  Path.join([app_root, "..", "..", "beryl", "build", "dev", "erlang", "gleam_erlang", "ebin"]),
   # levee_storage paths (for PG backend)
   Path.join([app_root, "levee_storage", "build", "dev", "erlang", "levee_storage", "ebin"]),
   Path.join([app_root, "levee_storage", "build", "dev", "erlang", "pog", "ebin"]),

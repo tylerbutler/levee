@@ -1,8 +1,8 @@
 //// Interop converters between Gleam storage types and Erlang maps.
 ////
 //// These functions convert between the typed Gleam custom types and
-//// atom-keyed Erlang maps consumed by the Elixir/Phoenix layer.
-//// When Phoenix is replaced by wisp/mist, this module can be dropped.
+//// atom-keyed Erlang maps consumed by the Elixir session layer.
+//// Can be dropped when the Session GenServer is ported to Gleam.
 
 import gleam/dynamic.{type Dynamic}
 import levee_storage/types.{

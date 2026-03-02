@@ -1,0 +1,28 @@
+name = "levee_web"
+version = "0.1.0"
+target = "erlang"
+description = "Levee web server — wisp/mist HTTP + beryl WebSocket"
+
+[dependencies]
+gleam_stdlib = ">= 0.62.0 and < 2.0.0"
+gleam_erlang = ">= 0.34.0 and < 2.0.0"
+gleam_otp = ">= 0.14.0 and < 2.0.0"
+gleam_json = ">= 3.0.0 and < 4.0.0"
+gleam_http = ">= 3.7.0 and < 5.0.0"
+gleam_crypto = ">= 1.3.0 and < 2.0.0"
+gleam_time = ">= 1.0.0 and < 2.0.0"
+mist = ">= 5.0.0 and < 6.0.0"
+gwt = ">= 2.1.0 and < 3.0.0"
+cors_builder = ">= 2.0.0 and < 3.0.0"
+envoy = ">= 1.1.0 and < 2.0.0"
+logging = ">= 1.2.0 and < 2.0.0"
+beryl = { git = "https://github.com/tylerbutler/beryl.git", ref = "0630920" }
+wisp = { git = "https://github.com/tylerbutler/wisp.git", ref = "0bbfe7f" }
+levee_protocol = { path = "../levee_protocol" }
+levee_auth = { path = "../levee_auth" }
+levee_storage = { path = "../levee_storage" }
+levee_channels = { path = "../../levee_channels" }
+levee_oauth = { path = "../levee_oauth" }
+
+[dev-dependencies]
+gleeunit = ">= 1.0.0 and < 2.0.0"

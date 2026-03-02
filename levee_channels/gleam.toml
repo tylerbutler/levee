@@ -1,0 +1,15 @@
+name = "levee_channels"
+version = "0.1.0"
+description = "Levee document protocol channel handlers for beryl"
+licences = ["Apache-2.0"]
+gleam = ">= 1.1.0"
+target = "erlang"
+
+[dependencies]
+gleam_stdlib = ">= 0.44.0 and < 2.0.0"
+gleam_erlang = ">= 0.29.0 and < 2.0.0"
+gleam_json = ">= 3.0.0 and < 4.0.0"
+beryl = { git = "https://github.com/tylerbutler/beryl.git", ref = "0630920" }
+
+[dev-dependencies]
+gleeunit = ">= 1.0.0 and < 2.0.0"

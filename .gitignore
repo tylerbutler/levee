@@ -43,3 +43,4 @@ client/**/.coverage/
 # === Claude Code ===
 
 **/.claude/settings.local.json
+server/levee_web/build/

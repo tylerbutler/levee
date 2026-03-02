@@ -25,6 +25,8 @@ build-gleam:
     cd server/levee_auth && gleam build --target erlang
     cd server/levee_storage && gleam build --target erlang
     cd server/levee_oauth && gleam build --target erlang
+    cd server/levee_web && gleam build --target erlang
+    cd levee_channels && gleam build --target erlang
     cd server/levee_admin && gleam build --target javascript
 
 # Build admin UI and copy to priv/static/admin
@@ -57,6 +59,8 @@ test-gleam:
     cd server/levee_protocol && gleam test
     cd server/levee_auth && gleam test
     cd server/levee_oauth && gleam test
+    cd server/levee_web && gleam test
+    cd levee_channels && gleam test
     cd server/levee_admin && gleam test
 
 # Run Elixir tests
@@ -81,6 +85,8 @@ format-gleam:
     cd server/levee_auth && gleam format
     cd server/levee_storage && gleam format
     cd server/levee_oauth && gleam format
+    cd server/levee_web && gleam format
+    cd levee_channels && gleam format
     cd server/levee_admin && gleam format
 
 # Format Elixir code
@@ -103,6 +109,8 @@ lint-gleam:
     cd server/levee_auth && gleam format --check
     cd server/levee_storage && gleam format --check
     cd server/levee_oauth && gleam format --check
+    cd server/levee_web && gleam format --check
+    cd levee_channels && gleam format --check
     cd server/levee_admin && gleam format --check
 
 # Lint Elixir code
@@ -130,6 +138,8 @@ clean-gleam:
     cd server/levee_auth && rm -rf build
     cd server/levee_storage && rm -rf build
     cd server/levee_oauth && rm -rf build
+    cd server/levee_web && rm -rf build
+    cd levee_channels && rm -rf build
     cd server/levee_admin && rm -rf build
     rm -rf server/priv/static/admin
 
@@ -187,6 +197,8 @@ setup-gleam:
     cd server/levee_auth && gleam deps download
     cd server/levee_storage && gleam deps download
     cd server/levee_oauth && gleam deps download
+    cd server/levee_web && gleam deps download
+    cd levee_channels && gleam deps download
     cd server/levee_admin && gleam deps download
 
 # Install Elixir dependencies
@@ -202,19 +214,15 @@ setup-client:
 # Start dev server (alias for server)
 start: server
 
-# Start Phoenix server (builds Gleam + admin first)
+# Start server (builds Gleam + admin first)
 server: build-gleam build-admin
-    cd server && mix phx.server
-
-# Start Phoenix server with IEx
-iex: build-gleam build-admin
-    cd server && iex -S mix phx.server
+    cd server/levee_web && gleam run
 
 # === CODE GENERATION ===
 
 # Generate JSON schema from Gleam protocol types
 generate-schema:
-    cd server && mix generate_schema
+    cd server/levee_protocol && gleam run -m generate_schema
 
 # Generate schema and copy to client driver package
 generate-schema-ts: generate-schema

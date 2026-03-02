@@ -27,7 +27,17 @@ defmodule Levee.Documents.Session do
 
   use GenServer
 
-  alias Levee.Protocol.Bridge
+  # Gleam modules are built separately and not visible to the Elixir compiler.
+  # This directive tells the compiler these modules will exist at runtime.
+  @compile {:no_warn_undefined,
+            [
+              :levee_protocol,
+              :levee_protocol@sequencing,
+              :levee_protocol@nack,
+              :levee_protocol@session_logic,
+              :levee_protocol@signals,
+              :levee_storage@ets
+            ]}
 
   require Logger
 
@@ -72,6 +82,10 @@ defmodule Levee.Documents.Session do
 
   def client_join(pid, connect_msg) do
     GenServer.call(pid, {:client_join, connect_msg, self()})
+  end
+
+  def client_join(pid, connect_msg, channel_pid) do
+    GenServer.call(pid, {:client_join, connect_msg, channel_pid})
   end
 
   def client_leave(pid, client_id) do
@@ -142,7 +156,7 @@ defmodule Levee.Documents.Session do
     Logger.info("Starting session for #{tenant_id}/#{document_id}")
 
     # Initialize sequence state using Gleam
-    sequence_state = Bridge.new_sequence_state()
+    sequence_state = :levee_protocol.new_sequence_state()
 
     # Try to load latest summary from storage
     latest_summary = load_latest_summary(tenant_id, document_id)
@@ -162,7 +176,7 @@ defmodule Levee.Documents.Session do
   end
 
   defp load_latest_summary(tenant_id, document_id) do
-    case Levee.Storage.get_latest_summary(tenant_id, document_id) do
+    case :levee_storage@ets.get_latest_summary(tenant_id, document_id) do
       {:ok, summary} ->
         %{
           handle: summary.handle,
@@ -181,10 +195,10 @@ defmodule Levee.Documents.Session do
     mode = connect_msg["mode"] || "write"
 
     # Get current sequence number as the join RSN
-    current_sn = Bridge.current_sn(state.sequence_state)
+    current_sn = :levee_protocol.current_sn(state.sequence_state)
 
     # Register client in sequence state
-    new_sequence_state = Bridge.client_join(state.sequence_state, client_id, current_sn)
+    new_sequence_state = :levee_protocol.client_join(state.sequence_state, client_id, current_sn)
 
     # Store client info with last seen SN for catch-up support
     # Also store negotiated features for targeting decisions
@@ -196,7 +210,7 @@ defmodule Levee.Documents.Session do
       mode: mode,
       monitor_ref: Process.monitor(channel_pid),
       last_seen_sn: current_sn,
-      features: Bridge.negotiate_features(@supported_features, client_features)
+      features: negotiate_features(@supported_features, client_features)
     }
 
     new_clients = Map.put(state.clients, client_id, client_info)
@@ -241,11 +255,11 @@ defmodule Levee.Documents.Session do
     # Verify client exists and is in write mode
     case Map.get(state.clients, client_id) do
       nil ->
-        nack = Bridge.build_nack_unknown_client(client_id)
+        nack = nack_to_wire_map(:levee_protocol@nack.unknown_client(client_id))
         {:reply, {:error, [nack]}, state}
 
       %{mode: "read"} ->
-        nack = Bridge.build_nack_read_only()
+        nack = nack_to_wire_map(:levee_protocol@nack.read_only_client(:none))
         {:reply, {:error, [nack]}, state}
 
       _client_info ->
@@ -280,8 +294,8 @@ defmodule Levee.Documents.Session do
     summary = %{
       tenant_id: state.tenant_id,
       document_id: state.document_id,
-      current_sn: Bridge.current_sn(state.sequence_state),
-      current_msn: Bridge.current_msn(state.sequence_state),
+      current_sn: :levee_protocol.current_sn(state.sequence_state),
+      current_msn: :levee_protocol.current_msn(state.sequence_state),
       client_count: map_size(state.clients),
       client_ids: Map.keys(state.clients),
       history_size: length(state.op_history)
@@ -301,7 +315,7 @@ defmodule Levee.Documents.Session do
         Process.demonitor(client_info.monitor_ref, [:flush])
 
         # Remove from sequence state
-        new_sequence_state = Bridge.client_leave(state.sequence_state, client_id)
+        new_sequence_state = :levee_protocol.client_leave(state.sequence_state, client_id)
         new_clients = Map.delete(state.clients, client_id)
 
         # Generate and sequence a system "leave" message
@@ -337,7 +351,7 @@ defmodule Levee.Documents.Session do
   end
 
   def handle_cast({:update_client_rsn, client_id, rsn}, state) do
-    case Bridge.update_client_rsn(state.sequence_state, client_id, rsn) do
+    case :levee_protocol@sequencing.update_client_rsn(state.sequence_state, client_id, rsn) do
       {:ok, new_sequence_state} ->
         new_clients =
           case Map.fetch(state.clients, client_id) do
@@ -407,7 +421,7 @@ defmodule Levee.Documents.Session do
          clients,
          latest_summary
        ) do
-    current_sn = Bridge.current_sn(sequence_state)
+    current_sn = :levee_protocol.current_sn(sequence_state)
 
     # Build initial clients list (all clients except the joining one)
     initial_clients =
@@ -423,11 +437,11 @@ defmodule Levee.Documents.Session do
 
     # Negotiate features based on client's supported features
     client_features = connect_msg["supportedFeatures"] || %{}
-    negotiated_features = Bridge.negotiate_features(@supported_features, client_features)
+    negotiated_features = negotiate_features(@supported_features, client_features)
 
     # Negotiate protocol version based on client's supported versions
     client_versions = connect_msg["versions"] || []
-    negotiated_version = Bridge.negotiate_version(@supported_versions, client_versions)
+    negotiated_version = negotiate_version(@supported_versions, client_versions)
 
     # Build base response
     response = %{
@@ -485,7 +499,7 @@ defmodule Levee.Documents.Session do
         csn = op["clientSequenceNumber"] || 0
         rsn = op["referenceSequenceNumber"] || 0
 
-        case Bridge.assign_sequence_number(acc_state.sequence_state, client_id, csn, rsn) do
+        case assign_sequence_number(acc_state.sequence_state, client_id, csn, rsn) do
           {:ok, new_seq_state, assigned_sn, msn} ->
             # Check if this is a summarize op
             op_type = op["type"] || "op"
@@ -503,10 +517,14 @@ defmodule Levee.Documents.Session do
                 acc_state
               )
             else
-              sequenced_op = Bridge.build_sequenced_op(op, client_id, assigned_sn, msn)
+              sequenced_op = build_sequenced_op(op, client_id, assigned_sn, msn)
               # Add to history (newest first) and trim if needed
               updated_history =
-                Bridge.add_to_history(sequenced_op, acc_state.op_history, @max_history_size)
+                :levee_protocol@session_logic.add_to_history(
+                  sequenced_op,
+                  acc_state.op_history,
+                  @max_history_size
+                )
 
               new_state = %{
                 acc_state
@@ -518,7 +536,7 @@ defmodule Levee.Documents.Session do
             end
 
           {:error, reason} ->
-            nack = Bridge.build_nack_from_reason(op, reason)
+            nack = build_nack_from_reason(op, reason)
             {acc_ops, [nack | acc_nacks], acc_state}
         end
       end)
@@ -542,18 +560,22 @@ defmodule Levee.Documents.Session do
        ) do
     contents = op["contents"] || %{}
 
-    case Bridge.validate_summarize_contents(contents) do
+    case validate_summarize_contents(contents) do
       :ok ->
         {:ok, summary_handle} =
           store_summary(acc_state.tenant_id, acc_state.document_id, contents, assigned_sn)
 
-        summary_ack = Bridge.build_summary_ack(summary_handle, assigned_sn, msn)
-        sequenced_summarize = Bridge.build_sequenced_op(op, client_id, assigned_sn, msn)
+        summary_ack = build_summary_ack(summary_handle, assigned_sn, msn)
+        sequenced_summarize = build_sequenced_op(op, client_id, assigned_sn, msn)
 
         updated_history =
-          Bridge.add_to_history(
+          :levee_protocol@session_logic.add_to_history(
             summary_ack,
-            Bridge.add_to_history(sequenced_summarize, acc_state.op_history, @max_history_size),
+            :levee_protocol@session_logic.add_to_history(
+              sequenced_summarize,
+              acc_state.op_history,
+              @max_history_size
+            ),
             @max_history_size
           )
 
@@ -567,7 +589,7 @@ defmodule Levee.Documents.Session do
         {[summary_ack, sequenced_summarize | acc_ops], acc_nacks, new_state}
 
       {:error, reason} ->
-        nack = Bridge.build_nack_from_reason(op, {:invalid_summarize, reason})
+        nack = build_nack_from_reason(op, {:invalid_summarize, reason})
         {acc_ops, [nack | acc_nacks], acc_state}
     end
   end
@@ -588,7 +610,7 @@ defmodule Levee.Documents.Session do
       message: message
     }
 
-    {:ok, _stored} = Levee.Storage.store_summary(tenant_id, document_id, summary)
+    {:ok, _stored} = :levee_storage@ets.store_summary(tenant_id, document_id, summary)
     {:ok, handle}
   end
 
@@ -608,9 +630,9 @@ defmodule Levee.Documents.Session do
   defp generate_system_message(message_type, client_id, content, sequence_state, history) do
     # System messages get the next sequence number
     # We increment SN directly since system messages don't go through normal client sequencing
-    current_sn = Bridge.current_sn(sequence_state)
+    current_sn = :levee_protocol.current_sn(sequence_state)
     new_sn = current_sn + 1
-    msn = Bridge.current_msn(sequence_state)
+    msn = :levee_protocol.current_msn(sequence_state)
 
     # Build the system message content based on type
     message_content =
@@ -641,23 +663,28 @@ defmodule Levee.Documents.Session do
       "metadata" => nil,
       "timestamp" => System.system_time(:millisecond),
       # System messages include data field
-      "data" => Jason.encode!(message_content)
+      "data" => IO.iodata_to_binary(:json.encode(message_content))
     }
 
     # Update sequence state to reflect the new SN
     # We use from_checkpoint to update the SN since we're manually incrementing
-    updated_sequence_state = Bridge.sequence_state_from_checkpoint(new_sn, msn)
+    updated_sequence_state = :levee_protocol.sequence_state_from_checkpoint(new_sn, msn)
 
     # Re-register all clients with the new SN as their join RSN
     # This is needed because from_checkpoint creates a fresh state
     final_sequence_state =
-      Enum.reduce(Bridge.connected_clients(sequence_state), updated_sequence_state, fn cid, acc ->
-        # Use new_sn since from_checkpoint reset the state to this sequence number
-        Bridge.client_join(acc, cid, new_sn)
-      end)
+      Enum.reduce(
+        :levee_protocol.connected_clients(sequence_state),
+        updated_sequence_state,
+        fn cid, acc ->
+          # Use new_sn since from_checkpoint reset the state to this sequence number
+          :levee_protocol.client_join(acc, cid, new_sn)
+        end
+      )
 
     # Add to history
-    updated_history = Bridge.add_to_history(system_message, history, @max_history_size)
+    updated_history =
+      :levee_protocol@session_logic.add_to_history(system_message, history, @max_history_size)
 
     {system_message, final_sequence_state, updated_history}
   end
@@ -693,11 +720,140 @@ defmodule Levee.Documents.Session do
       |> put_if_present("targetClientId", signal["targetClientId"])
 
     # Determine recipients via Gleam
-    recipients = Bridge.determine_signal_recipients(sender_client_id, signal, all_client_ids)
+    targeted = wrap_option(signal["targetedClients"], &is_list/1)
+    ignored = wrap_option(signal["ignoredClients"], &is_list/1)
+    single_target = wrap_option(signal["targetClientId"], &is_binary/1)
+
+    recipients =
+      :levee_protocol@session_logic.determine_signal_recipients(
+        sender_client_id,
+        targeted,
+        ignored,
+        single_target,
+        all_client_ids
+      )
 
     {message, recipients}
   end
 
   defp put_if_present(map, _key, nil), do: map
   defp put_if_present(map, key, value), do: Map.put(map, key, value)
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Inlined Gleam bridge helpers
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  defp assign_sequence_number(state, client_id, csn, rsn) do
+    case :levee_protocol.assign_sequence_number(state, client_id, csn, rsn) do
+      {:sequence_ok, new_state, assigned_sn, msn} ->
+        {:ok, new_state, assigned_sn, msn}
+
+      {:sequence_error, {:invalid_csn, expected, received}} ->
+        {:error, {:invalid_csn, expected, received}}
+
+      {:sequence_error, {:invalid_rsn, current_sn, received_rsn}} ->
+        {:error, {:invalid_rsn, current_sn, received_rsn}}
+
+      {:sequence_error, {:unknown_client, cid}} ->
+        {:error, {:unknown_client, cid}}
+
+      other ->
+        {:error, {:unexpected_result, other}}
+    end
+  end
+
+  defp negotiate_features(server_features, client_features) when is_map(client_features) do
+    :levee_protocol@session_logic.negotiate_features(server_features, client_features)
+  end
+
+  defp negotiate_features(server_features, _), do: server_features
+
+  defp negotiate_version(supported_versions, client_versions) when is_list(client_versions) do
+    :levee_protocol@session_logic.negotiate_version(supported_versions, client_versions)
+  end
+
+  defp negotiate_version(_supported_versions, _), do: "0.1.0"
+
+  defp validate_summarize_contents(contents) do
+    case :levee_protocol@session_logic.validate_summarize_contents(contents) do
+      {:ok, _} -> :ok
+      {:error, msg} -> {:error, msg}
+    end
+  end
+
+  defp build_sequenced_op(op, client_id, sn, msn) do
+    params =
+      {:sequenced_op_params, client_id, sn, msn, op["clientSequenceNumber"] || 0,
+       op["referenceSequenceNumber"] || 0, op["type"] || "op", op["contents"], op["metadata"],
+       System.system_time(:millisecond)}
+
+    :levee_protocol@session_logic.build_sequenced_op(params) |> Map.new()
+  end
+
+  defp build_summary_ack(handle, sn, msn) do
+    :levee_protocol@session_logic.build_summary_ack(
+      handle,
+      sn,
+      msn,
+      System.system_time(:millisecond)
+    )
+    |> Map.new()
+  end
+
+  defp build_nack_from_reason(op, reason) do
+    nack =
+      case reason do
+        {:invalid_csn, expected, received} ->
+          :levee_protocol@nack.invalid_csn(expected, received, :none)
+
+        {:invalid_rsn, current_sn, received_rsn} ->
+          :levee_protocol@nack.invalid_rsn(current_sn, received_rsn, :none)
+
+        {:unknown_client, client_id} ->
+          :levee_protocol@nack.unknown_client(client_id)
+
+        {:invalid_summarize, msg} ->
+          :levee_protocol@nack.bad_request("Invalid summarize op: #{msg}", :none)
+
+        _ ->
+          :levee_protocol@nack.bad_request("Sequencing error: #{inspect(reason)}", :none)
+      end
+
+    nack_to_wire_map(nack, op)
+  end
+
+  defp nack_to_wire_map(nack, op \\ nil) do
+    {:nack, _operation, seq_num, {:nack_content, code, error_type, message, retry_after}} = nack
+
+    content = %{
+      "code" => code,
+      "type" => nack_error_type_to_string(error_type),
+      "message" => message
+    }
+
+    content =
+      case retry_after do
+        {:some, seconds} -> Map.put(content, "retryAfter", seconds)
+        :none -> content
+      end
+
+    %{
+      "operation" => op,
+      "sequenceNumber" => seq_num,
+      "content" => content
+    }
+  end
+
+  defp nack_error_type_to_string(:throttling_error), do: "ThrottlingError"
+  defp nack_error_type_to_string(:invalid_scope_error), do: "InvalidScopeError"
+  defp nack_error_type_to_string(:bad_request_error), do: "BadRequestError"
+  defp nack_error_type_to_string(:limit_exceeded_error), do: "LimitExceededError"
+
+  defp wrap_option(nil, _check_fn), do: :none
+  defp wrap_option([], _check_fn), do: :none
+  defp wrap_option("", _check_fn), do: :none
+
+  defp wrap_option(value, check_fn) do
+    if check_fn.(value), do: {:some, value}, else: :none
+  end
 end

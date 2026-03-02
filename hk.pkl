@@ -38,10 +38,11 @@ local client_linters = new Mapping<String, Step> {
 }
 
 // Full test suite (slower, for pre-push or manual checks)
+// Note: Do NOT use batch=true here — it splits files into parallel groups,
+// each spawning a separate mix test that conflicts on the test server port.
 local test_linters = new Mapping<String, Step> {
     ["mix_test"] {
         glob = "server/**/*.ex"
-        batch = true
         check = "cd server && mix test"
     }
 }
