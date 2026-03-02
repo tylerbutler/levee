@@ -54,7 +54,7 @@ describe.runIf(serverAvailable)("LeveeClient Integration", () => {
 				expect(services).toBeDefined();
 
 				// Container starts detached
-				expect(container.attachState).toBe("detached");
+				expect(container.attachState).toBe("Detached");
 
 				// Attach and get the container ID
 				const containerId = await container.attach();
@@ -62,7 +62,7 @@ describe.runIf(serverAvailable)("LeveeClient Integration", () => {
 				expect(typeof containerId).toBe("string");
 				expect(containerId.length).toBeGreaterThan(0);
 
-				expect(container.attachState).toBe("attached");
+				expect(container.attachState).toBe("Attached");
 			},
 		);
 
@@ -114,7 +114,7 @@ describe.runIf(serverAvailable)("LeveeClient Integration", () => {
 			containersToDispose.push(loaded);
 
 			expect(loaded).toBeDefined();
-			expect(loaded.attachState).toBe("attached");
+			expect(loaded.attachState).toBe("Attached");
 			expect(services.audience).toBeDefined();
 		});
 

@@ -59,7 +59,7 @@ describe("Container Lifecycle", () => {
 			await container.attach(request);
 
 			expect(container.closed).toBe(false);
-			expect(container.attachState).toBe("attached");
+			expect(container.attachState).toBe("Attached");
 
 			container.dispose();
 		});
@@ -78,7 +78,7 @@ describe("Container Lifecycle", () => {
 			const container2 = await loader.resolve(loadRequest);
 
 			expect(container2.closed).toBe(false);
-			expect(container2.attachState).toBe("attached");
+			expect(container2.attachState).toBe("Attached");
 
 			container1.dispose();
 			container2.dispose();
