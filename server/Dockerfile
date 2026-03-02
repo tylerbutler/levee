@@ -98,11 +98,9 @@ COPY --from=builder /build/levee_auth/build/dev/erlang/youid/ebin ./levee_auth/b
 
 # Set runtime environment
 ENV MIX_ENV=prod
-ENV PHX_SERVER=true
-ENV PHX_HOST=localhost
 ENV PORT=4000
 
-# Expose the Phoenix port
+# Expose the HTTP port
 EXPOSE 4000
 
 # Health check

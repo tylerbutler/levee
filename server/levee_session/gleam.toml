@@ -1,0 +1,16 @@
+name = "levee_session"
+version = "0.1.0"
+target = "erlang"
+description = "Document session management for Levee"
+
+[dependencies]
+gleam_stdlib = ">= 0.62.0 and < 2.0.0"
+gleam_json = ">= 3.0.0 and < 4.0.0"
+gleam_otp = ">= 1.2.0 and < 2.0.0"
+gleam_erlang = ">= 0.34.0 and < 2.0.0"
+bravo = { git = "https://github.com/tylerbutler/bravo", ref = "c9e8314b03919870260db8f0d03cfe12ac1f6c11" }
+levee_protocol = { path = "../levee_protocol" }
+levee_storage = { path = "../levee_storage" }
+
+[dev-dependencies]
+startest = "~> 0.8"

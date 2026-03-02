@@ -1,5 +1,5 @@
 %% @doc Interop helpers for converting between Gleam storage types and
-%% atom-keyed Erlang maps (consumed by Elixir/Phoenix).
+%% atom-keyed Erlang maps (consumed by Elixir session layer).
 -module(storage_interop_ffi).
 
 -export([document_to_map/1, delta_to_map/1, blob_to_map/1,

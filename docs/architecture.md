@@ -79,7 +79,7 @@ Perfect fit for collaborative document services
 │  Elixir Layer (Runtime & Web)                               │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────┐ │
 │  │ Document Session │  │ WebSocket/REST  │  │   Storage   │ │
-│  │   (GenServer)    │  │   (Phoenix)     │  │    (ETS)    │ │
+│  │   (GenServer)    │  │  (Wisp/Mist)    │  │    (ETS)    │ │
 │  └────────┬─────────┘  └────────┬────────┘  └─────────────┘ │
 ├───────────┼─────────────────────┼───────────────────────────┤
 │  Gleam Layer (Protocol Logic)   │                           │
@@ -102,7 +102,7 @@ Perfect fit for collaborative document services
 
 **Elixir for Runtime:**
 - OTP supervision trees for fault tolerance
-- Phoenix for WebSocket/HTTP handling
+- Wisp/Mist for HTTP, Beryl for WebSocket
 - GenServer for per-document session state
 - Ecosystem of production-ready libraries
 
@@ -290,11 +290,10 @@ fn validate_scope(
 
 | Component | Library | Purpose |
 |-----------|---------|---------|
-| HTTP Server | **Bandit** | Pure-Elixir HTTP/2 server |
-| Web Framework | **Phoenix** | Channels, routing, controllers |
-| JWT | **JOSE** | Token signing and verification |
-| Clustering | **libcluster** | DNS-based node discovery |
-| PubSub | **Phoenix.PubSub** | Inter-process message broadcast |
+| HTTP Server | **Mist** | Gleam HTTP server |
+| Web Framework | **Wisp** | Routing, middleware, request handling |
+| WebSocket | **Beryl** | Channel-based WebSocket handling |
+| JWT | **gwt** | Token signing and verification (Gleam) |
 | Storage | **ETS** | In-memory key-value (dev) |
 
 All battle-tested, production-grade libraries
@@ -375,26 +374,31 @@ end
 
 ---
 
-# Elixir: Web Layer (Phoenix)
+# Gleam: Web Layer (Wisp/Mist + Beryl)
 
 ```
-lib/levee_web/
-├── router.ex              # Route definitions
-├── channels/
-│   └── document_channel.ex  # Phoenix Channel for real-time
-├── controllers/
-│   ├── document_controller.ex
-│   ├── delta_controller.ex
-│   └── git_controller.ex
-└── plugs/
-    └── auth.ex            # JWT middleware (Plug pipeline)
+server/levee_web/src/levee_web/
+├── router.gleam               # Route definitions (Wisp)
+├── context.gleam              # Typed request context
+├── handlers/
+│   ├── documents.gleam        # Document CRUD
+│   ├── deltas.gleam           # Delta/ops retrieval
+│   ├── git.gleam              # Git-like storage
+│   └── admin_spa.gleam        # Admin UI
+└── middleware/
+    ├── jwt_auth.gleam         # JWT authentication
+    ├── cors.gleam             # CORS handling
+    └── session_auth.gleam     # Session auth
+
+levee_channels/src/levee_channels/
+├── document_channel.gleam     # Beryl channel for real-time
+└── runtime.gleam              # Channel runtime
 ```
 
-**Phoenix Channels** handle WebSocket connections with:
-- Automatic reconnection and heartbeats
-- Per-channel process isolation
-- Built-in presence tracking
-- PubSub for broadcasting to subscribers
+**Beryl channels** handle WebSocket connections with:
+- Phoenix-compatible wire protocol (works with phoenix.js client)
+- Per-channel process isolation on BEAM
+- Built-in heartbeat handling
 
 ---
 

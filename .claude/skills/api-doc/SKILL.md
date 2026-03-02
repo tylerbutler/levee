@@ -1,6 +1,6 @@
 ---
 name: api-doc
-description: Generate OpenAPI documentation from Phoenix router
+description: Generate OpenAPI documentation from Wisp router
 ---
 
 # API Documentation Generator
@@ -9,10 +9,10 @@ Analyze the Levee API and generate comprehensive documentation.
 
 ## Source Files to Analyze
 
-1. **Router**: `lib/levee_web/router.ex` - All endpoints and pipelines
-2. **Controllers**: `lib/levee_web/controllers/*.ex` - Request/response handling
-3. **Auth Plug**: `lib/levee_web/plugs/auth.ex` - Authentication requirements
-4. **Channels**: `lib/levee_web/channels/*.ex` - WebSocket endpoints
+1. **Router**: `server/levee_web/src/levee_web/router.gleam` - All endpoints and routing
+2. **Handlers**: `server/levee_web/src/levee_web/handlers/*.gleam` - Request/response handling
+3. **Auth Middleware**: `server/levee_web/src/levee_web/middleware/jwt_auth.gleam` - Authentication requirements
+4. **Channels**: `levee_channels/src/levee_channels/document_channel.gleam` - WebSocket endpoints
 
 ## Documentation Structure
 
@@ -21,10 +21,10 @@ Generate documentation covering:
 ### REST Endpoints
 For each endpoint, document:
 - HTTP method and path
-- Pipeline (authentication level required)
+- Authentication requirements (JWT middleware)
 - Required JWT scopes (e.g., `doc:read`, `doc:write`, `summary:write`)
 - Path parameters
-- Request body schema (from controller action)
+- Request body schema (from handler)
 - Response schema and status codes
 - Example request/response
 
