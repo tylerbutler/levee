@@ -33,6 +33,8 @@ RUN mix local.hex --force && \
 COPY mix.exs mix.lock ./
 COPY levee_protocol/gleam.toml levee_protocol/manifest.toml levee_protocol/
 COPY levee_auth/gleam.toml levee_auth/manifest.toml levee_auth/
+COPY levee_storage/gleam.toml levee_storage/manifest.toml levee_storage/
+COPY levee_oauth/gleam.toml levee_oauth/manifest.toml levee_oauth/
 
 # Install Elixir dependencies
 RUN mix deps.get --only prod
@@ -40,6 +42,8 @@ RUN mix deps.get --only prod
 # Copy Gleam sources and build them
 COPY levee_protocol levee_protocol
 COPY levee_auth levee_auth
+COPY levee_storage levee_storage
+COPY levee_oauth levee_oauth
 
 # Copy levee_admin for SPA build
 COPY levee_admin levee_admin
@@ -83,18 +87,11 @@ WORKDIR /app
 COPY --from=builder /build/_build/prod/rel/levee ./
 
 # Copy Gleam compiled modules (required at runtime)
-# levee_protocol and its dependencies
-COPY --from=builder /build/levee_protocol/build/dev/erlang/levee_protocol/ebin ./levee_protocol/build/dev/erlang/levee_protocol/ebin
-COPY --from=builder /build/levee_protocol/build/dev/erlang/gleam_stdlib/ebin ./levee_protocol/build/dev/erlang/gleam_stdlib/ebin
-COPY --from=builder /build/levee_protocol/build/dev/erlang/gleam_json/ebin ./levee_protocol/build/dev/erlang/gleam_json/ebin
-
-# levee_auth and its dependencies
-COPY --from=builder /build/levee_auth/build/dev/erlang/levee_auth/ebin ./levee_auth/build/dev/erlang/levee_auth/ebin
-COPY --from=builder /build/levee_auth/build/dev/erlang/gleam_stdlib/ebin ./levee_auth/build/dev/erlang/gleam_stdlib/ebin
-COPY --from=builder /build/levee_auth/build/dev/erlang/gleam_crypto/ebin ./levee_auth/build/dev/erlang/gleam_crypto/ebin
-COPY --from=builder /build/levee_auth/build/dev/erlang/gleam_json/ebin ./levee_auth/build/dev/erlang/gleam_json/ebin
-COPY --from=builder /build/levee_auth/build/dev/erlang/gleam_time/ebin ./levee_auth/build/dev/erlang/gleam_time/ebin
-COPY --from=builder /build/levee_auth/build/dev/erlang/youid/ebin ./levee_auth/build/dev/erlang/youid/ebin
+# Copy all ebin dirs for each Gleam package and their dependencies
+COPY --from=builder /build/levee_protocol/build/dev/erlang/ ./levee_protocol/build/dev/erlang/
+COPY --from=builder /build/levee_auth/build/dev/erlang/ ./levee_auth/build/dev/erlang/
+COPY --from=builder /build/levee_storage/build/dev/erlang/ ./levee_storage/build/dev/erlang/
+COPY --from=builder /build/levee_oauth/build/dev/erlang/ ./levee_oauth/build/dev/erlang/
 
 # Set runtime environment
 ENV MIX_ENV=prod
