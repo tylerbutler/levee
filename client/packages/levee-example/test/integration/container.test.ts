@@ -64,19 +64,22 @@ describe("Container Lifecycle", () => {
 			container.dispose();
 		});
 
-		// Loading existing containers fails with 0x8e4 due to document ID mismatch
-		// between the factory-generated ID and the loader's expected ID.
-		it.fails("loads an existing container", { timeout: 30_000 }, async () => {
+		it("loads an existing container", { timeout: 30_000 }, async () => {
 			// First create a container
-			const documentId = `test-load-${Date.now()}`;
-			const createRequest = driver.createCreateNewRequest(documentId);
+			const createRequest = driver.createCreateNewRequest(
+				`test-load-${Date.now()}`,
+			);
 			const container1 = await loader.createDetachedContainer(
 				DiceRollerContainerCodeDetails,
 			);
 			await container1.attach(createRequest);
 
-			// Then load it
-			const loadRequest = driver.createLoadExistingRequest(documentId);
+			// Use the server-generated document ID from the resolved URL
+			const serverDocId = container1.resolvedUrl?.id;
+			expect(serverDocId).toBeDefined();
+
+			// Then load it using the server-generated ID
+			const loadRequest = driver.createLoadExistingRequest(serverDocId!);
 			const container2 = await loader.resolve(loadRequest);
 
 			expect(container2.closed).toBe(false);
@@ -103,24 +106,25 @@ describe("Container Lifecycle", () => {
 		});
 	});
 
-	// Collaborative sync depends on loading existing containers (see above).
 	describe.runIf(serverAvailable)("Collaborative Sync", () => {
-		it.fails(
+		it(
 			"synchronizes dice rolls between clients",
 			{ timeout: 30_000 },
 			async () => {
-				const documentId = `test-sync-${Date.now()}`;
-
 				// Create first client
-				const createRequest = driver.createCreateNewRequest(documentId);
+				const createRequest = driver.createCreateNewRequest(
+					`test-sync-${Date.now()}`,
+				);
 				const container1 = await loader.createDetachedContainer(
 					DiceRollerContainerCodeDetails,
 				);
 				await container1.attach(createRequest);
 				const diceRoller1 = await getDiceRollerFromContainer(container1);
 
-				// Create second client that loads the same document
-				const loadRequest = driver.createLoadExistingRequest(documentId);
+				// Use the server-generated document ID to load from second client
+				const serverDocId = container1.resolvedUrl?.id;
+				expect(serverDocId).toBeDefined();
+				const loadRequest = driver.createLoadExistingRequest(serverDocId!);
 				const container2 = await loader.resolve(loadRequest);
 				const diceRoller2 = await getDiceRollerFromContainer(container2);
 

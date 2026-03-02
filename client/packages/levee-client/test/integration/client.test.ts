@@ -93,10 +93,10 @@ describe.runIf(serverAvailable)("LeveeClient Integration", () => {
 		});
 	});
 
-	// Loading existing containers currently fails with Fluid Framework error
-	// 0x8e4. The factory generates a new document ID on the server that doesn't
-	// match the ID used by the loading client. These tests will pass once the
-	// createContainer flow correctly propagates the document ID.
+	// Loading existing containers succeeds (snapshot is found) but the loaded
+	// runtime can't find the root data store. The snapshot tree format from
+	// the server doesn't fully match what fluid-static expects during
+	// deserialization. Tracked for further investigation.
 	describe("getContainer", () => {
 		it.fails(
 			"loads an existing container by ID",
