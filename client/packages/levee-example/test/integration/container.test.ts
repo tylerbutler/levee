@@ -64,8 +64,8 @@ describe("Container Lifecycle", () => {
 			container.dispose();
 		});
 
-		// Loading existing containers fails with Fluid Framework error 0x8e4 —
-		// the server doesn't persist snapshots in the format Fluid expects.
+		// Loading existing containers fails with 0x8e4 due to document ID mismatch
+		// between the factory-generated ID and the loader's expected ID.
 		it.fails("loads an existing container", { timeout: 30_000 }, async () => {
 			// First create a container
 			const documentId = `test-load-${Date.now()}`;
@@ -103,8 +103,7 @@ describe("Container Lifecycle", () => {
 		});
 	});
 
-	// Collaborative sync requires loading existing containers, which fails
-	// with error 0x8e4 (see "loads an existing container" above).
+	// Collaborative sync depends on loading existing containers (see above).
 	describe.runIf(serverAvailable)("Collaborative Sync", () => {
 		it.fails(
 			"synchronizes dice rolls between clients",

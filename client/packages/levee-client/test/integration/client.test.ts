@@ -93,12 +93,10 @@ describe.runIf(serverAvailable)("LeveeClient Integration", () => {
 		});
 	});
 
-	// Loading existing containers fails with Fluid Framework error 0x8e4
-	// (snapshot fetch assertion failure). This is a known Levee server storage
-	// limitation — the server doesn't persist container snapshots in a format
-	// that satisfies the Fluid container loader's fetchSnapshot requirements.
-	// These tests document the expected behavior and will pass once the server
-	// storage layer properly supports snapshot retrieval.
+	// Loading existing containers currently fails with Fluid Framework error
+	// 0x8e4. The factory generates a new document ID on the server that doesn't
+	// match the ID used by the loading client. These tests will pass once the
+	// createContainer flow correctly propagates the document ID.
 	describe("getContainer", () => {
 		it.fails(
 			"loads an existing container by ID",

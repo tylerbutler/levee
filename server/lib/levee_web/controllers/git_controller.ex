@@ -247,9 +247,20 @@ defmodule LeveeWeb.GitController do
         |> json(format_ref_response(conn, tenant_id, ref))
 
       {:error, :not_found} ->
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "Reference not found"})
+        # Upsert: create the ref if it doesn't exist yet.
+        # The Fluid Framework client calls PATCH (updateRef) even for the initial
+        # summary upload, expecting create-if-not-exists semantics.
+        case Storage.create_ref(tenant_id, ref_path, sha) do
+          {:ok, ref} ->
+            conn
+            |> put_status(:ok)
+            |> json(format_ref_response(conn, tenant_id, ref))
+
+          {:error, reason} ->
+            conn
+            |> put_status(:bad_request)
+            |> json(%{error: inspect(reason)})
+        end
 
       {:error, reason} ->
         conn

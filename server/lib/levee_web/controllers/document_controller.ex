@@ -31,7 +31,7 @@ defmodule LeveeWeb.DocumentController do
     case Storage.create_document(tenant_id, document_id, %{sequence_number: sequence_number}) do
       {:ok, _document} ->
         if summary = params["summary"] do
-          process_summary_tree(tenant_id, summary)
+          process_initial_summary(tenant_id, document_id, summary)
         end
 
         # Return the document ID or full session info
@@ -125,22 +125,46 @@ defmodule LeveeWeb.DocumentController do
     }
   end
 
-  defp process_summary_tree(tenant_id, %{"type" => 1, "tree" => tree}) do
-    # Type 1 = SummaryTree
-    Enum.each(tree, fn {_path, node} ->
-      process_summary_node(tenant_id, node)
-    end)
+  # Process the initial summary from container attach by building a full
+  # git object graph (blobs → trees → commit → ref). This allows other
+  # clients to load the container via getVersions() → getSnapshotTree().
+  defp process_initial_summary(tenant_id, document_id, summary) do
+    case build_summary_objects(tenant_id, summary) do
+      {:ok, root_tree_sha, _type} ->
+        now = DateTime.utc_now() |> DateTime.to_iso8601()
+
+        {:ok, commit} =
+          Storage.create_commit(tenant_id, %{
+            "tree" => root_tree_sha,
+            "parents" => [],
+            "message" => "Initial summary",
+            "author" => %{"name" => "Levee", "email" => "server@levee.local", "date" => now}
+          })
+
+        Storage.create_ref(tenant_id, "refs/heads/#{document_id}", commit.sha)
+        {:ok, commit.sha}
+
+      _error ->
+        :ok
+    end
   end
 
-  defp process_summary_tree(_tenant_id, _), do: :ok
+  # Recursively walk the Fluid summary tree, storing blobs and building
+  # tree objects bottom-up. Returns {:ok, sha, type} for each node.
+  defp build_summary_objects(tenant_id, %{"type" => 1, "tree" => tree}) do
+    # Type 1 = SummaryTree: process children, then create tree from entries
+    entries =
+      Enum.map(tree, fn {path, node} ->
+        {:ok, sha, type} = build_summary_objects(tenant_id, node)
+        %{path: path, sha: sha, mode: "100644", type: type}
+      end)
 
-  defp process_summary_node(tenant_id, %{"type" => 1} = tree) do
-    # Nested tree
-    process_summary_tree(tenant_id, tree)
+    {:ok, tree_obj} = Storage.create_tree(tenant_id, entries)
+    {:ok, tree_obj.sha, "tree"}
   end
 
-  defp process_summary_node(tenant_id, %{"type" => 2, "content" => content}) do
-    # Type 2 = SummaryBlob
+  defp build_summary_objects(tenant_id, %{"type" => 2, "content" => content}) do
+    # Type 2 = SummaryBlob: store blob content, return its SHA
     binary_content =
       if is_binary(content) do
         content
@@ -148,8 +172,9 @@ defmodule LeveeWeb.DocumentController do
         Jason.encode!(content)
       end
 
-    Storage.create_blob(tenant_id, binary_content)
+    {:ok, blob} = Storage.create_blob(tenant_id, binary_content)
+    {:ok, blob.sha, "blob"}
   end
 
-  defp process_summary_node(_tenant_id, _), do: :ok
+  defp build_summary_objects(_tenant_id, _), do: {:ok, "", "blob"}
 end
