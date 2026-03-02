@@ -6,6 +6,9 @@
  *
  * Or run the full integration test suite with:
  *   pnpm test:integration
+ *
+ * Tests that need the server are wrapped in `describe.runIf(serverAvailable)`
+ * and will be properly marked as SKIPPED when the server is not reachable.
  */
 
 import { Loader } from "@fluidframework/container-loader/legacy";
@@ -17,32 +20,21 @@ import {
 	getDiceRollerFromContainer,
 } from "../../src/containerCode.js";
 import { createLeveeDriver } from "../../src/driver.js";
+import {
+	createTestDriver,
+	isServerRunning,
+	LEVEE_HTTP_URL,
+	LEVEE_SOCKET_URL,
+} from "./helpers.js";
 
-// Server configuration matching docker-compose.yml in levee-driver
-const LEVEE_HTTP_URL =
-	// biome-ignore lint/style/noProcessEnv: test configuration from environment
-	process.env.LEVEE_HTTP_URL ?? "http://localhost:4000";
-const LEVEE_SOCKET_URL =
-	// biome-ignore lint/style/noProcessEnv: test configuration from environment
-	process.env.LEVEE_SOCKET_URL ?? "ws://localhost:4000/socket";
-const LEVEE_TENANT_KEY =
-	// biome-ignore lint/style/noProcessEnv: test configuration from environment
-	process.env.LEVEE_TENANT_KEY ?? "dev-tenant-secret-key";
+const serverAvailable = await isServerRunning();
 
 describe("Container Lifecycle", () => {
-	let driver: ReturnType<typeof createLeveeDriver>;
+	let driver: ReturnType<typeof createTestDriver>;
 	let loader: Loader;
 
 	beforeAll(() => {
-		driver = createLeveeDriver({
-			httpUrl: LEVEE_HTTP_URL,
-			socketUrl: LEVEE_SOCKET_URL,
-			tenantKey: LEVEE_TENANT_KEY,
-			user: {
-				id: "integration-test-user",
-				name: "Integration Test",
-			},
-		});
+		driver = createTestDriver();
 
 		loader = new Loader({
 			urlResolver: driver.urlResolver,
@@ -56,11 +48,8 @@ describe("Container Lifecycle", () => {
 		});
 	});
 
-	// These tests are skipped by default because they require a running server
-	// Enable when testing against a live Levee server
-	// biome-ignore lint/suspicious/noSkippedTests: requires running Levee server
-	describe.skip("Create and Load", () => {
-		it("creates a new container", async () => {
+	describe.runIf(serverAvailable)("Create and Load", () => {
+		it("creates a new container", { timeout: 30_000 }, async () => {
 			const documentId = `test-create-${Date.now()}`;
 			const request = driver.createCreateNewRequest(documentId);
 
@@ -75,7 +64,7 @@ describe("Container Lifecycle", () => {
 			container.dispose();
 		});
 
-		it("loads an existing container", async () => {
+		it("loads an existing container", { timeout: 30_000 }, async () => {
 			// First create a container
 			const documentId = `test-load-${Date.now()}`;
 			const createRequest = driver.createCreateNewRequest(documentId);
@@ -95,7 +84,7 @@ describe("Container Lifecycle", () => {
 			container2.dispose();
 		});
 
-		it("gets DiceRoller from container", async () => {
+		it("gets DiceRoller from container", { timeout: 30_000 }, async () => {
 			const documentId = `test-diceroller-${Date.now()}`;
 			const request = driver.createCreateNewRequest(documentId);
 
@@ -112,39 +101,58 @@ describe("Container Lifecycle", () => {
 		});
 	});
 
-	// biome-ignore lint/suspicious/noSkippedTests: requires running Levee server
-	describe.skip("Collaborative Sync", () => {
-		it("synchronizes dice rolls between clients", async () => {
-			const documentId = `test-sync-${Date.now()}`;
+	describe.runIf(serverAvailable)("Collaborative Sync", () => {
+		it(
+			"synchronizes dice rolls between clients",
+			{ timeout: 30_000 },
+			async () => {
+				const documentId = `test-sync-${Date.now()}`;
 
-			// Create first client
-			const createRequest = driver.createCreateNewRequest(documentId);
-			const container1 = await loader.createDetachedContainer(
-				DiceRollerContainerCodeDetails,
-			);
-			await container1.attach(createRequest);
-			const diceRoller1 = await getDiceRollerFromContainer(container1);
+				// Create first client
+				const createRequest = driver.createCreateNewRequest(documentId);
+				const container1 = await loader.createDetachedContainer(
+					DiceRollerContainerCodeDetails,
+				);
+				await container1.attach(createRequest);
+				const diceRoller1 = await getDiceRollerFromContainer(container1);
 
-			// Create second client that loads the same document
-			const loadRequest = driver.createLoadExistingRequest(documentId);
-			const container2 = await loader.resolve(loadRequest);
-			const diceRoller2 = await getDiceRollerFromContainer(container2);
+				// Create second client that loads the same document
+				const loadRequest = driver.createLoadExistingRequest(documentId);
+				const container2 = await loader.resolve(loadRequest);
+				const diceRoller2 = await getDiceRollerFromContainer(container2);
 
-			// Both should start with the same value
-			expect(diceRoller1.value).toBe(diceRoller2.value);
+				// Both should start with the same value
+				expect(diceRoller1.value).toBe(diceRoller2.value);
 
-			// Roll on client 1
-			diceRoller1.roll();
+				// Roll on client 1
+				diceRoller1.roll();
 
-			// Wait for sync
-			await new Promise((resolve) => setTimeout(resolve, 500));
+				// Wait for sync with polling (more reliable than fixed timeout)
+				const rolledValue = diceRoller1.value;
+				await new Promise<void>((resolve, reject) => {
+					const deadline = Date.now() + 5000;
+					const check = () => {
+						if (diceRoller2.value === rolledValue) {
+							resolve();
+						} else if (Date.now() > deadline) {
+							reject(
+								new Error(
+									`Sync timeout: client1=${rolledValue}, client2=${diceRoller2.value}`,
+								),
+							);
+						} else {
+							setTimeout(check, 100);
+						}
+					};
+					check();
+				});
 
-			// Client 2 should see the same value
-			expect(diceRoller2.value).toBe(diceRoller1.value);
+				expect(diceRoller2.value).toBe(rolledValue);
 
-			container1.dispose();
-			container2.dispose();
-		});
+				container1.dispose();
+				container2.dispose();
+			},
+		);
 	});
 });
 
@@ -153,7 +161,7 @@ describe("Driver Configuration", () => {
 		const driver = createLeveeDriver({
 			httpUrl: LEVEE_HTTP_URL,
 			socketUrl: LEVEE_SOCKET_URL,
-			tenantKey: LEVEE_TENANT_KEY,
+			tenantKey: "dev-tenant-secret-key",
 		});
 
 		expect(driver.config.httpUrl).toBe(LEVEE_HTTP_URL);

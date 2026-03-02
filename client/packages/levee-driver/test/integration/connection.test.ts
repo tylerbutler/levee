@@ -5,53 +5,28 @@
  *   docker compose up -d
  *
  * Or run the full integration test suite with:
- *   pnpm test:integration:ci
+ *   pnpm test:integration
  *
- * Environment variables:
- *   LEVEE_HTTP_URL - HTTP URL for the server (default: http://localhost:4000)
- *   LEVEE_SOCKET_URL - WebSocket URL (default: ws://localhost:4000/socket)
- *   LEVEE_TENANT_KEY - Tenant secret key for auth (default: dev-tenant-secret-key)
- *   LEVEE_DEBUG - Enable debug logging (default: false)
+ * Tests that need the server are wrapped in `describe.runIf(serverAvailable)`
+ * and will be properly marked as SKIPPED when the server is not reachable.
  */
 
 import { beforeAll, describe, expect, it } from "vitest";
 import type { LeveeResolvedUrl } from "../../src/contracts.js";
-import { LeveeDocumentServiceFactory } from "../../src/leveeDocumentServiceFactory.js";
-import { InsecureLeveeTokenProvider } from "../../src/tokenProvider.js";
-import { LeveeUrlResolver } from "../../src/urlResolver.js";
+import type { LeveeDocumentServiceFactory } from "../../src/leveeDocumentServiceFactory.js";
+import type { InsecureLeveeTokenProvider } from "../../src/tokenProvider.js";
+import type { LeveeUrlResolver } from "../../src/urlResolver.js";
+import {
+	createTestFactory,
+	createTestTokenProvider,
+	createTestUrlResolver,
+	isServerRunning,
+	LEVEE_HTTP_URL,
+	LEVEE_SOCKET_URL,
+	uniqueDocId,
+} from "./helpers.js";
 
-// Server configuration matching docker-compose.yml
-const LEVEE_HTTP_URL =
-	// biome-ignore lint/style/noProcessEnv: test configuration from environment
-	process.env["LEVEE_HTTP_URL"] ?? "http://localhost:4000";
-const LEVEE_SOCKET_URL =
-	// biome-ignore lint/style/noProcessEnv: test configuration from environment
-	process.env["LEVEE_SOCKET_URL"] ?? "ws://localhost:4000/socket";
-const LEVEE_TENANT_KEY =
-	// biome-ignore lint/style/noProcessEnv: test configuration from environment
-	process.env["LEVEE_TENANT_KEY"] ?? "dev-tenant-secret-key";
-const LEVEE_DEBUG =
-	// biome-ignore lint/style/noProcessEnv: test configuration from environment
-	process.env["LEVEE_DEBUG"] === "true" ||
-	// biome-ignore lint/style/noProcessEnv: test configuration from environment
-	process.env["LEVEE_DEBUG"] === "1";
-
-/**
- * Checks if the Levee server is reachable.
- */
-async function isServerRunning(): Promise<boolean> {
-	try {
-		const controller = new AbortController();
-		const timeout = setTimeout(() => controller.abort(), 2000);
-		const response = await fetch(`${LEVEE_HTTP_URL}/health`, {
-			signal: controller.signal,
-		});
-		clearTimeout(timeout);
-		return response.ok;
-	} catch {
-		return false;
-	}
-}
+const serverAvailable = await isServerRunning();
 
 describe("Levee Server Integration", () => {
 	let urlResolver: LeveeUrlResolver;
@@ -59,12 +34,9 @@ describe("Levee Server Integration", () => {
 	let tokenProvider: InsecureLeveeTokenProvider;
 
 	beforeAll(() => {
-		tokenProvider = new InsecureLeveeTokenProvider(LEVEE_TENANT_KEY, {
-			id: "integration-test-user",
-			name: "Integration Test",
-		});
-		urlResolver = new LeveeUrlResolver(LEVEE_SOCKET_URL, LEVEE_HTTP_URL);
-		factory = new LeveeDocumentServiceFactory(tokenProvider, LEVEE_DEBUG);
+		tokenProvider = createTestTokenProvider();
+		urlResolver = createTestUrlResolver();
+		factory = createTestFactory();
 	});
 
 	describe("URL Resolution", () => {
@@ -140,38 +112,19 @@ describe("Levee Server Integration", () => {
 
 /**
  * Tests that require a running Levee server.
- * These will be skipped if the server is not available.
+ * Properly skipped (not silently passing) when the server is unavailable.
  */
-describe("Server Connection Tests", () => {
-	let serverRunning = false;
+describe.runIf(serverAvailable)("Server Connection Tests", () => {
 	let urlResolver: LeveeUrlResolver;
 	let factory: LeveeDocumentServiceFactory;
-	let tokenProvider: InsecureLeveeTokenProvider;
 
-	beforeAll(async () => {
-		serverRunning = await isServerRunning();
-		if (!serverRunning) {
-			console.log(
-				"\n⚠️  Levee server not running. Skipping server connection tests.",
-			);
-			console.log("   Start the server with: docker compose up -d");
-			console.log(`   Expected server at: ${LEVEE_HTTP_URL}\n`);
-		}
-
-		tokenProvider = new InsecureLeveeTokenProvider(LEVEE_TENANT_KEY, {
-			id: "integration-test-user",
-			name: "Integration Test",
-		});
-		urlResolver = new LeveeUrlResolver(LEVEE_SOCKET_URL, LEVEE_HTTP_URL);
-		factory = new LeveeDocumentServiceFactory(tokenProvider, LEVEE_DEBUG);
+	beforeAll(() => {
+		urlResolver = createTestUrlResolver();
+		factory = createTestFactory();
 	});
 
 	describe("Server Health", () => {
 		it("health endpoint responds", async () => {
-			if (!serverRunning) {
-				return; // Skip silently - warning already shown
-			}
-
 			const response = await fetch(`${LEVEE_HTTP_URL}/health`);
 			expect(response.ok).toBe(true);
 		});
@@ -179,11 +132,10 @@ describe("Server Connection Tests", () => {
 
 	describe("Storage Service", () => {
 		it("connects to storage", async () => {
-			if (!serverRunning) {
-				return; // Skip silently
-			}
-
-			const resolved = await urlResolver.resolve({ url: "fluid/storage-test" });
+			const docId = uniqueDocId("storage");
+			const resolved = await urlResolver.resolve({
+				url: `fluid/${docId}`,
+			});
 			const service = await factory.createDocumentService(resolved);
 			const storage = await service.connectToStorage();
 
@@ -193,12 +145,9 @@ describe("Server Connection Tests", () => {
 
 	describe("Delta Connection", () => {
 		it("establishes WebSocket connection", { timeout: 35000 }, async () => {
-			if (!serverRunning) {
-				return; // Skip silently
-			}
-
+			const docId = uniqueDocId("delta");
 			const resolved = await urlResolver.resolve({
-				url: "fluid/delta-test",
+				url: `fluid/${docId}`,
 			});
 			const service = await factory.createDocumentService(resolved);
 
@@ -210,33 +159,15 @@ describe("Server Connection Tests", () => {
 				scopes: ["doc:read", "doc:write"],
 			};
 
-			try {
-				const connection = await service.connectToDeltaStream(client);
+			const connection = await service.connectToDeltaStream(client);
 
-				expect(connection).toBeDefined();
-				expect(connection.clientId).toBeDefined();
+			expect(connection).toBeDefined();
+			expect(connection.clientId).toBeDefined();
 
-				connection.dispose();
-			} catch (error) {
-				// If connection fails with timeout, the server may not have this endpoint yet
-				if (error instanceof Error && error.message.includes("timeout")) {
-					console.log(
-						"\n⚠️  Delta connection timed out - server may not support this yet\n",
-					);
-					return;
-				}
-				throw error;
-			}
+			connection.dispose();
 		});
 	});
 });
 
-// biome-ignore lint/suspicious/noSkippedTests: placeholder for future tests
-describe.skip("Full Container Lifecycle", () => {
-	// These tests require full Fluid Framework container support
-	// Enable once server implementation is complete
-
-	it.todo("creates a new container");
-	it.todo("loads an existing container");
-	it.todo("synchronizes changes between clients");
-});
+// Full container lifecycle tests are covered in levee-example/test/integration/container.test.ts
+// which tests create, load, and collaborative sync using the Fluid Framework Loader API.

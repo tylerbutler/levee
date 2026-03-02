@@ -67,6 +67,22 @@ test-elixir:
 test-client:
     cd client && pnpm install && pnpm test
 
+# Run client integration tests (starts Docker server, runs tests, stops server)
+test-integration:
+    cd client && pnpm test:integration
+
+# Start integration test server
+test-integration-up:
+    cd client && pnpm test:integration:up
+
+# Stop integration test server
+test-integration-down:
+    cd client && pnpm test:integration:down
+
+# Run integration tests (assumes server already running)
+test-integration-run:
+    cd client && pnpm test:integration:run
+
 # === QUALITY ===
 
 # Format all code (server + client)
