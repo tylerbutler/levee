@@ -83,6 +83,15 @@ test-integration-down:
 test-integration-run:
     cd client && pnpm test:integration:run
 
+# Run admin e2e tests (starts Docker server, runs Playwright, stops server)
+test-e2e:
+    cd client && pnpm test:integration:up
+    cd client/packages/e2e && pnpm exec playwright test; result=$?; cd ../.. && pnpm test:integration:down; exit $result
+
+# Run admin e2e tests (assumes server already running)
+test-e2e-run:
+    cd client/packages/e2e && pnpm exec playwright test
+
 # === QUALITY ===
 
 # Format all code (server + client)
