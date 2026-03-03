@@ -10,9 +10,6 @@ primary_region = "sjc"
   PHX_HOST = "levee.fly.dev"
   PHX_SERVER = "true"
   PORT = "4000"
-  SECRET_KEY_BASE = "dev-only-secret-key-base-at-least-64-characters-long-for-phoenix-framework"
-  LEVEE_TENANT_ID = "fluid"
-  LEVEE_TENANT_KEY = "dev-tenant-secret-key"
 
 [http_service]
   internal_port = 4000
