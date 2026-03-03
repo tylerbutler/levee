@@ -95,9 +95,9 @@ test.describe("single user", () => {
 	});
 });
 
-// Multi-user tests are currently skipped because loading existing containers
-// returns error 0x8e4. This appears to be a Levee server storage issue where
-// container data isn't being persisted correctly.
+// Multi-user presence sync requires further investigation. Container loading
+// works (0x8e4 fixed) but presence signals between browser contexts aren't
+// propagating — likely a signal format or routing issue in the session layer.
 test.describe
 	.skip("multi-user presence sync", () => {
 		test("second user joins - both contexts show multiple users", async ({
