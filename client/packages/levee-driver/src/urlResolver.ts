@@ -79,7 +79,7 @@ export class LeveeUrlResolver implements IUrlResolver {
 			socketUrl: this.socketUrl,
 			httpUrl: this.httpUrl,
 			endpoints: {
-				deltaStorageUrl: `${this.httpUrl}/deltas/${tenantId}/${documentId}`,
+				deltaStorageUrl: `/deltas/${tenantId}/${documentId}`,
 				storageUrl: `${this.httpUrl}/repos/${tenantId}`,
 			},
 			tokens: {},
