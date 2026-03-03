@@ -11,7 +11,9 @@
 
 services:
   levee:
-    image: ghcr.io/tylerbutler/levee:latest
+    build:
+      context: ../../../server
+      dockerfile: Dockerfile
     ports:
       - "4000:4000"
     environment:

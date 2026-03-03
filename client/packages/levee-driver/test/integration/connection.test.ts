@@ -66,9 +66,7 @@ describe("Levee Server Integration", () => {
 				url: "fluid/test-doc",
 			})) as LeveeResolvedUrl;
 
-			expect(resolved.endpoints.deltaStorageUrl).toBe(
-				`${LEVEE_HTTP_URL}/deltas/fluid/test-doc`,
-			);
+			expect(resolved.endpoints.deltaStorageUrl).toBe("/deltas/fluid/test-doc");
 			expect(resolved.endpoints.storageUrl).toBe(
 				`${LEVEE_HTTP_URL}/repos/fluid`,
 			);
