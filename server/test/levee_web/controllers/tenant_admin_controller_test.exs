@@ -7,6 +7,11 @@ defmodule LeveeWeb.TenantAdminControllerTest do
   setup do
     GleamBridge.clear_session_store()
 
+    # Clear any tenants registered at app startup (e.g. dev-tenant)
+    for tenant_id <- TenantSecrets.list_tenants() do
+      TenantSecrets.unregister_tenant(tenant_id)
+    end
+
     {:ok, admin_user} =
       GleamBridge.create_user("admin@example.com", "admin_password_123", "Admin User")
 

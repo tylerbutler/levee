@@ -150,6 +150,64 @@ jobs:
         working-directory: client
         run: pnpm test
 
+  client-integration-test:
+    name: Client Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+
+      - name: Build Levee server image
+        run: docker build -t levee-test ./server
+
+      - name: Start Levee server
+        run: |
+          docker run -d --name levee-server \
+            -p 4000:4000 \
+            -e PHX_SERVER=true \
+            -e PHX_HOST=localhost \
+            -e PORT=4000 \
+            -e SECRET_KEY_BASE=dev-only-secret-key-base-at-least-64-characters-long-for-phoenix-framework \
+            -e LEVEE_TENANT_ID=fluid \
+            -e LEVEE_TENANT_KEY=dev-tenant-secret-key \
+            levee-test
+
+      - name: Wait for server to be healthy
+        run: |
+          for i in $(seq 1 30); do
+            if wget --spider -q http://localhost:4000/health 2>/dev/null; then
+              echo "Server is healthy"
+              exit 0
+            fi
+            echo "Waiting for server... ($i/30)"
+            sleep 2
+          done
+          echo "Server failed to start"
+          docker logs levee-server
+          exit 1
+
+      - name: Setup Node.js
+        uses: tylerbutler/actions/setup-node@4dd5edb0cc1d941b6db7433504e406c001eea748 # ratchet:tylerbutler/actions/setup-node@main
+        with:
+          working-directory: client
+          install-just: false
+
+      - name: Build client
+        working-directory: client
+        run: pnpm build
+
+      - name: Run integration tests
+        working-directory: client
+        run: pnpm test:integration:run
+        env:
+          LEVEE_HTTP_URL: http://localhost:4000
+          LEVEE_SOCKET_URL: ws://localhost:4000/socket
+          LEVEE_TENANT_KEY: dev-tenant-secret-key
+
+      - name: Server logs
+        if: failure()
+        run: docker logs levee-server
+
   client-lint:
     name: Client Lint
     runs-on: ubuntu-latest

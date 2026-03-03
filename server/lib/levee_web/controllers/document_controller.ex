@@ -31,7 +31,7 @@ defmodule LeveeWeb.DocumentController do
     case Storage.create_document(tenant_id, document_id, %{sequence_number: sequence_number}) do
       {:ok, _document} ->
         if summary = params["summary"] do
-          process_summary_tree(tenant_id, summary)
+          process_initial_summary(tenant_id, document_id, summary)
         end
 
         # Return the document ID or full session info
@@ -125,22 +125,84 @@ defmodule LeveeWeb.DocumentController do
     }
   end
 
-  defp process_summary_tree(tenant_id, %{"type" => 1, "tree" => tree}) do
-    # Type 1 = SummaryTree
-    Enum.each(tree, fn {_path, node} ->
-      process_summary_node(tenant_id, node)
-    end)
+  # Process the initial summary from container attach by building a full
+  # git object graph (blobs → trees → commit → ref). This allows other
+  # clients to load the container via getVersions() → getSnapshotTree().
+  #
+  # The Fluid client sends a combined summary with ".app" and ".protocol"
+  # as top-level keys. The server must unwrap ".app" so its contents
+  # (e.g., .channels, .aliases, .metadata) sit at the root of the stored
+  # snapshot tree alongside ".protocol". This matches what the container
+  # runtime expects when loading: .channels at root, .protocol as sibling.
+  defp process_initial_summary(tenant_id, document_id, %{"type" => 1, "tree" => tree}) do
+    app_summary = tree[".app"]
+    protocol_summary = tree[".protocol"]
+
+    if app_summary == nil do
+      :ok
+    else
+      # Build git objects for each child of .app (not .app itself)
+      app_entries =
+        case app_summary do
+          %{"type" => 1, "tree" => app_tree} ->
+            Enum.map(app_tree, fn {path, node} ->
+              {:ok, sha, type} = build_summary_objects(tenant_id, node)
+              mode = if type == "tree", do: "040000", else: "100644"
+              %{path: path, sha: sha, mode: mode, type: type}
+            end)
+
+          _ ->
+            []
+        end
+
+      # Build git objects for .protocol and add as a sibling
+      protocol_entries =
+        case protocol_summary do
+          %{"type" => 1, "tree" => _} ->
+            {:ok, sha, _type} = build_summary_objects(tenant_id, protocol_summary)
+            [%{path: ".protocol", sha: sha, mode: "040000", type: "tree"}]
+
+          _ ->
+            []
+        end
+
+      entries = app_entries ++ protocol_entries
+      {:ok, root_tree} = Storage.create_tree(tenant_id, entries)
+
+      now = DateTime.utc_now() |> DateTime.to_iso8601()
+
+      {:ok, commit} =
+        Storage.create_commit(tenant_id, %{
+          "tree" => root_tree.sha,
+          "parents" => [],
+          "message" => "Initial summary",
+          "author" => %{"name" => "Levee", "email" => "server@levee.local", "date" => now}
+        })
+
+      Storage.create_ref(tenant_id, "refs/heads/#{document_id}", commit.sha)
+      {:ok, commit.sha}
+    end
   end
 
-  defp process_summary_tree(_tenant_id, _), do: :ok
+  defp process_initial_summary(_tenant_id, _document_id, _summary), do: :ok
 
-  defp process_summary_node(tenant_id, %{"type" => 1} = tree) do
-    # Nested tree
-    process_summary_tree(tenant_id, tree)
+  # Recursively walk the Fluid summary tree, storing blobs and building
+  # tree objects bottom-up. Returns {:ok, sha, type} for each node.
+  defp build_summary_objects(tenant_id, %{"type" => 1, "tree" => tree}) do
+    # Type 1 = SummaryTree: process children, then create tree from entries
+    entries =
+      Enum.map(tree, fn {path, node} ->
+        {:ok, sha, type} = build_summary_objects(tenant_id, node)
+        mode = if type == "tree", do: "040000", else: "100644"
+        %{path: path, sha: sha, mode: mode, type: type}
+      end)
+
+    {:ok, tree_obj} = Storage.create_tree(tenant_id, entries)
+    {:ok, tree_obj.sha, "tree"}
   end
 
-  defp process_summary_node(tenant_id, %{"type" => 2, "content" => content}) do
-    # Type 2 = SummaryBlob
+  defp build_summary_objects(tenant_id, %{"type" => 2, "content" => content}) do
+    # Type 2 = SummaryBlob: store blob content, return its SHA
     binary_content =
       if is_binary(content) do
         content
@@ -148,8 +210,9 @@ defmodule LeveeWeb.DocumentController do
         Jason.encode!(content)
       end
 
-    Storage.create_blob(tenant_id, binary_content)
+    {:ok, blob} = Storage.create_blob(tenant_id, binary_content)
+    {:ok, blob.sha, "blob"}
   end
 
-  defp process_summary_node(_tenant_id, _), do: :ok
+  defp build_summary_objects(_tenant_id, _), do: {:ok, "", "blob"}
 end

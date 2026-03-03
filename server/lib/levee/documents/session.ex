@@ -577,13 +577,31 @@ defmodule Levee.Documents.Session do
     message = contents["message"]
     parents = contents["parents"] || []
     head = contents["head"]
+    now = DateTime.utc_now() |> DateTime.to_iso8601()
 
-    # Create summary record
+    # Create a commit pointing to the tree the client uploaded
+    {:ok, commit} =
+      Levee.Storage.create_commit(tenant_id, %{
+        "tree" => head,
+        "parents" => parents,
+        "message" => message || "Summary at sequence #{sequence_number}",
+        "author" => %{"name" => "Levee", "email" => "server@levee.local", "date" => now}
+      })
+
+    # Update or create the ref so getVersions() can discover this snapshot
+    ref_path = "refs/heads/#{document_id}"
+
+    case Levee.Storage.update_ref(tenant_id, ref_path, commit.sha) do
+      {:ok, _} -> :ok
+      {:error, :not_found} -> Levee.Storage.create_ref(tenant_id, ref_path, commit.sha)
+    end
+
+    # Store summary record with commit SHA
     summary = %{
       handle: handle,
       sequence_number: sequence_number,
       tree_sha: head,
-      commit_sha: nil,
+      commit_sha: commit.sha,
       parent_handle: List.first(parents),
       message: message
     }
