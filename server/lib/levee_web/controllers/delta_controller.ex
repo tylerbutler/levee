@@ -61,7 +61,7 @@ defmodule LeveeWeb.DeltaController do
   defp parse_int_param(value, _default) when is_integer(value), do: value
 
   defp format_sequenced_message(delta) do
-    %{
+    msg = %{
       sequenceNumber: delta.sequence_number,
       clientSequenceNumber: delta.client_sequence_number,
       minimumSequenceNumber: delta.minimum_sequence_number,
@@ -72,5 +72,12 @@ defmodule LeveeWeb.DeltaController do
       metadata: delta.metadata,
       timestamp: delta.timestamp
     }
+
+    # System messages (join/leave) need a `data` field with JSON-stringified contents
+    if delta.type in ["join", "leave"] do
+      Map.put(msg, :data, Jason.encode!(delta.contents))
+    else
+      msg
+    end
   end
 end

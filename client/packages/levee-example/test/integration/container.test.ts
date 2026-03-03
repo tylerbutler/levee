@@ -116,11 +116,7 @@ describe("Container Lifecycle", () => {
 		});
 	});
 
-	// Collaborative sync requires container2 (loaded via Loader.resolve) to reach
-	// the "Connected" state, which depends on the ConnectionStateCatchup mechanism
-	// completing its op catch-up cycle. This needs further investigation into the
-	// server's delta history and the Fluid Framework's connection lifecycle.
-	describe.runIf(serverAvailable).skip("Collaborative Sync", () => {
+	describe.runIf(serverAvailable)("Collaborative Sync", () => {
 		it(
 			"synchronizes dice rolls between clients",
 			{ timeout: 30_000 },

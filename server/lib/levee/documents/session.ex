@@ -28,6 +28,7 @@ defmodule Levee.Documents.Session do
   use GenServer
 
   alias Levee.Protocol.Bridge
+  alias Levee.Storage
 
   require Logger
 
@@ -208,7 +209,9 @@ defmodule Levee.Documents.Session do
         client_id,
         connect_msg["client"],
         new_sequence_state,
-        state.op_history
+        state.op_history,
+        state.tenant_id,
+        state.document_id
       )
 
     # Build IConnected response with initial clients list and summary context
@@ -312,7 +315,9 @@ defmodule Levee.Documents.Session do
             # For leave, content is just the client_id
             client_id,
             new_sequence_state,
-            state.op_history
+            state.op_history,
+            state.tenant_id,
+            state.document_id
           )
 
         # Broadcast leave message to remaining clients
@@ -508,6 +513,13 @@ defmodule Levee.Documents.Session do
               updated_history =
                 Bridge.add_to_history(sequenced_op, acc_state.op_history, @max_history_size)
 
+              # Persist to storage for delta catch-up
+              Storage.store_delta(
+                acc_state.tenant_id,
+                acc_state.document_id,
+                sequenced_op_to_delta(sequenced_op)
+              )
+
               new_state = %{
                 acc_state
                 | sequence_state: new_seq_state,
@@ -556,6 +568,19 @@ defmodule Levee.Documents.Session do
             Bridge.add_to_history(sequenced_summarize, acc_state.op_history, @max_history_size),
             @max_history_size
           )
+
+        # Persist to storage for delta catch-up
+        Storage.store_delta(
+          acc_state.tenant_id,
+          acc_state.document_id,
+          sequenced_op_to_delta(sequenced_summarize)
+        )
+
+        Storage.store_delta(
+          acc_state.tenant_id,
+          acc_state.document_id,
+          sequenced_op_to_delta(summary_ack)
+        )
 
         new_state = %{
           acc_state
@@ -623,7 +648,15 @@ defmodule Levee.Documents.Session do
 
   # Generate a system message (join/leave) with proper sequencing
   # System messages have clientId: nil and get their own sequence number
-  defp generate_system_message(message_type, client_id, content, sequence_state, history) do
+  defp generate_system_message(
+         message_type,
+         client_id,
+         content,
+         sequence_state,
+         history,
+         tenant_id,
+         document_id
+       ) do
     # System messages get the next sequence number
     # We increment SN directly since system messages don't go through normal client sequencing
     current_sn = Bridge.current_sn(sequence_state)
@@ -677,7 +710,25 @@ defmodule Levee.Documents.Session do
     # Add to history
     updated_history = Bridge.add_to_history(system_message, history, @max_history_size)
 
+    # Persist to storage for delta catch-up
+    Storage.store_delta(tenant_id, document_id, sequenced_op_to_delta(system_message))
+
     {system_message, final_sequence_state, updated_history}
+  end
+
+  # Convert a camelCase string-keyed sequenced op to the snake_case atom-keyed delta format
+  defp sequenced_op_to_delta(op) do
+    %{
+      sequence_number: op["sequenceNumber"],
+      client_id: op["clientId"],
+      client_sequence_number: op["clientSequenceNumber"],
+      reference_sequence_number: op["referenceSequenceNumber"],
+      minimum_sequence_number: op["minimumSequenceNumber"],
+      type: op["type"],
+      contents: op["contents"],
+      metadata: op["metadata"],
+      timestamp: op["timestamp"]
+    }
   end
 
   # Broadcast a signal to appropriate clients based on format (v1/v2) and targeting
