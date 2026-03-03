@@ -4,7 +4,7 @@
 # Build stage
 FROM elixir:1.18-otp-27-slim AS builder
 
-# Install build dependencies including Gleam
+# Install build dependencies including Gleam and just
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git build-essential curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -20,6 +20,17 @@ RUN ARCH=$(uname -m) && \
     curl -fsSL https://github.com/gleam-lang/gleam/releases/download/v${GLEAM_VERSION}/gleam-v${GLEAM_VERSION}-${GLEAM_ARCH}.tar.gz \
     | tar -xzC /usr/local/bin
 
+# Install just
+ARG JUST_VERSION=1.40.0
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then \
+      JUST_ARCH="aarch64-unknown-linux-musl"; \
+    else \
+      JUST_ARCH="x86_64-unknown-linux-musl"; \
+    fi && \
+    curl -fsSL https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-${JUST_ARCH}.tar.gz \
+    | tar -xzC /usr/local/bin
+
 # Set build environment
 ENV MIX_ENV=prod
 
@@ -29,7 +40,8 @@ WORKDIR /build
 RUN mix local.hex --force && \
     mix local.rebar --force
 
-# Copy dependency files first for better caching
+# Copy justfile and dependency files first for better caching
+COPY justfile ./
 COPY mix.exs mix.lock ./
 COPY levee_protocol/gleam.toml levee_protocol/manifest.toml levee_protocol/
 COPY levee_auth/gleam.toml levee_auth/manifest.toml levee_auth/
@@ -39,36 +51,19 @@ COPY levee_oauth/gleam.toml levee_oauth/manifest.toml levee_oauth/
 # Install Elixir dependencies
 RUN mix deps.get --only prod
 
-# Copy Gleam sources and build them
+# Copy all source files
 COPY levee_protocol levee_protocol
 COPY levee_auth levee_auth
 COPY levee_storage levee_storage
 COPY levee_oauth levee_oauth
-
-# Copy levee_admin for SPA build
 COPY levee_admin levee_admin
-
-# Build levee_admin SPA (JavaScript target)
-RUN cd levee_admin && gleam build --target javascript
-
-# Copy the rest of the Elixir source
 COPY config config
 COPY lib lib
 COPY priv priv
 COPY rel rel
 
-# Copy admin SPA output to priv/static/admin
-# Remove any stale admin assets first, then copy fresh Gleam JS build
-RUN rm -rf priv/static/admin && \
-    mkdir -p priv/static/admin && \
-    cp -r levee_admin/build/dev/javascript/* priv/static/admin/ && \
-    cp levee_admin/index.html priv/static/admin/index.html
-
-# Compile the application
-RUN mix compile
-
-# Build the release
-RUN mix release
+# Build everything and create the release
+RUN just release
 
 # Runtime stage
 FROM debian:bookworm-slim AS runtime

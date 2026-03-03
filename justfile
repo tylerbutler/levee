@@ -226,6 +226,56 @@ server: build-gleam build-admin
 iex: build-gleam build-admin
     cd server && iex -S mix phx.server
 
+# === DOCKER ===
+
+# Docker image name
+docker_image := "levee-server"
+
+# Build Docker image locally
+docker-build tag=docker_image:
+    docker build -t {{tag}} ./server
+
+# Verify Docker image starts and passes health check
+docker-verify tag=docker_image:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    container_name="levee-verify-$$"
+    cleanup() { docker rm -f "$container_name" >/dev/null 2>&1 || true; }
+    trap cleanup EXIT
+
+    echo "Starting container from {{tag}}..."
+    docker run -d --name "$container_name" \
+        -p 0:4000 \
+        -e PHX_SERVER=true \
+        -e PHX_HOST=localhost \
+        -e PORT=4000 \
+        -e SECRET_KEY_BASE=dev-only-secret-key-base-at-least-64-characters-long-for-phoenix-framework \
+        -e LEVEE_TENANT_ID=fluid \
+        -e LEVEE_TENANT_KEY=dev-tenant-secret-key \
+        "{{tag}}"
+
+    # Get the randomly assigned host port
+    host_port=$(docker port "$container_name" 4000/tcp | head -1 | cut -d: -f2)
+    echo "Container running on port $host_port"
+
+    echo "Waiting for health check..."
+    for i in $(seq 1 30); do
+        if curl -sf "http://localhost:$host_port/health" >/dev/null 2>&1; then
+            echo "Health check passed!"
+            docker logs "$container_name" 2>&1 | tail -5
+            exit 0
+        fi
+        echo "  attempt $i/30..."
+        sleep 2
+    done
+
+    echo "Health check failed after 60s. Container logs:"
+    docker logs "$container_name" 2>&1
+    exit 1
+
+# Build and verify Docker image
+docker-test tag=docker_image: (docker-build tag) (docker-verify tag)
+
 # === CODE GENERATION ===
 
 # Generate JSON schema from Gleam protocol types
