@@ -152,7 +152,7 @@ export class LeveeDocumentServiceFactory implements IDocumentServiceFactory {
 			documentId: documentId,
 			url: `${leveeUrl.httpUrl}/${leveeUrl.tenantId}/${documentId}`,
 			endpoints: {
-				deltaStorageUrl: `${leveeUrl.httpUrl}/deltas/${leveeUrl.tenantId}/${documentId}`,
+				deltaStorageUrl: `/deltas/${leveeUrl.tenantId}/${documentId}`,
 				storageUrl: `${leveeUrl.httpUrl}/repos/${leveeUrl.tenantId}`,
 			},
 		};
