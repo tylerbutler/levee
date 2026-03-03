@@ -696,26 +696,23 @@ defmodule Levee.Documents.Session do
 
   # Process signal targeting to determine recipients
   # Returns {signal_message, list_of_recipient_client_ids}
+  #
+  # The Fluid Framework's ConnectionManager asserts that ISignalMessage must NOT
+  # have a "type" field and that "content" must be a string. We only include
+  # clientId and content in the outgoing signal message.
   defp process_signal_targeting(sender_client_id, signal, clients) do
     all_client_ids = Map.keys(clients)
 
-    # Build the signal message with optional fields
-    message =
-      %{
-        "clientId" => sender_client_id,
-        "content" => signal["content"],
-        "type" => signal["type"]
-      }
-      |> put_if_present("clientConnectionNumber", signal["clientConnectionNumber"])
-      |> put_if_present("referenceSequenceNumber", signal["referenceSequenceNumber"])
-      |> put_if_present("targetClientId", signal["targetClientId"])
+    # Build the signal message - only clientId and content
+    # The Fluid Framework rejects signals that have a "type" field
+    message = %{
+      "clientId" => sender_client_id,
+      "content" => signal["content"]
+    }
 
     # Determine recipients via Gleam
     recipients = Bridge.determine_signal_recipients(sender_client_id, signal, all_client_ids)
 
     {message, recipients}
   end
-
-  defp put_if_present(map, _key, nil), do: map
-  defp put_if_present(map, key, value), do: Map.put(map, key, value)
 end

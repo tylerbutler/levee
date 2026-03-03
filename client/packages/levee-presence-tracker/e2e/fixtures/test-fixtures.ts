@@ -49,6 +49,19 @@ export async function waitForPresenceCount(
 	});
 }
 
+/**
+ * Attach console logging from a browser page to Node.js stdout for debugging.
+ */
+function attachConsoleLogger(page: Page, label: string): void {
+	page.on("console", (msg) => {
+		const type = msg.type();
+		if (type === "error" || type === "warning" || type === "info") {
+			// biome-ignore lint/suspicious/noConsole: e2e debugging
+			console.log(`[${label}:${type}] ${msg.text()}`);
+		}
+	});
+}
+
 export const test = base.extend<TestFixtures>({
 	/**
 	 * Provides a page that's already connected to a new container.
@@ -56,6 +69,8 @@ export const test = base.extend<TestFixtures>({
 	 * Each test gets its own fresh container.
 	 */
 	connectedPage: async ({ page }, use) => {
+		attachConsoleLogger(page, "user1");
+
 		// Navigate to create a new container
 		await page.goto("/");
 
@@ -72,7 +87,6 @@ export const test = base.extend<TestFixtures>({
 	/**
 	 * Creates a second browser context with a unique user identity
 	 * that joins the same container as the first user.
-	 * Note: Currently multi-user tests are skipped due to container loading issues.
 	 */
 	secondUser: async ({ browser, connectedPage }, use) => {
 		// Get the container URL from the first user's page
@@ -81,6 +95,7 @@ export const test = base.extend<TestFixtures>({
 		// Create a new browser context (simulates a different user/session)
 		const context = await browser.newContext();
 		const page = await context.newPage();
+		attachConsoleLogger(page, "user2");
 
 		// Navigate to the same container URL
 		await page.goto(containerUrl);

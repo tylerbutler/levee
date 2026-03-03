@@ -24,7 +24,7 @@ export function renderFocusPresence(
 	focusDiv.style.fontSize = "14px";
 
 	const onFocusChanged = (): void => {
-		focusDiv.innerHTML = getFocusPresencesString(focusTracker, "<br>");
+		focusDiv.innerHTML = getFocusPresencesString(focusTracker);
 	};
 
 	onFocusChanged();
@@ -34,12 +34,10 @@ export function renderFocusPresence(
 }
 
 /**
- * Builds a string representation of all focus presences.
+ * Builds an HTML string representation of all focus presences.
+ * Each entry is wrapped in a div with class "focus" for test selectors.
  */
-function getFocusPresencesString(
-	focusTracker: FocusTracker,
-	newLineSeparator = "\n",
-): string {
+function getFocusPresencesString(focusTracker: FocusTracker): string {
 	const focusString: string[] = [];
 
 	for (const [sessionClient, hasFocus] of focusTracker
@@ -47,12 +45,12 @@ function getFocusPresencesString(
 		.entries()) {
 		const prefix = `User session ${sessionClient.attendeeId}:`;
 		if (hasFocus) {
-			focusString.push(`${prefix} has focus`);
+			focusString.push(`<div class="focus">${prefix} has focus</div>`);
 		} else {
-			focusString.push(`${prefix} missing focus`);
+			focusString.push(`<div class="focus">${prefix} missing focus</div>`);
 		}
 	}
-	return focusString.join(newLineSeparator);
+	return focusString.join("");
 }
 
 /**
