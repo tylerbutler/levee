@@ -87,7 +87,7 @@ WORKDIR /app
 COPY --from=builder /build/_build/prod/rel/levee ./
 
 # Copy Gleam compiled modules (required at runtime)
-# Copy all ebin dirs for each Gleam package and their dependencies
+# Copy entire erlang build dirs to include all dependencies
 COPY --from=builder /build/levee_protocol/build/dev/erlang/ ./levee_protocol/build/dev/erlang/
 COPY --from=builder /build/levee_auth/build/dev/erlang/ ./levee_auth/build/dev/erlang/
 COPY --from=builder /build/levee_storage/build/dev/erlang/ ./levee_storage/build/dev/erlang/
