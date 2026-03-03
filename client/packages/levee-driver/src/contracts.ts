@@ -458,7 +458,7 @@ export function normalizeOpPayload(
 	}
 
 	const normalized = normalizeKeys<Record<string, unknown>>(payload);
-	const ops = normalized["ops"];
+	const ops = normalized["ops"] ?? normalized["op"];
 	const documentId =
 		typeof normalized["documentId"] === "string"
 			? normalized["documentId"]

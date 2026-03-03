@@ -196,8 +196,14 @@ export class LeveeDeltaConnection
 
 		const signalPayload = {
 			clientId: this.clientId,
-			content,
-			targetClientId,
+			contentBatches: [
+				[
+					{
+						content,
+						targetClientId,
+					},
+				],
+			],
 		};
 
 		this.channel.push("submitSignal", signalPayload);
@@ -523,7 +529,7 @@ export class LeveeDeltaConnection
 
 		const payload = {
 			clientId: this.clientId,
-			messages: opMessages,
+			messageBatches: [opMessages],
 		};
 
 		this.logger.log("Submitting ops:", payload);
