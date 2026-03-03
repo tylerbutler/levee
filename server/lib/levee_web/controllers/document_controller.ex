@@ -128,26 +128,63 @@ defmodule LeveeWeb.DocumentController do
   # Process the initial summary from container attach by building a full
   # git object graph (blobs → trees → commit → ref). This allows other
   # clients to load the container via getVersions() → getSnapshotTree().
-  defp process_initial_summary(tenant_id, document_id, summary) do
-    case build_summary_objects(tenant_id, summary) do
-      {:ok, root_tree_sha, _type} ->
-        now = DateTime.utc_now() |> DateTime.to_iso8601()
+  #
+  # The Fluid client sends a combined summary with ".app" and ".protocol"
+  # as top-level keys. The server must unwrap ".app" so its contents
+  # (e.g., .channels, .aliases, .metadata) sit at the root of the stored
+  # snapshot tree alongside ".protocol". This matches what the container
+  # runtime expects when loading: .channels at root, .protocol as sibling.
+  defp process_initial_summary(tenant_id, document_id, %{"type" => 1, "tree" => tree}) do
+    app_summary = tree[".app"]
+    protocol_summary = tree[".protocol"]
 
-        {:ok, commit} =
-          Storage.create_commit(tenant_id, %{
-            "tree" => root_tree_sha,
-            "parents" => [],
-            "message" => "Initial summary",
-            "author" => %{"name" => "Levee", "email" => "server@levee.local", "date" => now}
-          })
+    if app_summary == nil do
+      :ok
+    else
+      # Build git objects for each child of .app (not .app itself)
+      app_entries =
+        case app_summary do
+          %{"type" => 1, "tree" => app_tree} ->
+            Enum.map(app_tree, fn {path, node} ->
+              {:ok, sha, type} = build_summary_objects(tenant_id, node)
+              mode = if type == "tree", do: "040000", else: "100644"
+              %{path: path, sha: sha, mode: mode, type: type}
+            end)
 
-        Storage.create_ref(tenant_id, "refs/heads/#{document_id}", commit.sha)
-        {:ok, commit.sha}
+          _ ->
+            []
+        end
 
-      _error ->
-        :ok
+      # Build git objects for .protocol and add as a sibling
+      protocol_entries =
+        case protocol_summary do
+          %{"type" => 1, "tree" => _} ->
+            {:ok, sha, _type} = build_summary_objects(tenant_id, protocol_summary)
+            [%{path: ".protocol", sha: sha, mode: "040000", type: "tree"}]
+
+          _ ->
+            []
+        end
+
+      entries = app_entries ++ protocol_entries
+      {:ok, root_tree} = Storage.create_tree(tenant_id, entries)
+
+      now = DateTime.utc_now() |> DateTime.to_iso8601()
+
+      {:ok, commit} =
+        Storage.create_commit(tenant_id, %{
+          "tree" => root_tree.sha,
+          "parents" => [],
+          "message" => "Initial summary",
+          "author" => %{"name" => "Levee", "email" => "server@levee.local", "date" => now}
+        })
+
+      Storage.create_ref(tenant_id, "refs/heads/#{document_id}", commit.sha)
+      {:ok, commit.sha}
     end
   end
+
+  defp process_initial_summary(_tenant_id, _document_id, _summary), do: :ok
 
   # Recursively walk the Fluid summary tree, storing blobs and building
   # tree objects bottom-up. Returns {:ok, sha, type} for each node.
@@ -156,7 +193,8 @@ defmodule LeveeWeb.DocumentController do
     entries =
       Enum.map(tree, fn {path, node} ->
         {:ok, sha, type} = build_summary_objects(tenant_id, node)
-        %{path: path, sha: sha, mode: "100644", type: type}
+        mode = if type == "tree", do: "040000", else: "100644"
+        %{path: path, sha: sha, mode: mode, type: type}
       end)
 
     {:ok, tree_obj} = Storage.create_tree(tenant_id, entries)

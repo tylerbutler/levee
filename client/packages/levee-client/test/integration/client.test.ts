@@ -93,40 +93,32 @@ describe.runIf(serverAvailable)("LeveeClient Integration", () => {
 		});
 	});
 
-	// Loading existing containers succeeds (snapshot is found) but the loaded
-	// runtime can't find the root data store. The snapshot tree format from
-	// the server doesn't fully match what fluid-static expects during
-	// deserialization. Tracked for further investigation.
 	describe("getContainer", () => {
-		it.fails(
-			"loads an existing container by ID",
-			{ timeout: 30_000 },
-			async () => {
-				// Create and attach first
-				const { container: created } = await client.createContainer(
-					testSchema,
-					"2",
-				);
-				containersToDispose.push(created);
+		it("loads an existing container by ID", { timeout: 30_000 }, async () => {
+			// Create and attach first
+			const { container: created } = await client.createContainer(
+				testSchema,
+				"2",
+			);
+			containersToDispose.push(created);
 
-				const containerId = await created.attach();
+			const containerId = await created.attach();
 
-				// Load in a second client
-				const client2 = createTestClient("second-user");
-				const { container: loaded, services } = await client2.getContainer(
-					containerId,
-					testSchema,
-					"2",
-				);
-				containersToDispose.push(loaded);
+			// Load in a second client
+			const client2 = createTestClient("second-user");
+			const { container: loaded, services } = await client2.getContainer(
+				containerId,
+				testSchema,
+				"2",
+			);
+			containersToDispose.push(loaded);
 
-				expect(loaded).toBeDefined();
-				expect(loaded.attachState).toBe("Attached");
-				expect(services.audience).toBeDefined();
-			},
-		);
+			expect(loaded).toBeDefined();
+			expect(loaded.attachState).toBe("Attached");
+			expect(services.audience).toBeDefined();
+		});
 
-		it.fails(
+		it(
 			"loaded container has initialObjects accessible",
 			{ timeout: 30_000 },
 			async () => {
@@ -152,7 +144,7 @@ describe.runIf(serverAvailable)("LeveeClient Integration", () => {
 	});
 
 	describe("data round-trip", () => {
-		it.fails(
+		it(
 			"create -> set value -> attach -> load -> verify value",
 			{ timeout: 45_000 },
 			async () => {

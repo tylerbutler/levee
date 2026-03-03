@@ -240,10 +240,12 @@ fn expand_tree_recursive(tables: Tables, tenant_id: String, tree: Tree) -> Tree 
       case entry.entry_type {
         "tree" ->
           case get_tree(tables, tenant_id, entry.sha, True) {
-            Ok(subtree) ->
-              list.map(subtree.tree, fn(sub) {
+            Ok(subtree) -> [
+              entry,
+              ..list.map(subtree.tree, fn(sub) {
                 TreeEntry(..sub, path: entry.path <> "/" <> sub.path)
               })
+            ]
             Error(_) -> [entry]
           }
         _ -> [entry]
