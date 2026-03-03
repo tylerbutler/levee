@@ -418,7 +418,8 @@ defmodule Levee.Documents.SessionTest do
       assert_receive {:signal, signal_msg1}, 100
       assert signal_msg1["clientId"] == client1_id
       assert signal_msg1["content"] == %{"cursor" => %{"x" => 100, "y" => 200}}
-      assert signal_msg1["type"] == "cursor"
+      # Signal messages don't include "type" — Fluid Framework rejects signals with a type field
+      refute Map.has_key?(signal_msg1, "type")
 
       assert_receive {:signal, signal_msg2}, 100
       assert signal_msg2["clientId"] == client1_id
@@ -498,7 +499,8 @@ defmodule Levee.Documents.SessionTest do
       assert_receive {:signal, signal_msg}, 100
       assert signal_msg["clientId"] == client1_id
       assert signal_msg["content"] == %{"message" => "hello"}
-      assert signal_msg["targetClientId"] == client2_id
+      # targetClientId is used for routing but not included in the outgoing signal message
+      # (Fluid Framework rejects signals with extra fields like "type")
 
       # Should NOT receive another signal
       refute_receive {:signal, _}, 50
