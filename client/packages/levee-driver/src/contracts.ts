@@ -129,7 +129,7 @@ export function isDebugEnabled(configDebug?: boolean): boolean {
 	}
 	// Check environment variable (works in Node.js)
 	if (typeof process !== "undefined" && process.env) {
-		const debugValue = process.env.LEVEE_DEBUG;
+		const debugValue = process.env["LEVEE_DEBUG"];
 		return debugValue === "true" || debugValue === "1";
 	}
 	return false;
@@ -411,7 +411,7 @@ export function normalizeConnectedResponse(raw: unknown): ConnectedResponse {
 	const normalized = normalizeKeys<Record<string, unknown>>(raw);
 
 	// Validate required fields
-	if (!normalized.clientId || typeof normalized.clientId !== "string") {
+	if (!normalized["clientId"] || typeof normalized["clientId"] !== "string") {
 		throw new Error("Invalid connected response: missing clientId");
 	}
 
@@ -419,8 +419,8 @@ export function normalizeConnectedResponse(raw: unknown): ConnectedResponse {
 	return {
 		...CONNECTED_RESPONSE_DEFAULTS,
 		...normalized,
-		clientId: normalized.clientId as string,
-		claims: normalized.claims as LeveeTokenClaims,
+		clientId: normalized["clientId"] as string,
+		claims: normalized["claims"] as LeveeTokenClaims,
 	} as ConnectedResponse;
 }
 
@@ -453,10 +453,10 @@ export function normalizeOpPayload(
 	}
 
 	const normalized = normalizeKeys<Record<string, unknown>>(payload);
-	const ops = normalized.ops ?? normalized.op;
+	const ops = normalized["ops"] ?? normalized["op"];
 	const documentId =
-		typeof normalized.documentId === "string"
-			? normalized.documentId
+		typeof normalized["documentId"] === "string"
+			? normalized["documentId"]
 			: fallbackDocId;
 
 	return {
