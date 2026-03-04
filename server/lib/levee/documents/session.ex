@@ -407,7 +407,7 @@ defmodule Levee.Documents.Session do
          client_id,
          mode,
          connect_msg,
-         _state,
+         state,
          sequence_state,
          clients,
          latest_summary
@@ -434,6 +434,11 @@ defmodule Levee.Documents.Session do
     client_versions = connect_msg["versions"] || []
     negotiated_version = Bridge.negotiate_version(@supported_versions, client_versions)
 
+    # Include recent ops as initialMessages so clients can catch up
+    # without relying on delta storage REST endpoint.
+    # History is stored newest-first; reverse for chronological order.
+    initial_messages = Enum.reverse(state.op_history)
+
     # Build base response
     response = %{
       "claims" => build_mock_claims(connect_msg),
@@ -446,7 +451,7 @@ defmodule Levee.Documents.Session do
         "maxMessageSize" => @max_message_size
       },
       "initialClients" => initial_clients,
-      "initialMessages" => [],
+      "initialMessages" => initial_messages,
       "initialSignals" => [],
       "supportedVersions" => @supported_versions,
       "supportedFeatures" => negotiated_features,

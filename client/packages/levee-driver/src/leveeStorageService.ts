@@ -230,7 +230,6 @@ export class LeveeStorageService implements IDocumentStorageService {
 	/**
 	 * Converts a Git tree to a Fluid snapshot tree.
 	 */
-	// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: tree conversion requires nested logic
 	private convertGitTreeToSnapshotTree(gitTree: GitTree): ISnapshotTree {
 		const snapshotTree: ISnapshotTree = {
 			blobs: {},
@@ -286,7 +285,6 @@ export class LeveeStorageService implements IDocumentStorageService {
 	/**
 	 * Writes a summary tree to storage.
 	 */
-	// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: handles multiple summary types
 	private async writeSummaryTree(
 		tree: ISummaryTree,
 		path = "",

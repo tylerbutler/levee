@@ -128,9 +128,7 @@ export function isDebugEnabled(configDebug?: boolean): boolean {
 		return configDebug;
 	}
 	// Check environment variable (works in Node.js)
-	// biome-ignore lint/style/noProcessEnv: checking for debug env var
 	if (typeof process !== "undefined" && process.env) {
-		// biome-ignore lint/style/noProcessEnv: checking for debug env var
 		const debugValue = process.env["LEVEE_DEBUG"];
 		return debugValue === "true" || debugValue === "1";
 	}
@@ -151,14 +149,12 @@ export class LeveeDebugLogger {
 
 	public log(message: string, ...args: unknown[]): void {
 		if (this.enabled) {
-			// biome-ignore lint/suspicious/noConsole: intentional debug logging
 			console.debug(this.prefix, message, ...args);
 		}
 	}
 
 	public logRequest(method: string, url: string, body?: unknown): void {
 		if (this.enabled) {
-			// biome-ignore lint/suspicious/noConsole: intentional debug logging
 			console.debug(
 				this.prefix,
 				`${method} ${url}`,
@@ -174,7 +170,6 @@ export class LeveeDebugLogger {
 		body?: unknown,
 	): void {
 		if (this.enabled) {
-			// biome-ignore lint/suspicious/noConsole: intentional debug logging
 			console.debug(
 				this.prefix,
 				`${method} ${url} -> ${status}`,
@@ -201,6 +196,7 @@ export interface ConnectedResponse {
 	mode: "write" | "read";
 	epoch?: string;
 	supportedVersions?: string[];
+	checkpointSequenceNumber?: number;
 }
 
 /**
@@ -246,7 +242,6 @@ export interface NackResponse {
 /**
  * Types of nack errors.
  */
-// biome-ignore lint/style/noEnum: required for Fluid Framework protocol compatibility
 export enum NackErrorType {
 	ThrottlingError = "ThrottlingError",
 	InvalidScopeError = "InvalidScopeError",

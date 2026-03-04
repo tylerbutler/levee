@@ -34,9 +34,7 @@ export async function registerUser(
 
 	if (!response.ok) {
 		const body = await response.text();
-		throw new Error(
-			`Failed to register user: ${response.status} ${body}`,
-		);
+		throw new Error(`Failed to register user: ${response.status} ${body}`);
 	}
 
 	return response.json();

@@ -9,6 +9,7 @@ defmodule LeveeWeb.DeltaController do
   use LeveeWeb, :controller
 
   alias Levee.Storage
+  require Logger
 
   @max_ops_per_request 2000
 
@@ -19,7 +20,7 @@ defmodule LeveeWeb.DeltaController do
 
   Query parameters:
   - from: Exclusive lower bound on sequence number
-  - to: Exclusive upper bound on sequence number
+  - to: Inclusive upper bound on sequence number
 
   Behavior:
   - If neither from nor to specified: Returns first 2000 ops from sequence 0
@@ -39,12 +40,17 @@ defmodule LeveeWeb.DeltaController do
     ]
 
     {:ok, deltas} = Storage.get_deltas(tenant_id, document_id, opts)
+
+    Logger.info(
+      "GET /deltas/#{tenant_id}/#{document_id} from=#{inspect(from_sn)} to=#{inspect(to_sn)} => #{length(deltas)} deltas"
+    )
+
     # Convert deltas to the ISequencedDocumentMessage format
     messages = Enum.map(deltas, &format_sequenced_message/1)
 
     conn
     |> put_status(:ok)
-    |> json(messages)
+    |> json(%{value: messages})
   end
 
   # Private functions

@@ -121,7 +121,6 @@ export class RestWrapper {
 	/**
 	 * Makes an authenticated request with automatic token refresh on auth errors.
 	 */
-	// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: HTTP request handling requires error path logic
 	private async request<T>(
 		method: string,
 		path: string,

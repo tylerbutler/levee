@@ -138,17 +138,13 @@ async function start(): Promise<void> {
 	renderControlPanel(mouseTracker, controlPanelDiv);
 
 	// Log connection info
-	// biome-ignore lint/suspicious/noConsole: intentional logging in example app
 	console.info("Connected to Levee server");
-	// biome-ignore lint/suspicious/noConsole: intentional logging in example app
 	console.info("Container ID:", id);
-	// biome-ignore lint/suspicious/noConsole: intentional logging in example app
 	console.info("User ID:", userId);
 }
 
 // Start the application
 start().catch((error) => {
-	// biome-ignore lint/suspicious/noConsole: error logging is necessary
 	console.error("Failed to start application:", error);
 	setStatus(
 		`Error: ${error instanceof Error ? error.message : String(error)}`,
