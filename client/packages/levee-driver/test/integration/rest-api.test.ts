@@ -129,7 +129,8 @@ describe.runIf(serverAvailable)("REST API - Deltas", () => {
 
 		expect(response.status).toBe(200);
 		const body = await response.json();
-		expect(Array.isArray(body)).toBe(true);
+		expect(body).toHaveProperty("value");
+		expect(Array.isArray(body.value)).toBe(true);
 	});
 
 	it("GET /deltas/:tenant_id/:id supports from/to query parameters", async () => {
@@ -148,7 +149,8 @@ describe.runIf(serverAvailable)("REST API - Deltas", () => {
 
 		expect(response.status).toBe(200);
 		const body = await response.json();
-		expect(Array.isArray(body)).toBe(true);
+		expect(body).toHaveProperty("value");
+		expect(Array.isArray(body.value)).toBe(true);
 	});
 });
 

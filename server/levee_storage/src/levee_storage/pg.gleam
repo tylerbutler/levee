@@ -200,7 +200,7 @@ pub fn get_deltas(
                 reference_sequence_number, minimum_sequence_number,
                 op_type, contents::text, metadata::text, timestamp
          FROM deltas WHERE tenant_id = $1 AND document_id = $2
-         AND sequence_number > $3 AND sequence_number < $4
+         AND sequence_number > $3 AND sequence_number <= $4
          ORDER BY sequence_number ASC LIMIT $5",
       )
       |> pog.parameter(pog.text(tenant_id))

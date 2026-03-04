@@ -201,6 +201,7 @@ export interface ConnectedResponse {
 	mode: "write" | "read";
 	epoch?: string;
 	supportedVersions?: string[];
+	checkpointSequenceNumber?: number;
 }
 
 /**

@@ -154,7 +154,7 @@ pub fn get_deltas(
           case to_sn {
             None -> Ok(delta)
             Some(to) ->
-              case sn < to {
+              case sn <= to {
                 True -> Ok(delta)
                 False -> Error(Nil)
               }

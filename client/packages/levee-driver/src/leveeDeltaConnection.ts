@@ -102,7 +102,7 @@ export class LeveeDeltaConnection
 		blockSize: 64 * 1024, // 64KB
 		maxMessageSize: 16 * 1024, // 16KB
 	};
-	public readonly checkpointSequenceNumber: number | undefined = undefined;
+	public checkpointSequenceNumber: number | undefined = undefined;
 
 	// Internal state
 	private socket: Socket | null = null;
@@ -384,6 +384,7 @@ export class LeveeDeltaConnection
 		this.existing = connectedResponse.existing;
 		this.maxMessageSize = connectedResponse.maxMessageSize;
 		this.version = connectedResponse.version;
+		this.checkpointSequenceNumber = connectedResponse.checkpointSequenceNumber;
 		this.serviceConfiguration = {
 			...this.serviceConfiguration,
 			...connectedResponse.serviceConfiguration,

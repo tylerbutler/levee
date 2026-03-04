@@ -19,7 +19,7 @@ defmodule LeveeWeb.DeltaController do
 
   Query parameters:
   - from: Exclusive lower bound on sequence number
-  - to: Exclusive upper bound on sequence number
+  - to: Inclusive upper bound on sequence number
 
   Behavior:
   - If neither from nor to specified: Returns first 2000 ops from sequence 0
@@ -44,7 +44,7 @@ defmodule LeveeWeb.DeltaController do
 
     conn
     |> put_status(:ok)
-    |> json(messages)
+    |> json(%{value: messages})
   end
 
   # Private functions

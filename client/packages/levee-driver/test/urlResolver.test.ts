@@ -88,9 +88,7 @@ describe("LeveeUrlResolver", () => {
 				url: "tenant/doc",
 			})) as LeveeResolvedUrl;
 
-			expect(resolved.endpoints.deltaStorageUrl).toBe(
-				"http://localhost:4000/deltas/tenant/doc",
-			);
+			expect(resolved.endpoints.deltaStorageUrl).toBe("/deltas/tenant/doc");
 			expect(resolved.endpoints.storageUrl).toBe(
 				"http://localhost:4000/repos/tenant",
 			);
