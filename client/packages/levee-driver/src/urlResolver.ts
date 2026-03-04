@@ -144,7 +144,6 @@ export class LeveeUrlResolver implements IUrlResolver {
 	 * @param url - The URL to parse
 	 * @returns Object containing tenantId and documentId
 	 */
-	// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: URL parsing handles multiple formats
 	private parseUrl(url: string): { tenantId: string; documentId: string } {
 		// Handle levee:// or phoenix:// protocol
 		if (url.startsWith("levee://") || url.startsWith("phoenix://")) {

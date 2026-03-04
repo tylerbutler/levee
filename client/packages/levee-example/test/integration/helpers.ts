@@ -4,15 +4,12 @@
 
 import { createLeveeDriver } from "../../src/driver.js";
 
-// biome-ignore lint/style/noProcessEnv: test configuration from environment
 export const LEVEE_HTTP_URL =
-	process.env["LEVEE_HTTP_URL"] ?? "http://localhost:4000";
-// biome-ignore lint/style/noProcessEnv: test configuration from environment
+	process.env.LEVEE_HTTP_URL ?? "http://localhost:4000";
 export const LEVEE_SOCKET_URL =
-	process.env["LEVEE_SOCKET_URL"] ?? "ws://localhost:4000/socket";
-// biome-ignore lint/style/noProcessEnv: test configuration from environment
+	process.env.LEVEE_SOCKET_URL ?? "ws://localhost:4000/socket";
 export const LEVEE_TENANT_KEY =
-	process.env["LEVEE_TENANT_KEY"] ?? "dev-tenant-secret-key";
+	process.env.LEVEE_TENANT_KEY ?? "dev-tenant-secret-key";
 export const LEVEE_TENANT_ID = "fluid";
 
 /**

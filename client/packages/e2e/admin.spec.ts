@@ -35,9 +35,7 @@ test.describe("admin register page", () => {
 		await page.goto("/admin/register");
 
 		await expect(page.locator(".register-page")).toBeVisible();
-		await expect(page.locator("h1.auth-title")).toHaveText(
-			"Create Account",
-		);
+		await expect(page.locator("h1.auth-title")).toHaveText("Create Account");
 
 		// All form fields
 		await expect(page.locator("#display_name")).toBeVisible();
@@ -122,8 +120,6 @@ test.describe("admin 404 page", () => {
 		await page.goto("/admin/nonexistent");
 
 		await expect(page.locator(".not-found")).toBeVisible();
-		await expect(page.locator(".not-found h1")).toHaveText(
-			"404 - Not Found",
-		);
+		await expect(page.locator(".not-found h1")).toHaveText("404 - Not Found");
 	});
 });

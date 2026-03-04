@@ -6,7 +6,10 @@ import { promisify } from "node:util";
 const execAsync = promisify(exec);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DOCKER_COMPOSE_DIR = join(__dirname, "../../client/packages/levee-driver");
+const DOCKER_COMPOSE_DIR = join(
+	__dirname,
+	"../../client/packages/levee-driver",
+);
 const HEALTH_URL = "http://localhost:4000/health";
 const HEALTH_CHECK_TIMEOUT_MS = 30_000;
 const HEALTH_CHECK_INTERVAL_MS = 1_000;
@@ -42,9 +45,7 @@ async function startServer(): Promise<void> {
 		await execAsync("docker compose up -d", {
 			cwd: DOCKER_COMPOSE_DIR,
 		});
-		console.log(
-			"Docker Compose started, waiting for server to be healthy...",
-		);
+		console.log("Docker Compose started, waiting for server to be healthy...");
 	} catch (error) {
 		throw new Error(`Failed to start Levee server: ${error}`);
 	}

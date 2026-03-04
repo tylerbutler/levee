@@ -132,7 +132,6 @@ export class LeveeDeltaConnection
 		debug?: boolean,
 	) {
 		super((eventName, error) =>
-			// biome-ignore lint/suspicious/noConsole: error handler for event emitter
 			console.error(`Error in event ${String(eventName)}:`, error),
 		);
 
@@ -545,7 +544,6 @@ export class LeveeDeltaConnection
 			return;
 		}
 
-		// biome-ignore lint/suspicious/noConsole: intentional error logging
 		console.error(`${context}:`, error);
 
 		const errorObj =

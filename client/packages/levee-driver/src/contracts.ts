@@ -128,10 +128,8 @@ export function isDebugEnabled(configDebug?: boolean): boolean {
 		return configDebug;
 	}
 	// Check environment variable (works in Node.js)
-	// biome-ignore lint/style/noProcessEnv: checking for debug env var
 	if (typeof process !== "undefined" && process.env) {
-		// biome-ignore lint/style/noProcessEnv: checking for debug env var
-		const debugValue = process.env["LEVEE_DEBUG"];
+		const debugValue = process.env.LEVEE_DEBUG;
 		return debugValue === "true" || debugValue === "1";
 	}
 	return false;
@@ -151,14 +149,12 @@ export class LeveeDebugLogger {
 
 	public log(message: string, ...args: unknown[]): void {
 		if (this.enabled) {
-			// biome-ignore lint/suspicious/noConsole: intentional debug logging
 			console.debug(this.prefix, message, ...args);
 		}
 	}
 
 	public logRequest(method: string, url: string, body?: unknown): void {
 		if (this.enabled) {
-			// biome-ignore lint/suspicious/noConsole: intentional debug logging
 			console.debug(
 				this.prefix,
 				`${method} ${url}`,
@@ -174,7 +170,6 @@ export class LeveeDebugLogger {
 		body?: unknown,
 	): void {
 		if (this.enabled) {
-			// biome-ignore lint/suspicious/noConsole: intentional debug logging
 			console.debug(
 				this.prefix,
 				`${method} ${url} -> ${status}`,
@@ -247,7 +242,6 @@ export interface NackResponse {
 /**
  * Types of nack errors.
  */
-// biome-ignore lint/style/noEnum: required for Fluid Framework protocol compatibility
 export enum NackErrorType {
 	ThrottlingError = "ThrottlingError",
 	InvalidScopeError = "InvalidScopeError",
@@ -417,7 +411,7 @@ export function normalizeConnectedResponse(raw: unknown): ConnectedResponse {
 	const normalized = normalizeKeys<Record<string, unknown>>(raw);
 
 	// Validate required fields
-	if (!normalized["clientId"] || typeof normalized["clientId"] !== "string") {
+	if (!normalized.clientId || typeof normalized.clientId !== "string") {
 		throw new Error("Invalid connected response: missing clientId");
 	}
 
@@ -425,8 +419,8 @@ export function normalizeConnectedResponse(raw: unknown): ConnectedResponse {
 	return {
 		...CONNECTED_RESPONSE_DEFAULTS,
 		...normalized,
-		clientId: normalized["clientId"] as string,
-		claims: normalized["claims"] as LeveeTokenClaims,
+		clientId: normalized.clientId as string,
+		claims: normalized.claims as LeveeTokenClaims,
 	} as ConnectedResponse;
 }
 
@@ -459,10 +453,10 @@ export function normalizeOpPayload(
 	}
 
 	const normalized = normalizeKeys<Record<string, unknown>>(payload);
-	const ops = normalized["ops"] ?? normalized["op"];
+	const ops = normalized.ops ?? normalized.op;
 	const documentId =
-		typeof normalized["documentId"] === "string"
-			? normalized["documentId"]
+		typeof normalized.documentId === "string"
+			? normalized.documentId
 			: fallbackDocId;
 
 	return {
