@@ -142,11 +142,36 @@ defmodule Levee.Documents.Session do
   def init({tenant_id, document_id}) do
     Logger.info("Starting session for #{tenant_id}/#{document_id}")
 
-    # Initialize sequence state using Gleam
-    sequence_state = Bridge.new_sequence_state()
-
     # Try to load latest summary from storage
     latest_summary = load_latest_summary(tenant_id, document_id)
+
+    # Initialize sequence state - restore from summary if available
+    sequence_state =
+      case latest_summary do
+        %{sequence_number: sn} ->
+          Bridge.sequence_state_from_checkpoint(sn, sn)
+
+        nil ->
+          Bridge.new_sequence_state()
+      end
+
+    # Load post-summary op history from storage so initialMessages works after restart
+    op_history =
+      case latest_summary do
+        %{sequence_number: sn} ->
+          case Storage.get_deltas(tenant_id, document_id, from: sn, limit: @max_history_size) do
+            {:ok, deltas} ->
+              deltas
+              |> Enum.map(&delta_to_sequenced_op/1)
+              |> Enum.reverse()
+
+            _ ->
+              []
+          end
+
+        nil ->
+          []
+      end
 
     state = %__MODULE__{
       tenant_id: tenant_id,
@@ -154,7 +179,7 @@ defmodule Levee.Documents.Session do
       sequence_state: sequence_state,
       clients: %{},
       client_counter: 0,
-      op_history: [],
+      op_history: op_history,
       pending_summaries: %{},
       latest_summary: latest_summary
     }
@@ -719,6 +744,21 @@ defmodule Levee.Documents.Session do
     Storage.store_delta(tenant_id, document_id, sequenced_op_to_delta(system_message))
 
     {system_message, final_sequence_state, updated_history}
+  end
+
+  # Convert a snake_case atom-keyed delta back to the camelCase string-keyed op format
+  defp delta_to_sequenced_op(delta) do
+    %{
+      "sequenceNumber" => delta.sequence_number,
+      "clientId" => delta.client_id,
+      "clientSequenceNumber" => delta.client_sequence_number,
+      "referenceSequenceNumber" => delta.reference_sequence_number,
+      "minimumSequenceNumber" => delta.minimum_sequence_number,
+      "type" => delta.type,
+      "contents" => delta.contents,
+      "metadata" => delta.metadata,
+      "timestamp" => delta.timestamp
+    }
   end
 
   # Convert a camelCase string-keyed sequenced op to the snake_case atom-keyed delta format

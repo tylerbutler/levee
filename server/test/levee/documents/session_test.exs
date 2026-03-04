@@ -563,6 +563,155 @@ defmodule Levee.Documents.SessionTest do
     end
   end
 
+  describe "session restart" do
+    test "restores checkpointSequenceNumber from latest summary", %{
+      session: session,
+      document_id: document_id
+    } do
+      # Join a client
+      connect_msg = build_connect_message()
+      {:ok, client_id, response} = Session.client_join(session, connect_msg)
+      initial_sn = response["checkpointSequenceNumber"]
+      flush_messages()
+
+      # Submit several ops to advance the sequence number
+      ops =
+        for csn <- 1..5 do
+          %{
+            "clientSequenceNumber" => csn,
+            "referenceSequenceNumber" => initial_sn,
+            "type" => "op",
+            "contents" => %{"data" => csn}
+          }
+        end
+
+      :ok = Session.submit_ops(session, client_id, [ops])
+      flush_messages()
+
+      # Get current SN before summarize
+      {:ok, summary_before} = Session.get_state_summary(session)
+      sn_before_summarize = summary_before.current_sn
+
+      # Submit a summarize op to persist a summary
+      # First, create a blob and tree so the summary has valid git objects
+      {:ok, blob} = Levee.Storage.create_blob(@tenant_id, "test-content")
+
+      {:ok, tree} =
+        Levee.Storage.create_tree(@tenant_id, [
+          %{path: "test.txt", sha: blob.sha, mode: "100644", type: "blob"}
+        ])
+
+      summarize_op = %{
+        "clientSequenceNumber" => 6,
+        "referenceSequenceNumber" => sn_before_summarize,
+        "type" => "summarize",
+        "contents" => %{
+          "handle" => "test-handle-#{System.unique_integer([:positive])}",
+          "head" => tree.sha,
+          "message" => "Test summary",
+          "parents" => []
+        }
+      }
+
+      :ok = Session.submit_ops(session, client_id, [[summarize_op]])
+      flush_messages()
+
+      # Get the SN after summarize (should include summarize + summaryAck)
+      {:ok, summary_after} = Session.get_state_summary(session)
+      summary_sn = summary_after.current_sn
+      assert summary_sn > sn_before_summarize
+
+      # Stop the session GenServer
+      stop_supervised(Session)
+
+      # Start a new session for the same document
+      {:ok, new_pid} = start_supervised({Session, {@tenant_id, document_id}})
+
+      # Join a new client to the restarted session
+      new_connect_msg = build_connect_message()
+      {:ok, _new_client_id, new_response} = Session.client_join(new_pid, new_connect_msg)
+
+      # checkpointSequenceNumber should reflect the summary's SN (not 0)
+      checkpoint_sn = new_response["checkpointSequenceNumber"]
+
+      assert checkpoint_sn >= summary_sn, """
+      Expected checkpointSequenceNumber (#{checkpoint_sn}) >= summary SN (#{summary_sn}).
+      The session should restore sequence state from the latest summary on restart.
+      """
+    end
+
+    test "new ops get SN values continuing from summary after restart", %{
+      session: session,
+      document_id: document_id
+    } do
+      # Join a client and submit ops + summarize
+      connect_msg = build_connect_message()
+      {:ok, client_id, response} = Session.client_join(session, connect_msg)
+      initial_sn = response["checkpointSequenceNumber"]
+      flush_messages()
+
+      op = %{
+        "clientSequenceNumber" => 1,
+        "referenceSequenceNumber" => initial_sn,
+        "type" => "op",
+        "contents" => %{"data" => "before-summary"}
+      }
+
+      :ok = Session.submit_ops(session, client_id, [[op]])
+      flush_messages()
+
+      {:ok, state} = Session.get_state_summary(session)
+
+      # Create git objects for summary
+      {:ok, blob} = Levee.Storage.create_blob(@tenant_id, "content")
+
+      {:ok, tree} =
+        Levee.Storage.create_tree(@tenant_id, [
+          %{path: "data", sha: blob.sha, mode: "100644", type: "blob"}
+        ])
+
+      summarize_op = %{
+        "clientSequenceNumber" => 2,
+        "referenceSequenceNumber" => state.current_sn,
+        "type" => "summarize",
+        "contents" => %{
+          "handle" => "handle-#{System.unique_integer([:positive])}",
+          "head" => tree.sha,
+          "message" => "Summary",
+          "parents" => []
+        }
+      }
+
+      :ok = Session.submit_ops(session, client_id, [[summarize_op]])
+      flush_messages()
+
+      {:ok, final_state} = Session.get_state_summary(session)
+      summary_sn = final_state.current_sn
+
+      # Restart the session
+      stop_supervised(Session)
+      {:ok, new_pid} = start_supervised({Session, {@tenant_id, document_id}})
+
+      # Join and submit a new op
+      {:ok, new_client_id, _} = Session.client_join(new_pid, build_connect_message())
+      flush_messages()
+
+      new_op = %{
+        "clientSequenceNumber" => 1,
+        "referenceSequenceNumber" => summary_sn,
+        "type" => "op",
+        "contents" => %{"data" => "after-restart"}
+      }
+
+      :ok = Session.submit_ops(new_pid, new_client_id, [[new_op]])
+
+      # Receive the broadcast and check the SN
+      assert_receive {:op, op_message}, 1000
+      sequenced_op = List.first(op_message["op"])
+      assert sequenced_op["sequenceNumber"] > summary_sn
+    end
+  end
+
   describe "feature negotiation" do
     test "connect response includes supported features", %{session: session} do
       connect_msg = build_connect_message()
