@@ -1,0 +1,15 @@
+{
+	"extends": "../../tsconfig.strict.json",
+	"compilerOptions": {
+		"outDir": "./esm",
+		"rootDir": "./src",
+		"jsx": "react-jsx",
+		"lib": ["ES2022", "DOM", "DOM.Iterable"]
+	},
+	"include": ["src/**/*"],
+	"references": [
+		{
+			"path": "../levee-client"
+		}
+	]
+}

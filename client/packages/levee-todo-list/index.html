@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" style="height: 100%">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Levee Todo List</title>
+		<style>
+			#status {
+				padding: 8px 16px;
+				font-family: monospace;
+				font-size: 14px;
+				background: #f0f0f0;
+				border-bottom: 1px solid #ddd;
+			}
+			#status.connected {
+				background: #d4edda;
+				color: #155724;
+			}
+			#status.error {
+				background: #f8d7da;
+				color: #721c24;
+			}
+		</style>
+	</head>
+	<body style="margin: 0; height: 100%">
+		<div id="status">Initializing...</div>
+		<div id="content" style="min-height: 100%"></div>
+		<script type="module" src="/src/app.tsx"></script>
+	</body>
+</html>
