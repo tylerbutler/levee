@@ -190,4 +190,45 @@ test.describe("multi-user presence sync", () => {
 		expect(reactionText).toBeTruthy();
 		expect(reactionText!.length).toBeGreaterThan(0);
 	});
+
+	test("second user disconnects - first user sees attendee leave", async ({
+		connectedPage: page1,
+		secondUser: { page: page2 },
+	}) => {
+		// Wait for both users to see 2 users
+		await waitForPresenceCount(page1, 2);
+		await waitForPresenceCount(page2, 2);
+
+		// Disconnect page2 by navigating away
+		await page2.goto("about:blank");
+
+		// Page1 should eventually see only 1 user in the focus panel
+		await waitForPresenceCount(page1, 1);
+	});
+
+	test("disconnected user can rejoin", async ({
+		connectedPage: page1,
+		secondUser: { page: page2 },
+	}) => {
+		// Wait for both users to see 2 users
+		await waitForPresenceCount(page1, 2);
+		await waitForPresenceCount(page2, 2);
+
+		// Get the container URL before disconnecting
+		const containerUrl = page1.url();
+
+		// Disconnect page2
+		await page2.goto("about:blank");
+
+		// Wait for page1 to see only 1 user
+		await waitForPresenceCount(page1, 1);
+
+		// Reconnect page2 to the same container
+		await page2.goto(containerUrl);
+		await waitForConnected(page2);
+
+		// Both should see 2 users again
+		await waitForPresenceCount(page1, 2);
+		await waitForPresenceCount(page2, 2);
+	});
 });
