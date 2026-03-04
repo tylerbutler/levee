@@ -229,11 +229,11 @@ start: server
 
 # Start Phoenix server (builds Gleam + admin first)
 server: build-gleam build-admin
-    cd server && mix phx.server
+    cd server && LEVEE_TENANT_ID=fluid LEVEE_TENANT_KEY=dev-tenant-secret-key mix phx.server
 
 # Start Phoenix server with IEx
 iex: build-gleam build-admin
-    cd server && iex -S mix phx.server
+    cd server && LEVEE_TENANT_ID=fluid LEVEE_TENANT_KEY=dev-tenant-secret-key iex -S mix phx.server
 
 # === DOCKER ===
 
