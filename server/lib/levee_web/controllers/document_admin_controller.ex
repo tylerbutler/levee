@@ -135,7 +135,7 @@ defmodule LeveeWeb.DocumentAdminController do
     end
   end
 
-  defp safe_json_encode(nil), do: nil
+  defp safe_json_encode(nil), do: ""
 
   defp safe_json_encode(val) when is_binary(val), do: val
 

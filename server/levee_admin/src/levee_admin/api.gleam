@@ -532,7 +532,10 @@ fn delta_item_decoder() -> Decoder(DeltaItem) {
     decode.int,
   )
   use timestamp <- decode.field("timestamp", decode.int)
-  use contents <- decode.field("contents", decode.string)
+  use contents <- decode.field(
+    "contents",
+    decode.one_of(decode.string, [decode.success("")]),
+  )
   decode.success(DeltaItem(
     sequence_number:,
     client_id:,
