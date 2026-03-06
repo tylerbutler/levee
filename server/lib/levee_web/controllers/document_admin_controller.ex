@@ -35,18 +35,19 @@ defmodule LeveeWeb.DocumentAdminController do
   def show(conn, %{"tenant_id" => tenant_id, "id" => document_id}) do
     case Storage.get_document(tenant_id, document_id) do
       {:ok, doc} ->
-        session_info =
+        {session_alive, session_info} =
           case Registry.get_session(tenant_id, document_id) do
             {:ok, pid} ->
               case Levee.Documents.Session.get_state_summary(pid) do
-                {:ok, summary} -> summary
-                _ -> nil
+                {:ok, summary} -> {true, summary}
+                _ -> {true, nil}
               end
 
             _ ->
-              nil
+              {false, nil}
           end
 
+        doc = Map.put(doc, :session_alive, session_alive)
         json(conn, %{document: doc, session: session_info})
 
       {:error, :not_found} ->
