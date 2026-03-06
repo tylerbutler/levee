@@ -37,6 +37,20 @@ end
 #   GITHUB_CLIENT_SECRET - GitHub OAuth App client secret
 #   GITHUB_REDIRECT_URI - Callback URL (e.g., http://localhost:4000/auth/github/callback)
 
+# GitHub username allow list (comma-separated). Only these users can log in via GitHub OAuth.
+# Unset or empty = allow all users.
+if allowed_users = System.get_env("GITHUB_ALLOWED_USERS") do
+  users =
+    allowed_users
+    |> String.split(",")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+
+  if users != [] do
+    config :levee, :github_allowed_users, users
+  end
+end
+
 if config_env() == :prod do
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you
