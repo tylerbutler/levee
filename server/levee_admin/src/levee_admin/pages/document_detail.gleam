@@ -255,7 +255,23 @@ pub fn view(model: Model) -> Element(Msg) {
           ],
           [text("Back to Documents")],
         ),
-        h1([class("page-title")], [text("Document: " <> model.document_id)]),
+        div([class("page-title-row")], [
+          h1([class("page-title")], [text("Document: " <> model.document_id)]),
+          a(
+            [
+              class("btn btn-secondary btn-sm"),
+              href(
+                "/api/tenants/"
+                <> model.tenant_id
+                <> "/documents/"
+                <> model.document_id,
+              ),
+              attribute.target("_blank"),
+              attribute.attribute("rel", "noopener"),
+            ],
+            [text("View Raw")],
+          ),
+        ]),
       ]),
     ]),
     view_page_content(model),
