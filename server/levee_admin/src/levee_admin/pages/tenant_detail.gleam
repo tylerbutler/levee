@@ -49,6 +49,7 @@ pub type Model {
     delete_state: DeleteState,
     pending_regenerate: Option(Int),
     pending_delete: Bool,
+    document_count: Option(Int),
   )
 }
 
@@ -66,6 +67,7 @@ pub fn init(tenant_id: String) -> Model {
     delete_state: DeleteHidden,
     pending_regenerate: None,
     pending_delete: False,
+    document_count: None,
   )
 }
 
@@ -160,6 +162,10 @@ pub fn get_pending_delete(model: Model) -> Bool {
 
 pub fn set_delete_error(model: Model, error: String) -> Model {
   Model(..model, delete_state: DeleteError(error))
+}
+
+pub fn set_document_count(model: Model, count: Int) -> Model {
+  Model(..model, document_count: Some(count))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -302,7 +308,12 @@ fn view_info(model: Model) -> Element(Msg) {
           class("btn btn-secondary btn-sm"),
           attribute.href("/admin/tenants/" <> model.tenant_id <> "/documents"),
         ],
-        [text("View Documents")],
+        [
+          text(case model.document_count {
+            Some(count) -> "View Documents (" <> int.to_string(count) <> ")"
+            None -> "View Documents"
+          }),
+        ],
       ),
     ]),
   ])

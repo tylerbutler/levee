@@ -22,7 +22,7 @@ import levee_admin/api
 
 pub type Tab {
   MetadataTab
-  DeltasTab
+  OpStreamTab
   SummariesTab
   RefsTab
   GitTab
@@ -291,7 +291,7 @@ fn view_page_content(model: Model) -> Element(Msg) {
 fn view_tabs(model: Model) -> Element(Msg) {
   div([class("tab-bar")], [
     tab_button("Metadata", MetadataTab, model.active_tab),
-    tab_button("Deltas", DeltasTab, model.active_tab),
+    tab_button("Op Stream", OpStreamTab, model.active_tab),
     tab_button("Summaries", SummariesTab, model.active_tab),
     tab_button("Refs", RefsTab, model.active_tab),
     tab_button("Git Objects", GitTab, model.active_tab),
@@ -314,7 +314,7 @@ fn tab_button(label: String, tab: Tab, active: Tab) -> Element(Msg) {
 fn view_tab_content(model: Model) -> Element(Msg) {
   case model.active_tab {
     MetadataTab -> view_metadata(model)
-    DeltasTab -> view_deltas(model)
+    OpStreamTab -> view_op_stream(model)
     SummariesTab -> view_summaries(model)
     RefsTab -> view_refs(model)
     GitTab -> view_git(model)
@@ -396,52 +396,23 @@ fn view_session_info(session: Option(api.SessionInfo)) -> Element(Msg) {
   }
 }
 
-// --- Deltas tab ---
+// --- Op Stream tab ---
 
-fn view_deltas(model: Model) -> Element(Msg) {
+fn view_op_stream(model: Model) -> Element(Msg) {
   div([class("card")], [
-    h2([], [text("Deltas")]),
+    h2([], [text("Op Stream")]),
     case model.deltas {
       [] ->
         case model.deltas_loading {
-          True -> p([], [text("Loading deltas...")])
-          False -> p([class("text-muted")], [text("No deltas loaded yet.")])
+          True -> p([], [text("Loading ops...")])
+          False -> p([class("text-muted")], [text("No ops yet.")])
         }
       deltas ->
         div([], [
-          table([class("data-table")], [
-            thead([], [
-              tr([], [
-                th([], [text("SN")]),
-                th([], [text("Client ID")]),
-                th([], [text("Type")]),
-                th([], [text("RSN")]),
-                th([], [text("MSN")]),
-                th([], [text("Timestamp")]),
-              ]),
-            ]),
-            tbody(
-              [],
-              list.map(deltas, fn(d) {
-                tr([], [
-                  td([class("mono")], [
-                    text(int.to_string(d.sequence_number)),
-                  ]),
-                  td([class("mono")], [
-                    text(option.unwrap(d.client_id, "-")),
-                  ]),
-                  td([], [text(d.type_)]),
-                  td([], [
-                    text(int.to_string(d.reference_sequence_number)),
-                  ]),
-                  td([], [
-                    text(int.to_string(d.minimum_sequence_number)),
-                  ]),
-                  td([class("mono")], [text(int.to_string(d.timestamp))]),
-                ])
-              }),
-            ),
-          ]),
+          div(
+            [class("op-stream")],
+            list.map(deltas, fn(d) { view_op_entry(d) }),
+          ),
           case model.deltas_has_more {
             True ->
               div([class("load-more")], [
@@ -459,6 +430,36 @@ fn view_deltas(model: Model) -> Element(Msg) {
               ])
             False -> div([], [])
           },
+        ])
+    },
+  ])
+}
+
+fn view_op_entry(d: api.DeltaItem) -> Element(Msg) {
+  let type_class = "op-type op-type-" <> d.type_
+  div([class("op-entry")], [
+    div([class("op-header")], [
+      span([class("op-sn mono")], [
+        text("#" <> int.to_string(d.sequence_number)),
+      ]),
+      span([class(type_class)], [text(d.type_)]),
+      span([class("op-client mono")], [
+        text(option.unwrap(d.client_id, "system")),
+      ]),
+      span([class("op-meta text-muted")], [
+        text(
+          "rsn="
+          <> int.to_string(d.reference_sequence_number)
+          <> " msn="
+          <> int.to_string(d.minimum_sequence_number),
+        ),
+      ]),
+    ]),
+    case d.contents {
+      "" -> element.none()
+      contents ->
+        div([class("op-contents")], [
+          pre([], [code([], [text(contents)])]),
         ])
     },
   ])

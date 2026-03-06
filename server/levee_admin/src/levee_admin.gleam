@@ -124,6 +124,8 @@ pub type Msg {
   GetTenantResponse(Result(api.TenantWithSecrets, api.ApiError))
   RegenerateSecretResponse(Int, Result(api.RegenerateResponse, api.ApiError))
   DeleteTenantResponse(Result(api.DeleteResponse, api.ApiError))
+  // Tenant document count (for tenant detail page)
+  TenantDocumentCountResponse(Result(api.DocumentListResponse, api.ApiError))
   // Document admin API responses
   DocumentListResponse(Result(api.DocumentListResponse, api.ApiError))
   DocumentDetailResponse(Result(api.DocumentDetailResponse, api.ApiError))
@@ -163,7 +165,10 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
           api.list_tenants(token, DashboardTenantsResponse)
         router.Tenants, Some(token) -> api.list_tenants(token, TenantsResponse)
         router.TenantDetail(id), Some(token) ->
-          api.get_tenant(token, id, GetTenantResponse)
+          effect.batch([
+            api.get_tenant(token, id, GetTenantResponse),
+            api.list_documents(token, id, TenantDocumentCountResponse),
+          ])
         router.DocumentList(tid), Some(token) ->
           api.list_documents(token, tid, DocumentListResponse)
         router.DocumentDetail(tid, did), Some(token) ->
@@ -623,6 +628,16 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         effect.batch([mapped_effect, api_effect]),
       )
     }
+
+    // Tenant document count response (for tenant detail page)
+    TenantDocumentCountResponse(Ok(resp)) -> {
+      let count = list.length(resp.documents)
+      let detail_model =
+        tenant_detail.set_document_count(model.tenant_detail, count)
+      #(Model(..model, tenant_detail: detail_model), effect.none())
+    }
+
+    TenantDocumentCountResponse(Error(_)) -> #(model, effect.none())
 
     // Document list API response
     DocumentListResponse(Ok(resp)) -> {

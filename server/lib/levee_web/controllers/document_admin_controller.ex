@@ -66,6 +66,13 @@ defmodule LeveeWeb.DocumentAdminController do
 
     case Storage.get_deltas(tenant_id, document_id, opts) do
       {:ok, deltas} ->
+        deltas =
+          Enum.map(deltas, fn delta ->
+            delta
+            |> Map.update(:contents, nil, &safe_json_encode/1)
+            |> Map.update(:metadata, nil, &safe_json_encode/1)
+          end)
+
         json(conn, %{deltas: deltas})
     end
   end
@@ -125,6 +132,17 @@ defmodule LeveeWeb.DocumentAdminController do
         conn
         |> put_status(:not_found)
         |> json(%{error: %{code: "not_found", message: "Commit not found"}})
+    end
+  end
+
+  defp safe_json_encode(nil), do: nil
+
+  defp safe_json_encode(val) when is_binary(val), do: val
+
+  defp safe_json_encode(val) do
+    case Jason.encode(val, pretty: true) do
+      {:ok, json} -> json
+      _ -> inspect(val)
     end
   end
 
