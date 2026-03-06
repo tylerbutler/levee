@@ -295,6 +295,16 @@ fn view_info(model: Model) -> Element(Msg) {
       span([class("detail-label")], [text("Name")]),
       span([class("detail-value")], [text(model.tenant_name)]),
     ]),
+    div([class("detail-row")], [
+      span([class("detail-label")], [text("Documents")]),
+      a(
+        [
+          class("btn btn-secondary btn-sm"),
+          attribute.href("/admin/tenants/" <> model.tenant_id <> "/documents"),
+        ],
+        [text("View Documents")],
+      ),
+    ]),
   ])
 }
 

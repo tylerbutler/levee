@@ -72,6 +72,9 @@ defmodule Levee.Storage.Behaviour do
   @callback get_document(tenant_id(), document_id()) ::
               {:ok, document()} | {:error, :not_found}
 
+  @callback list_documents(tenant_id()) ::
+              {:ok, [document()]}
+
   @callback update_document_sequence(tenant_id(), document_id(), non_neg_integer()) ::
               {:ok, document()} | {:error, term()}
 
