@@ -1,12 +1,12 @@
-//// ETS-backed in-memory storage backend using bravo.
+//// Persistent ETS storage backend using shelf.
 ////
-//// Uses bravo USet/OSet for typed ETS access.
+//// Uses shelf/set (ETS + DETS) for typed, persistent key-value storage.
 //// All operations are scoped by tenant_id for multi-tenant isolation.
-//// Data is not persisted across restarts.
+//// Data is persisted to DETS files on disk and survives restarts.
+////
+//// Deltas and summaries use USet (no ordered set in DETS) with
+//// sort-on-read for ordered queries.
 
-import bravo
-import bravo/oset.{type OSet}
-import bravo/uset.{type USet}
 import gleam/bit_array
 import gleam/crypto
 import gleam/dynamic.{type Dynamic}
@@ -21,37 +21,72 @@ import levee_storage/types.{
   type Summary, type Tree, type TreeEntry, AlreadyExists, Blob, Commit, Document,
   NotFound, Ref, Summary, Tree, TreeEntry,
 }
+import shelf/set.{type PSet}
 
 // ---------------------------------------------------------------------------
 // Table types
 // ---------------------------------------------------------------------------
 
-/// Holds all seven ETS table handles.
+/// Holds all seven shelf table handles.
 pub type Tables {
   Tables(
-    documents: USet(#(String, String), Document),
-    deltas: OSet(#(String, String, Int), Delta),
-    blobs: USet(#(String, String), Blob),
-    trees: USet(#(String, String), Tree),
-    commits: USet(#(String, String), Commit),
-    refs: USet(#(String, String), Ref),
-    summaries: OSet(#(String, String, Int), Summary),
+    documents: PSet(#(String, String), Document),
+    deltas: PSet(#(String, String, Int), Delta),
+    blobs: PSet(#(String, String), Blob),
+    trees: PSet(#(String, String), Tree),
+    commits: PSet(#(String, String), Commit),
+    refs: PSet(#(String, String), Ref),
+    summaries: PSet(#(String, String, Int), Summary),
   )
 }
 
-/// Create all ETS tables. Returns a Tables handle.
-pub fn init() -> Tables {
+/// Create all persistent tables. Returns a Tables handle.
+/// The data_dir is the directory where DETS files will be stored.
+pub fn init(data_dir: String) -> Tables {
   let assert Ok(documents) =
-    uset.new(name: "levee_documents", access: bravo.Public)
-  let assert Ok(deltas) = oset.new(name: "levee_deltas", access: bravo.Public)
-  let assert Ok(blobs) = uset.new(name: "levee_blobs", access: bravo.Public)
-  let assert Ok(trees) = uset.new(name: "levee_trees", access: bravo.Public)
-  let assert Ok(commits) = uset.new(name: "levee_commits", access: bravo.Public)
-  let assert Ok(refs) = uset.new(name: "levee_refs", access: bravo.Public)
+    set.open(name: "levee_documents", path: dets_path(data_dir, "documents"))
+  let assert Ok(deltas) =
+    set.open(name: "levee_deltas", path: dets_path(data_dir, "deltas"))
+  let assert Ok(blobs) =
+    set.open(name: "levee_blobs", path: dets_path(data_dir, "blobs"))
+  let assert Ok(trees) =
+    set.open(name: "levee_trees", path: dets_path(data_dir, "trees"))
+  let assert Ok(commits) =
+    set.open(name: "levee_commits", path: dets_path(data_dir, "commits"))
+  let assert Ok(refs) =
+    set.open(name: "levee_refs", path: dets_path(data_dir, "refs"))
   let assert Ok(summaries) =
-    oset.new(name: "levee_summaries", access: bravo.Public)
+    set.open(name: "levee_summaries", path: dets_path(data_dir, "summaries"))
 
   Tables(documents:, deltas:, blobs:, trees:, commits:, refs:, summaries:)
+}
+
+/// Close all tables, persisting data to disk.
+pub fn close(tables: Tables) -> Nil {
+  let _ = set.close(tables.documents)
+  let _ = set.close(tables.deltas)
+  let _ = set.close(tables.blobs)
+  let _ = set.close(tables.trees)
+  let _ = set.close(tables.commits)
+  let _ = set.close(tables.refs)
+  let _ = set.close(tables.summaries)
+  Nil
+}
+
+/// Save all tables to disk without closing them.
+pub fn save(tables: Tables) -> Nil {
+  let _ = set.save(tables.documents)
+  let _ = set.save(tables.deltas)
+  let _ = set.save(tables.blobs)
+  let _ = set.save(tables.trees)
+  let _ = set.save(tables.commits)
+  let _ = set.save(tables.refs)
+  let _ = set.save(tables.summaries)
+  Nil
+}
+
+fn dets_path(data_dir: String, table_name: String) -> String {
+  data_dir <> "/" <> table_name <> ".dets"
 }
 
 // ---------------------------------------------------------------------------
@@ -75,7 +110,7 @@ pub fn create_document(
       updated_at: now,
     )
   let key = #(tenant_id, document_id)
-  case uset.insert_new(into: tables.documents, key: key, value: doc) {
+  case set.insert_new(into: tables.documents, key: key, value: doc) {
     Ok(_) -> Ok(doc)
     Error(_) -> Error(AlreadyExists)
   }
@@ -88,7 +123,7 @@ pub fn get_document(
   document_id: String,
 ) -> Result(Document, StorageError) {
   let key = #(tenant_id, document_id)
-  case uset.lookup(from: tables.documents, at: key) {
+  case set.lookup(from: tables.documents, key: key) {
     Ok(doc) -> Ok(doc)
     Error(_) -> Error(NotFound)
   }
@@ -102,11 +137,11 @@ pub fn update_document_sequence(
   sequence_number: Int,
 ) -> Result(Document, StorageError) {
   let key = #(tenant_id, document_id)
-  case uset.lookup(from: tables.documents, at: key) {
+  case set.lookup(from: tables.documents, key: key) {
     Ok(doc) -> {
       let updated =
         Document(..doc, sequence_number: sequence_number, updated_at: utc_now())
-      let _ = uset.insert(into: tables.documents, key: key, value: updated)
+      let _ = set.insert(into: tables.documents, key: key, value: updated)
       Ok(updated)
     }
     Error(_) -> Error(NotFound)
@@ -125,11 +160,12 @@ pub fn store_delta(
   delta: Delta,
 ) -> Result(Delta, StorageError) {
   let key = #(tenant_id, document_id, delta.sequence_number)
-  let _ = oset.insert(into: tables.deltas, key: key, value: delta)
+  let _ = set.insert(into: tables.deltas, key: key, value: delta)
   Ok(delta)
 }
 
 /// Get deltas for a document with optional filtering.
+/// Results are sorted by sequence number (sort-on-read).
 pub fn get_deltas(
   tables: Tables,
   tenant_id: String,
@@ -143,9 +179,8 @@ pub fn get_deltas(
     False -> limit
   }
 
-  // OSet tab2list returns entries sorted by key
   let deltas =
-    oset.tab2list(from: tables.deltas)
+    set.to_list(from: tables.deltas)
     |> result.unwrap([])
     |> list.filter_map(fn(entry) {
       let #(#(tid, did, sn), delta) = entry
@@ -161,6 +196,9 @@ pub fn get_deltas(
           }
         False -> Error(Nil)
       }
+    })
+    |> list.sort(fn(a: Delta, b: Delta) {
+      int_compare(a.sequence_number, b.sequence_number)
     })
     |> list.take(effective_limit)
 
@@ -181,7 +219,7 @@ pub fn create_blob(
   let size = byte_size(content)
   let blob = Blob(sha: sha, content: content, size: size)
   let key = #(tenant_id, sha)
-  let _ = uset.insert(into: tables.blobs, key: key, value: blob)
+  let _ = set.insert(into: tables.blobs, key: key, value: blob)
   Ok(blob)
 }
 
@@ -192,7 +230,7 @@ pub fn get_blob(
   sha: String,
 ) -> Result(Blob, StorageError) {
   let key = #(tenant_id, sha)
-  case uset.lookup(from: tables.blobs, at: key) {
+  case set.lookup(from: tables.blobs, key: key) {
     Ok(blob) -> Ok(blob)
     Error(_) -> Error(NotFound)
   }
@@ -212,7 +250,7 @@ pub fn create_tree(
   let sha = compute_sha256(tree_content)
   let tree = Tree(sha: sha, tree: entries)
   let key = #(tenant_id, sha)
-  let _ = uset.insert(into: tables.trees, key: key, value: tree)
+  let _ = set.insert(into: tables.trees, key: key, value: tree)
   Ok(tree)
 }
 
@@ -224,7 +262,7 @@ pub fn get_tree(
   recursive: Bool,
 ) -> Result(Tree, StorageError) {
   let key = #(tenant_id, sha)
-  case uset.lookup(from: tables.trees, at: key) {
+  case set.lookup(from: tables.trees, key: key) {
     Ok(tree) ->
       case recursive {
         True -> Ok(expand_tree_recursive(tables, tenant_id, tree))
@@ -287,7 +325,7 @@ pub fn create_commit(
       committer: committer,
     )
   let key = #(tenant_id, sha)
-  let _ = uset.insert(into: tables.commits, key: key, value: commit)
+  let _ = set.insert(into: tables.commits, key: key, value: commit)
   Ok(commit)
 }
 
@@ -298,7 +336,7 @@ pub fn get_commit(
   sha: String,
 ) -> Result(Commit, StorageError) {
   let key = #(tenant_id, sha)
-  case uset.lookup(from: tables.commits, at: key) {
+  case set.lookup(from: tables.commits, key: key) {
     Ok(commit) -> Ok(commit)
     Error(_) -> Error(NotFound)
   }
@@ -317,7 +355,7 @@ pub fn create_ref(
 ) -> Result(Ref, StorageError) {
   let r = Ref(ref: ref_path, sha: sha)
   let key = #(tenant_id, ref_path)
-  case uset.insert_new(into: tables.refs, key: key, value: r) {
+  case set.insert_new(into: tables.refs, key: key, value: r) {
     Ok(_) -> Ok(r)
     Error(_) -> Error(AlreadyExists)
   }
@@ -330,7 +368,7 @@ pub fn get_ref(
   ref_path: String,
 ) -> Result(Ref, StorageError) {
   let key = #(tenant_id, ref_path)
-  case uset.lookup(from: tables.refs, at: key) {
+  case set.lookup(from: tables.refs, key: key) {
     Ok(r) -> Ok(r)
     Error(_) -> Error(NotFound)
   }
@@ -342,7 +380,7 @@ pub fn list_refs(
   tenant_id: String,
 ) -> Result(List(Ref), StorageError) {
   let refs =
-    uset.tab2list(from: tables.refs)
+    set.to_list(from: tables.refs)
     |> result.unwrap([])
     |> list.filter_map(fn(entry) {
       let #(#(tid, _), r) = entry
@@ -362,10 +400,10 @@ pub fn update_ref(
   sha: String,
 ) -> Result(Ref, StorageError) {
   let key = #(tenant_id, ref_path)
-  case uset.lookup(from: tables.refs, at: key) {
+  case set.lookup(from: tables.refs, key: key) {
     Ok(_) -> {
       let updated = Ref(ref: ref_path, sha: sha)
-      let _ = uset.insert(into: tables.refs, key: key, value: updated)
+      let _ = set.insert(into: tables.refs, key: key, value: updated)
       Ok(updated)
     }
     Error(_) -> Error(NotFound)
@@ -394,7 +432,7 @@ pub fn store_summary(
       },
     )
   let key = #(tenant_id, document_id, summary.sequence_number)
-  let _ = oset.insert(into: tables.summaries, key: key, value: stored)
+  let _ = set.insert(into: tables.summaries, key: key, value: stored)
 
   // Update document with latest summary info
   update_document_latest_summary(tables, tenant_id, document_id, stored)
@@ -410,7 +448,7 @@ pub fn get_summary(
   handle: String,
 ) -> Result(Summary, StorageError) {
   let found =
-    oset.tab2list(from: tables.summaries)
+    set.to_list(from: tables.summaries)
     |> result.unwrap([])
     |> list.find(fn(entry: #(#(String, String, Int), Summary)) {
       let #(#(tid, did, _), s) = entry
@@ -429,7 +467,7 @@ pub fn get_latest_summary(
   document_id: String,
 ) -> Result(Summary, StorageError) {
   let matching =
-    oset.tab2list(from: tables.summaries)
+    set.to_list(from: tables.summaries)
     |> result.unwrap([])
     |> list.filter_map(fn(entry: #(#(String, String, Int), Summary)) {
       let #(#(tid, did, sn), s) = entry
@@ -454,6 +492,7 @@ pub fn get_latest_summary(
 }
 
 /// List summaries for a document with optional filtering.
+/// Results are sorted by sequence number (sort-on-read).
 pub fn list_summaries(
   tables: Tables,
   tenant_id: String,
@@ -462,7 +501,7 @@ pub fn list_summaries(
   limit: Int,
 ) -> Result(List(Summary), StorageError) {
   let summaries =
-    oset.tab2list(from: tables.summaries)
+    set.to_list(from: tables.summaries)
     |> result.unwrap([])
     |> list.filter_map(fn(entry: #(#(String, String, Int), Summary)) {
       let #(#(tid, did, sn), s) = entry
@@ -489,10 +528,10 @@ fn update_document_latest_summary(
   _summary: Summary,
 ) -> Nil {
   let key = #(tenant_id, document_id)
-  case uset.lookup(from: tables.documents, at: key) {
+  case set.lookup(from: tables.documents, key: key) {
     Ok(doc) -> {
       let updated = Document(..doc, updated_at: coerce(utc_now()))
-      let _ = uset.insert(into: tables.documents, key: key, value: updated)
+      let _ = set.insert(into: tables.documents, key: key, value: updated)
       Nil
     }
     Error(_) -> Nil
