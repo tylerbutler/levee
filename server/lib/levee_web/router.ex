@@ -139,6 +139,13 @@ defmodule LeveeWeb.Router do
     post "/tenants/:id/secrets/:slot", TenantAdminController, :regenerate_secret
   end
 
+  # Token minting (requires valid session)
+  scope "/api/tenants", LeveeWeb do
+    pipe_through [:api, :session_auth]
+
+    post "/:tenant_id/token-mint", TokenMintController, :create
+  end
+
   # Session-auth admin routes (for admin UI SPA)
   pipeline :admin_session do
     plug :accepts, ["json"]
@@ -150,6 +157,17 @@ defmodule LeveeWeb.Router do
 
     get "/", TenantAdminController, :index
     post "/", TenantAdminController, :create
+
+    # Document admin routes (read-only) — must come before /:id catch-all
+    get "/:tenant_id/documents", DocumentAdminController, :index
+    get "/:tenant_id/documents/:id", DocumentAdminController, :show
+    get "/:tenant_id/documents/:id/deltas", DocumentAdminController, :deltas
+    get "/:tenant_id/documents/:id/summaries", DocumentAdminController, :summaries
+    get "/:tenant_id/refs", DocumentAdminController, :refs
+    get "/:tenant_id/git/blobs/:sha", DocumentAdminController, :blob
+    get "/:tenant_id/git/trees/:sha", DocumentAdminController, :tree
+    get "/:tenant_id/git/commits/:sha", DocumentAdminController, :commit
+
     get "/:id", TenantAdminController, :show
     delete "/:id", TenantAdminController, :delete
     post "/:id/secrets/:slot", TenantAdminController, :regenerate_secret

@@ -56,7 +56,6 @@ export class LeveeDocumentService
 		debug?: boolean,
 	) {
 		super((eventName, error) =>
-			// biome-ignore lint/suspicious/noConsole: error handler for event emitter
 			console.error(`Error in event ${String(eventName)}:`, error),
 		);
 
@@ -121,7 +120,11 @@ export class LeveeDocumentService
 			this.resolvedUrl.documentId,
 		);
 
-		const mode = client.mode === "read" ? "read" : "write";
+		// Always request write mode — the Levee server supports write for all
+		// authenticated clients. Without this, containers created via
+		// createDetachedContainer + attach connect in read mode (the Fluid
+		// Framework default) and never upgrade, preventing op submission.
+		const mode = "write";
 
 		return LeveeDeltaConnection.create(
 			this.resolvedUrl.socketUrl,

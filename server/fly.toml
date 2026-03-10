@@ -1,8 +1,10 @@
-app = "levee"
-primary_region = "iad"
+app = "levee-sparkling-breeze-7930"
+primary_region = "sjc"
 
 [build]
   dockerfile = "Dockerfile"
+  ignorefile = ".dockerignore"
+  # image = "ghcr.io/tylerbutler/levee:latest"
 
 [env]
   PHX_HOST = "levee.fly.dev"

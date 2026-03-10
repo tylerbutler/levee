@@ -23,6 +23,7 @@ build-server: build-gleam build-admin build-elixir
 build-gleam:
     cd server/levee_protocol && gleam build --target erlang
     cd server/levee_auth && gleam build --target erlang
+    cd server/levee_storage && gleam build --target erlang
     cd server/levee_oauth && gleam build --target erlang
     cd server/levee_admin && gleam build --target javascript
 
@@ -45,6 +46,9 @@ build-client:
 # Run all tests (server + client)
 test: test-server test-client
 
+# Run all tests including PostgreSQL backend
+test-all: test-server test-client test-pg
+
 # Run all server tests
 test-server: test-gleam test-elixir
 
@@ -63,17 +67,30 @@ test-elixir:
 test-client:
     cd client && pnpm install && pnpm test
 
-# Run E2E tests (requires server running: just server)
+# Run client integration tests (starts Docker server, runs tests, stops server)
+test-integration:
+    cd client && pnpm test:integration
+
+# Start integration test server
+test-integration-up:
+    cd client && pnpm test:integration:up
+
+# Stop integration test server
+test-integration-down:
+    cd client && pnpm test:integration:down
+
+# Run integration tests (assumes server already running)
+test-integration-run:
+    cd client && pnpm test:integration:run
+
+# Run admin e2e tests (starts Docker server, runs Playwright, stops server)
 test-e2e:
-    cd e2e && pnpm exec playwright test
+    cd client && pnpm test:integration:up
+    cd client/packages/e2e && pnpm exec playwright test; result=$?; cd ../.. && pnpm test:integration:down; exit $result
 
-# Run E2E tests with visible browser
-test-e2e-headed:
-    cd e2e && pnpm exec playwright test --headed
-
-# Run E2E tests with Playwright UI
-test-e2e-ui:
-    cd e2e && pnpm exec playwright test --ui
+# Run admin e2e tests (assumes server already running)
+test-e2e-run:
+    cd client/packages/e2e && pnpm exec playwright test
 
 # === QUALITY ===
 
@@ -87,6 +104,7 @@ format-server: format-gleam format-elixir
 format-gleam:
     cd server/levee_protocol && gleam format
     cd server/levee_auth && gleam format
+    cd server/levee_storage && gleam format
     cd server/levee_oauth && gleam format
     cd server/levee_admin && gleam format
 
@@ -108,6 +126,7 @@ lint-server: lint-gleam lint-elixir
 lint-gleam:
     cd server/levee_protocol && gleam format --check
     cd server/levee_auth && gleam format --check
+    cd server/levee_storage && gleam format --check
     cd server/levee_oauth && gleam format --check
     cd server/levee_admin && gleam format --check
 
@@ -134,6 +153,7 @@ clean-server: clean-gleam clean-elixir
 clean-gleam:
     cd server/levee_protocol && rm -rf build
     cd server/levee_auth && rm -rf build
+    cd server/levee_storage && rm -rf build
     cd server/levee_oauth && rm -rf build
     cd server/levee_admin && rm -rf build
     rm -rf server/priv/static/admin
@@ -145,6 +165,31 @@ clean-elixir:
 # Clean client build artifacts
 clean-client:
     cd client && pnpm clean
+
+# === DATABASE ===
+
+# Default DATABASE_URL for local Docker PostgreSQL
+export DATABASE_URL := env("DATABASE_URL", "postgres://levee:levee@localhost:5432/levee_test")
+
+# Start PostgreSQL in Docker
+db-start:
+    docker compose up -d postgres
+    @echo "Waiting for PostgreSQL..."
+    @docker compose exec postgres sh -c 'until pg_isready -U levee -d levee_test; do sleep 0.5; done' 2>/dev/null
+    @echo "PostgreSQL is ready at $DATABASE_URL"
+
+# Stop PostgreSQL
+db-stop:
+    docker compose down
+
+# Reset the test database (drop all tables, re-run migrations)
+db-reset:
+    docker compose exec postgres psql -U levee -d levee_test -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+    @echo "Database reset."
+
+# Run Elixir tests including PostgreSQL backend tests
+test-pg: db-start
+    cd server && DATABASE_URL="$DATABASE_URL" mix test --include postgres
 
 # === CI ===
 
@@ -165,6 +210,7 @@ setup-server: setup-gleam setup-elixir
 setup-gleam:
     cd server/levee_protocol && gleam deps download
     cd server/levee_auth && gleam deps download
+    cd server/levee_storage && gleam deps download
     cd server/levee_oauth && gleam deps download
     cd server/levee_admin && gleam deps download
 
@@ -187,11 +233,61 @@ start: server
 
 # Start Phoenix server (builds Gleam + admin first)
 server: build-gleam build-admin
-    cd server && mix phx.server
+    cd server && LEVEE_TENANT_ID=fluid LEVEE_TENANT_KEY=dev-tenant-secret-key mix phx.server
 
 # Start Phoenix server with IEx
 iex: build-gleam build-admin
-    cd server && iex -S mix phx.server
+    cd server && LEVEE_TENANT_ID=fluid LEVEE_TENANT_KEY=dev-tenant-secret-key iex -S mix phx.server
+
+# === DOCKER ===
+
+# Docker image name
+docker_image := "levee-server"
+
+# Build Docker image locally
+docker-build tag=docker_image:
+    docker build -t {{tag}} ./server
+
+# Verify Docker image starts and passes health check
+docker-verify tag=docker_image:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    container_name="levee-verify-$$"
+    cleanup() { docker rm -f "$container_name" >/dev/null 2>&1 || true; }
+    trap cleanup EXIT
+
+    echo "Starting container from {{tag}}..."
+    docker run -d --name "$container_name" \
+        -p 0:4000 \
+        -e PHX_SERVER=true \
+        -e PHX_HOST=localhost \
+        -e PORT=4000 \
+        -e SECRET_KEY_BASE=dev-only-secret-key-base-at-least-64-characters-long-for-phoenix-framework \
+        -e LEVEE_TENANT_ID=fluid \
+        -e LEVEE_TENANT_KEY=dev-tenant-secret-key \
+        "{{tag}}"
+
+    # Get the randomly assigned host port
+    host_port=$(docker port "$container_name" 4000/tcp | head -1 | cut -d: -f2)
+    echo "Container running on port $host_port"
+
+    echo "Waiting for health check..."
+    for i in $(seq 1 30); do
+        if curl -sf "http://localhost:$host_port/health" >/dev/null 2>&1; then
+            echo "Health check passed!"
+            docker logs "$container_name" 2>&1 | tail -5
+            exit 0
+        fi
+        echo "  attempt $i/30..."
+        sleep 2
+    done
+
+    echo "Health check failed after 60s. Container logs:"
+    docker logs "$container_name" 2>&1
+    exit 1
+
+# Build and verify Docker image
+docker-test tag=docker_image: (docker-build tag) (docker-verify tag)
 
 # === CODE GENERATION ===
 

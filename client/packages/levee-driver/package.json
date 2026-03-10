@@ -1,7 +1,6 @@
 {
 	"name": "@tylerbu/levee-driver",
-	"version": "0.0.1",
-	"private": true,
+	"version": "0.1.0",
 	"description": "Phoenix Channels driver for Fluid Framework (Levee service)",
 	"bugs": "https://github.com/tylerbutler/levee/issues",
 	"repository": {

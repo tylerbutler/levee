@@ -5,9 +5,7 @@ defmodule Levee.Storage do
   Delegates all storage operations to the configured backend module.
   The backend is configured via:
 
-      config :levee, :storage_backend, Levee.Storage.ETS  # default
-      # or
-      config :levee, :storage_backend, Levee.Storage.Postgres
+      config :levee, :storage_backend, Levee.Storage.GleamETS
 
   All functions delegate to the configured backend module.
   """
@@ -18,7 +16,7 @@ defmodule Levee.Storage do
   Get the currently configured storage backend module.
   """
   def backend do
-    Application.get_env(:levee, :storage_backend, Levee.Storage.ETS)
+    Application.get_env(:levee, :storage_backend, Levee.Storage.GleamETS)
   end
 
   # Document operations
@@ -31,6 +29,11 @@ defmodule Levee.Storage do
   @impl Levee.Storage.Behaviour
   def get_document(tenant_id, document_id) do
     backend().get_document(tenant_id, document_id)
+  end
+
+  @impl Levee.Storage.Behaviour
+  def list_documents(tenant_id) do
+    backend().list_documents(tenant_id)
   end
 
   @impl Levee.Storage.Behaviour

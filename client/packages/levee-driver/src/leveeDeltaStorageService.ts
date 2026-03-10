@@ -62,7 +62,6 @@ export class LeveeDeltaStorageService implements IDocumentDeltaStorageService {
 		let done = false;
 
 		return {
-			// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: streaming logic requires control flow
 			read: async (): Promise<IStreamResult<ISequencedDocumentMessage[]>> => {
 				if (done || cachedOnly) {
 					return { done: true };

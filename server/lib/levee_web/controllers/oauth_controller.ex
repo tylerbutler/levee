@@ -133,40 +133,72 @@ defmodule LeveeWeb.OAuthController do
     # Extract user info from vestibule UserInfo record
     # UserInfo: {:user_info, name, email, nickname, image, description, urls}
     {_tag, name, email, nickname, _image, _description, _urls} = info
-    display_name = unwrap_option(name) || unwrap_option(nickname) || ""
+    github_username = unwrap_option(nickname)
+    display_name = unwrap_option(name) || github_username || ""
     email_str = unwrap_option(email) || ""
 
-    user =
-      case GleamBridge.find_user_by_github_id(github_id) do
-        {:ok, existing_user} ->
-          existing_user
+    case check_github_allowed(github_username) do
+      :ok ->
+        user =
+          case GleamBridge.find_user_by_github_id(github_id) do
+            {:ok, existing_user} ->
+              existing_user
 
-        :error ->
-          new_user = GleamBridge.create_oauth_user(email_str, display_name, github_id)
+            :error ->
+              new_user = GleamBridge.create_oauth_user(email_str, display_name, github_id)
 
-          # Auto-promote first user to admin
-          new_user =
-            if GleamBridge.user_count() == 0 do
-              Map.put(new_user, :is_admin, true)
-            else
+              # Auto-promote first user to admin
+              new_user =
+                if GleamBridge.user_count() == 0 do
+                  Map.put(new_user, :is_admin, true)
+                else
+                  new_user
+                end
+
+              GleamBridge.store_user(new_user)
               new_user
-            end
+          end
 
-          GleamBridge.store_user(new_user)
-          new_user
-      end
+        session = GleamBridge.create_session(user.id, nil)
+        GleamBridge.store_session(session)
 
-    session = GleamBridge.create_session(user.id, nil)
-    GleamBridge.store_session(session)
+        redirect_url = get_redirect_url(conn, session.id)
+        redirect(conn, external: redirect_url)
 
-    redirect_url = get_redirect_url(conn, session.id)
-    redirect(conn, external: redirect_url)
+      :denied ->
+        require Logger
+        Logger.warning("GitHub login denied for user not on allow list: #{github_username}")
+        redirect(conn, to: "/admin?error=not_authorized")
+    end
   end
 
   defp get_redirect_url(conn, token) do
     redirect_to = conn.params["redirect_url"] || "/admin"
     separator = if String.contains?(redirect_to, "?"), do: "&", else: "?"
     "#{redirect_to}#{separator}token=#{token}"
+  end
+
+  # Check if a GitHub username is on the allow list.
+  # Returns :ok if allowed, :denied if not.
+  defp check_github_allowed(username) do
+    case Application.get_env(:levee, :github_allowed_users) do
+      nil ->
+        :ok
+
+      [] ->
+        :denied
+
+      allowed_users when is_list(allowed_users) ->
+        # GitHub usernames are case-insensitive, so we downcase both sides
+        # to avoid config mismatches (e.g. "TylerBu" vs "tylerbu").
+        downcased = String.downcase(username || "")
+
+        if Enum.any?(allowed_users, &(String.downcase(&1) == downcased)) do
+          :ok
+        else
+          :denied
+        end
+    end
   end
 
   # Gleam Option type: {:some, value} or :none

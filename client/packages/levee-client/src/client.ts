@@ -30,6 +30,8 @@ import {
 	LeveeDocumentServiceFactory,
 	LeveeUrlResolver,
 	type LeveeUser,
+	RemoteLeveeTokenProvider,
+	type TokenProvider,
 } from "@tylerbu/levee-driver";
 
 import { createLeveeAudienceMember } from "./audience.js";
@@ -44,6 +46,7 @@ import type { LeveeClientProps, LeveeContainerServices } from "./interfaces.js";
  *
  * @example
  * ```typescript
+ * // Dev mode (sync constructor)
  * const client = new LeveeClient({
  *   connection: {
  *     httpUrl: "http://localhost:4000",
@@ -53,7 +56,14 @@ import type { LeveeClientProps, LeveeContainerServices } from "./interfaces.js";
  *   }
  * });
  *
- * const { container, services } = await client.createContainer(schema, "2");
+ * // Production mode (async factory, user resolved from session)
+ * const client = await LeveeClient.create({
+ *   connection: {
+ *     httpUrl: "https://levee.example.com",
+ *     socketUrl: "wss://levee.example.com/socket",
+ *     authToken: sessionToken,
+ *   }
+ * });
  * ```
  *
  * @public
@@ -65,13 +75,68 @@ export class LeveeClient {
 	private readonly user: LeveeUser;
 
 	/**
+	 * Creates a new LeveeClient asynchronously.
+	 *
+	 * @remarks
+	 * Use this factory when using `authToken` without providing `user`.
+	 * It calls the token-mint endpoint to resolve user identity from the
+	 * server before constructing the client.
+	 *
+	 * @param properties - Properties for initializing a new LeveeClient instance
+	 * @returns A configured LeveeClient ready to create/load containers
+	 */
+	public static async create(
+		properties: LeveeClientProps,
+	): Promise<LeveeClient> {
+		const { connection } = properties;
+
+		// If user is already provided or not using authToken, use sync constructor
+		if (connection.user || !connection.authToken) {
+			return new LeveeClient(properties);
+		}
+
+		// Resolve user from token-mint endpoint
+		const tenantId = connection.tenantId ?? "fluid";
+		const tokenEndpoint = `${connection.httpUrl}/api/tenants/${tenantId}/token-mint`;
+		const tokenProvider = new RemoteLeveeTokenProvider(
+			tokenEndpoint,
+			undefined,
+			connection.authToken,
+		);
+
+		const resolvedUser = await tokenProvider.resolveUser(tenantId);
+
+		return new LeveeClient({
+			...properties,
+			connection: {
+				...connection,
+				user: resolvedUser,
+				tokenProvider,
+			},
+		});
+	}
+
+	/**
 	 * Creates a new client instance using configuration parameters.
-	 * @param properties - Optional. Properties for initializing a new LeveeClient instance
+	 *
+	 * @remarks
+	 * When using `authToken` without `user`, prefer {@link LeveeClient.create}
+	 * which resolves user identity from the server automatically.
+	 *
+	 * @param properties - Properties for initializing a new LeveeClient instance
 	 */
 	public constructor(properties: LeveeClientProps) {
 		const { connection } = properties;
 		this.logger = properties?.logger;
-		this.user = connection.user;
+
+		if (!connection.user && !connection.authToken) {
+			throw new Error(
+				"LeveeClient requires either 'user' in connection config or 'authToken' to resolve user from server. " +
+					"Use LeveeClient.create() for async user resolution with authToken.",
+			);
+		}
+
+		this.user = connection.user ?? { id: "pending", name: "" };
 
 		// Create URL resolver with the configured URLs
 		this.urlResolver = new LeveeUrlResolver(
@@ -80,14 +145,34 @@ export class LeveeClient {
 			connection.tenantId,
 		);
 
-		// Use provided token provider or create an InsecureLeveeTokenProvider
-		const tokenProvider =
-			connection.tokenProvider ??
-			new InsecureLeveeTokenProvider(
-				connection.tenantKey ?? "",
+		// Determine token provider
+		const tenantId = connection.tenantId ?? "fluid";
+		let tokenProvider: TokenProvider;
+		if (connection.tokenProvider) {
+			tokenProvider = connection.tokenProvider;
+		} else if (connection.tenantKey) {
+			if (!connection.user) {
+				throw new Error(
+					"LeveeClient requires 'user' in connection config when using 'tenantKey'.",
+				);
+			}
+			tokenProvider = new InsecureLeveeTokenProvider(
+				connection.tenantKey,
 				connection.user,
 				connection.tenantId,
 			);
+		} else if (connection.authToken) {
+			const tokenEndpoint = `${connection.httpUrl}/api/tenants/${tenantId}/token-mint`;
+			tokenProvider = new RemoteLeveeTokenProvider(
+				tokenEndpoint,
+				connection.user,
+				connection.authToken,
+			);
+		} else {
+			throw new Error(
+				"LeveeClient requires one of: tokenProvider, tenantKey, or authToken",
+			);
+		}
 
 		this.documentServiceFactory = new LeveeDocumentServiceFactory(
 			tokenProvider,

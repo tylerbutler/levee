@@ -109,7 +109,7 @@ export class LeveeDocumentServiceFactory implements IDocumentServiceFactory {
 	 * @returns Document service connected to the new document
 	 */
 	public async createContainer(
-		_createNewSummary: ISummaryTree | undefined,
+		createNewSummary: ISummaryTree | undefined,
 		createNewResolvedUrl: IResolvedUrl,
 		_logger?: ITelemetryBaseLogger,
 		_clientIsSummarizer?: boolean,
@@ -130,10 +130,17 @@ export class LeveeDocumentServiceFactory implements IDocumentServiceFactory {
 			this.debug,
 		);
 
+		// Build request body — include initial summary if provided so the server
+		// can persist the snapshot as git objects (blobs, trees, commit, ref).
+		// Without this, other clients cannot load the container.
+		const body: Record<string, unknown> = createNewSummary
+			? { summary: createNewSummary }
+			: {};
+
 		// Create document - server generates and returns the document ID
 		const documentId = await restWrapper.post<string>(
 			`/documents/${leveeUrl.tenantId}`,
-			{}, // Empty body - let server generate the ID
+			body,
 		);
 
 		this.logger.log(`Container created with ID: ${documentId}`);
@@ -145,7 +152,7 @@ export class LeveeDocumentServiceFactory implements IDocumentServiceFactory {
 			documentId: documentId,
 			url: `${leveeUrl.httpUrl}/${leveeUrl.tenantId}/${documentId}`,
 			endpoints: {
-				deltaStorageUrl: `${leveeUrl.httpUrl}/deltas/${leveeUrl.tenantId}/${documentId}`,
+				deltaStorageUrl: `/deltas/${leveeUrl.tenantId}/${documentId}`,
 				storageUrl: `${leveeUrl.httpUrl}/repos/${leveeUrl.tenantId}`,
 			},
 		};

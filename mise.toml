@@ -9,4 +9,4 @@ node = "22"
 pnpm = "10.24.0"
 
 [env]
-GITHUB_REDIRECT_URI = "http://localhost:4000/auth/github/callback"
+GITHUB_REDIRECT_URI = "http://127.0.0.1:4000/auth/github/callback"

@@ -10,6 +10,8 @@ deps
 # Gleam build artifacts (will be rebuilt)
 levee_protocol/build
 levee_auth/build
+levee_storage/build
+levee_oauth/build
 levee_admin/build
 
 # Editor/IDE
@@ -36,6 +38,5 @@ test
 # Misc
 .DS_Store
 Thumbs.db
-justfile
 hk.pkl
 mise.toml

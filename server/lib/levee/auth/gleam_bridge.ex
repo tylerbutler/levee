@@ -19,6 +19,9 @@ defmodule Levee.Auth.GleamBridge do
   @gleam_token :token
   @gleam_session_store :session_store
 
+  # Gleam scopes module for role-based filtering
+  @gleam_scopes :scopes
+
   # Tell compiler these modules will exist at runtime
   @compile {:no_warn_undefined,
             [
@@ -29,7 +32,8 @@ defmodule Levee.Auth.GleamBridge do
               :invite,
               :token,
               :scopes,
-              :session_store
+              :session_store,
+              :tenant_secrets
             ]}
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -370,6 +374,52 @@ defmodule Levee.Auth.GleamBridge do
   end
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # Membership Store Functions
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  @doc """
+  Store a membership in the session store.
+  """
+  def store_membership(membership) do
+    actor = get_session_store_actor()
+    gleam_membership = map_to_gleam_membership(membership)
+    @gleam_session_store.store_membership(actor, gleam_membership)
+  end
+
+  @doc """
+  Get a user's membership in a specific tenant.
+  Returns `{:ok, membership_map}` or `:error`.
+  """
+  def get_membership(user_id, tenant_id) do
+    actor = get_session_store_actor()
+
+    case @gleam_session_store.get_membership(actor, user_id, tenant_id) do
+      {:ok, gleam_membership} -> {:ok, gleam_membership_to_map(gleam_membership)}
+      {:error, _} -> :error
+    end
+  end
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Scope Functions
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  @doc """
+  Filter a list of scope strings to only those allowed for the given role.
+
+  The role should be an atom (:owner, :admin, :member, :viewer) or string.
+  Returns a filtered list of scope strings.
+  """
+  def filter_scopes_for_role(requested_scopes, role) when is_atom(role) do
+    filter_scopes_for_role(requested_scopes, Atom.to_string(role))
+  end
+
+  def filter_scopes_for_role(requested_scopes, role) when is_binary(role) do
+    gleam_scopes = @gleam_scopes.list_from_strings(requested_scopes)
+    filtered = @gleam_scopes.filter_for_role(gleam_scopes, role)
+    @gleam_scopes.list_to_strings(filtered)
+  end
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # Type Conversions: Gleam -> Elixir
   # ─────────────────────────────────────────────────────────────────────────────
 
@@ -471,6 +521,10 @@ defmodule Levee.Auth.GleamBridge do
   defp map_to_gleam_invite(invite) do
     {:invite, invite.id, invite.token, invite.email, invite.tenant_id, invite.role,
      invite.invited_by, invite.status, invite.created_at, invite.expires_at}
+  end
+
+  defp map_to_gleam_membership(membership) do
+    {:membership, membership.user_id, membership.tenant_id, membership.role, membership.joined_at}
   end
 
   # Gleam Option type: {:some, value} or :none

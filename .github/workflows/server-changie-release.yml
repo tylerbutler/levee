@@ -17,7 +17,7 @@ jobs:
         with:
           token: ${{ secrets.RELEASE_PAT }}
 
-      - uses: tylerbutler/actions/changie-release@4dd5edb0cc1d941b6db7433504e406c001eea748 # ratchet:tylerbutler/actions/changie-release@main
+      - uses: tylerbutler/actions/changie-release@4c6b22106fa7156926918c47847e7d9fbc0e8f9f # ratchet:tylerbutler/actions/changie-release@main
         id: release
         with:
           token: ${{ secrets.RELEASE_PAT }}
