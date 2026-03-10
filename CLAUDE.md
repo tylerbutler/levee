@@ -255,6 +255,24 @@ GET    /admin/*path                       SPA catch-all
 | `PHX_HOST` | Host for production |
 | `PORT` | HTTP port (default: 4000) |
 
+## Client Release Pipeline
+
+### Changie (Changelog Management)
+- Config: `client/.changie.yaml` (project mode with `levee-driver` and `levee-client`)
+- Fragments go in `client/.changes/unreleased/` (root), NOT per-project subdirectories
+- Each fragment YAML needs a `project` field to route to the correct package
+- `changie` CLI is NOT in `mise.toml` — only available in CI via `miniscruff/changie-action`
+
+### Release Workflow
+1. Push to main → `client-changie-release.yml` creates/updates a release PR (label: `release:client`)
+2. Merge release PR → `auto-tag.yml` pushes git tags, dispatches `Client npm Publish`
+3. `client-release.yml` publishes to npm, then creates GitHub releases
+
+### Reusable Actions (`tylerbutler/actions`)
+- `changie-release` — batch changie entries, create release PR
+- `changie-auto-tag` — create git tags from changie versions
+- `changie-check` — detect fragments in PRs, render preview (supports `projects` input)
+
 ## Claude Code Integration
 
 ### Available Agents
