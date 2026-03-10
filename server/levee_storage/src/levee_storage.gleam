@@ -75,6 +75,13 @@ pub fn ets_get_document(
   ets.get_document(tables, tenant_id, document_id)
 }
 
+pub fn ets_list_documents(
+  tables: Tables,
+  tenant_id: String,
+) -> Result(List(Document), StorageError) {
+  ets.list_documents(tables, tenant_id)
+}
+
 pub fn ets_update_document_sequence(
   tables: Tables,
   tenant_id: String,
