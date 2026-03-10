@@ -1,7 +1,6 @@
 {
 	"name": "@tylerbu/levee-client",
 	"version": "0.0.2",
-	"private": true,
 	"description": "Client for the Levee Fluid Framework service.",
 	"bugs": "https://github.com/tylerbutler/levee/issues",
 	"repository": {
@@ -23,6 +22,9 @@
 	},
 	"main": "esm/index.js",
 	"types": "esm/index.d.ts",
+	"files": [
+		"esm"
+	],
 	"scripts": {
 		"build:compile": "tsc",
 		"check": "pnpm check:format",

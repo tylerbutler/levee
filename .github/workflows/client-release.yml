@@ -1,23 +1,51 @@
-name: Client Release
+name: Client npm Publish
 
 on:
   push:
-    tags: ['client/v*']
+    tags: ['levee-driver/v*', 'levee-client/v*']
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
-  github-release:
-    name: GitHub Release
+  npm-publish:
+    name: Publish to npm
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+      - name: Setup Node.js
+        uses: tylerbutler/actions/setup-node@4dd5edb0cc1d941b6db7433504e406c001eea748 # ratchet:tylerbutler/actions/setup-node@main
+        with:
+          working-directory: client
+          install-just: false
+
+      - name: Build
+        working-directory: client
+        run: pnpm build
+
+      - name: Configure npm for publishing
+        working-directory: client
         run: |
-          gh release create "$TAG" --generate-notes --title "$TAG"
+          echo "//registry.npmjs.org/:_authToken=\${NPM_TOKEN}" >> .npmrc
+
+      - name: Publish to npm
+        working-directory: client
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm ci:publish
+
+      - name: Report published packages
+        if: always()
+        working-directory: client
+        run: |
+          if [ -f pnpm-publish-summary.json ]; then
+            echo "### Published Packages" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat pnpm-publish-summary.json >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
