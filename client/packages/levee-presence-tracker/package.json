@@ -1,6 +1,6 @@
 {
 	"name": "@tylerbu/levee-presence-tracker",
-	"version": "0.0.1",
+	"version": "0.1.0",
 	"private": true,
 	"description": "Presence tracker example using Levee client and Fluid Framework presence features",
 	"bugs": "https://github.com/tylerbutler/levee/issues",
