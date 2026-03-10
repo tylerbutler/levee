@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
       - name: Setup Node.js
-        uses: tylerbutler/actions/setup-node@4dd5edb0cc1d941b6db7433504e406c001eea748 # ratchet:tylerbutler/actions/setup-node@main
+        uses: tylerbutler/actions/setup-node@16768298299d70597eae956677ec18593ce76c0d # ratchet:tylerbutler/actions/setup-node@main
         with:
           working-directory: client
           install-just: false
