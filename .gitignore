@@ -36,6 +36,7 @@ client/**/dist/
 client/**/*.tsbuildinfo
 client/**/_temp/
 client/**/.coverage/
+server/**/admin/
 
 # === IDE / Editor ===
 
