@@ -37,7 +37,7 @@ jobs:
           SEMVER="${VERSION#v}"
 
           for pkg in client/packages/levee-driver client/packages/levee-client client/packages/levee-example client/packages/levee-presence-tracker; do
-            jq --arg v "$SEMVER" '.version = $v' "$pkg/package.json" > "$pkg/package.json.tmp"
+            jq --tab --arg v "$SEMVER" '.version = $v' "$pkg/package.json" > "$pkg/package.json.tmp"
             mv "$pkg/package.json.tmp" "$pkg/package.json"
           done
 
