@@ -85,9 +85,7 @@ test.describe("admin tenant detail page", () => {
 		// Verify danger zone
 		await expect(page.locator(".danger-card")).toBeVisible();
 		await expect(page.getByText("Danger Zone")).toBeVisible();
-		await expect(
-			page.locator(".danger-card .btn.btn-danger"),
-		).toBeVisible();
+		await expect(page.locator(".danger-card .btn.btn-danger")).toBeVisible();
 	});
 
 	test("tenant detail page has view documents link", async ({
@@ -96,9 +94,7 @@ test.describe("admin tenant detail page", () => {
 		const tenantName = `Docs Link Test ${Date.now()}`;
 		await createTenantViaUi(page, tenantName);
 
-		const docsLink = page.locator(
-			'a.btn.btn-secondary[href*="/documents"]',
-		);
+		const docsLink = page.locator('a.btn.btn-secondary[href*="/documents"]');
 		await expect(docsLink).toBeVisible();
 		await expect(docsLink).toContainText("View Documents");
 	});

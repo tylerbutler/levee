@@ -1,9 +1,7 @@
 import { expect, test } from "../fixtures/admin-fixtures.ts";
 
 test.describe("admin navigation", () => {
-	test("logout returns to login page", async ({
-		authenticatedPage: page,
-	}) => {
+	test("logout returns to login page", async ({ authenticatedPage: page }) => {
 		// Click logout button in nav
 		await page.locator(".nav-user button").click();
 

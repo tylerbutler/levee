@@ -54,9 +54,7 @@ test.describe("admin dashboard quick actions and navigation", () => {
 		await expect(tenantsCard).toBeVisible();
 
 		// Either shows empty state with create link, or shows tenant list
-		const emptyCreate = tenantsCard.locator(
-			'a[href="/admin/tenants/new"]',
-		);
+		const emptyCreate = tenantsCard.locator('a[href="/admin/tenants/new"]');
 		const tenantList = tenantsCard.locator(".tenant-list");
 		await expect(emptyCreate.or(tenantList)).toBeVisible({ timeout: 10_000 });
 	});

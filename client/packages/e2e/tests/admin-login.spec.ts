@@ -12,9 +12,7 @@ test.describe("admin login page", () => {
 		await expect(page.locator("#email")).toBeVisible();
 		await expect(page.locator("#password")).toBeVisible();
 		await expect(page.locator('button[type="submit"]')).toBeVisible();
-		await expect(
-			page.locator('a[href="/admin/register"]'),
-		).toBeVisible();
+		await expect(page.locator('a[href="/admin/register"]')).toBeVisible();
 	});
 
 	test("navigate to register page via footer link", async ({ page }) => {
