@@ -32,9 +32,10 @@ jobs:
 
       - name: Check for changelog entries
         id: changelog
-        uses: tylerbutler/actions/changie-check@4c6b22106fa7156926918c47847e7d9fbc0e8f9f # ratchet:tylerbutler/actions/changie-check@main
+        uses: tylerbutler/actions/changie-check@fix/changie-check-projects # ratchet:tylerbutler/actions/changie-check@main
         with:
           working-directory: client
+          projects: levee-driver,levee-client
           base-sha: ${{ github.event.pull_request.base.sha }}
           head-sha: ${{ github.event.pull_request.head.sha }}
 
