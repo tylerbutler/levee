@@ -27,6 +27,8 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
       - uses: tylerbutler/actions/changie-auto-tag@4dd5edb0cc1d941b6db7433504e406c001eea748 # ratchet:tylerbutler/actions/changie-auto-tag@main
+        id: auto-tag
         with:
           working-directory: client
-          tag-prefix: 'client/'
+          projects: levee-driver,levee-client
+          create-release: true

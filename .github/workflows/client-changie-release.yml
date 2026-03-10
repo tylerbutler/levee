@@ -22,33 +22,12 @@ jobs:
         with:
           token: ${{ secrets.RELEASE_PAT }}
           working-directory: client
+          projects: levee-driver,levee-client
           labels: release:client
-          pr-title-template: 'Release client {version}'
-          branch-template: 'release/client-{version}'
+          pr-title-template: 'Release client packages {version}'
+          branch-template: 'release/client-next'
           commit-message-template: 'chore(client): release {version}'
 
-      - name: Bump package.json versions
-        if: steps.release.outputs.skipped != 'true'
-        env:
-          VERSION: ${{ steps.release.outputs.version }}
-          PR_BRANCH: ${{ steps.release.outputs.pr-branch }}
-        shell: bash
-        run: |
-          SEMVER="${VERSION#v}"
-
-          for pkg in client/packages/levee-driver client/packages/levee-client client/packages/levee-example client/packages/levee-presence-tracker; do
-            jq --tab --arg v "$SEMVER" '.version = $v' "$pkg/package.json" > "$pkg/package.json.tmp"
-            mv "$pkg/package.json.tmp" "$pkg/package.json"
-          done
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout "$PR_BRANCH"
-          git add client/packages/*/package.json
-          if ! git diff --cached --quiet; then
-            git commit -m "chore(client): bump package versions to ${SEMVER}"
-            git push origin "$PR_BRANCH"
-          fi
 
       - name: Summary
         if: steps.release.outputs.skipped != 'true'
@@ -56,10 +35,12 @@ jobs:
           VERSION: ${{ steps.release.outputs.version }}
           PR_URL: ${{ steps.release.outputs.pr-url }}
           PR_OP: ${{ steps.release.outputs.pr-operation }}
+          BATCHED: ${{ steps.release.outputs.batched-projects }}
         run: |
           echo "### Client Release PR" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Version:** $VERSION" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Version(s):** $VERSION" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Batched projects:** $BATCHED" >> "$GITHUB_STEP_SUMMARY"
           echo "- **PR:** $PR_URL" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Operation:** $PR_OP" >> "$GITHUB_STEP_SUMMARY"
 
