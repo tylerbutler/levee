@@ -30,6 +30,8 @@ import {
 	LeveeDocumentServiceFactory,
 	LeveeUrlResolver,
 	type LeveeUser,
+	RemoteLeveeTokenProvider,
+	type TokenProvider,
 } from "@tylerbu/levee-driver";
 
 import { createLeveeAudienceMember } from "./audience.js";
@@ -80,14 +82,29 @@ export class LeveeClient {
 			connection.tenantId,
 		);
 
-		// Use provided token provider or create an InsecureLeveeTokenProvider
-		const tokenProvider =
-			connection.tokenProvider ??
-			new InsecureLeveeTokenProvider(
-				connection.tenantKey ?? "",
+		// Determine token provider
+		const tenantId = connection.tenantId ?? "fluid";
+		let tokenProvider: TokenProvider;
+		if (connection.tokenProvider) {
+			tokenProvider = connection.tokenProvider;
+		} else if (connection.tenantKey) {
+			tokenProvider = new InsecureLeveeTokenProvider(
+				connection.tenantKey,
 				connection.user,
 				connection.tenantId,
 			);
+		} else if (connection.authToken) {
+			const tokenEndpoint = `${connection.httpUrl}/api/tenants/${tenantId}/token-mint`;
+			tokenProvider = new RemoteLeveeTokenProvider(
+				tokenEndpoint,
+				connection.user,
+				connection.authToken,
+			);
+		} else {
+			throw new Error(
+				"LeveeClient requires one of: tokenProvider, tenantKey, or authToken",
+			);
+		}
 
 		this.documentServiceFactory = new LeveeDocumentServiceFactory(
 			tokenProvider,

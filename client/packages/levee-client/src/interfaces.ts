@@ -58,7 +58,15 @@ export interface LeveeConnectionConfig {
 	readonly user: DriverLeveeUser;
 
 	/**
-	 * Custom token provider (overrides tenantKey if provided).
+	 * Authentication token (e.g., session token from OAuth login).
+	 * When provided without a custom `tokenProvider`, the client will
+	 * automatically create a RemoteLeveeTokenProvider that sends this
+	 * token as a Bearer header to the Levee token-mint endpoint.
+	 */
+	readonly authToken?: string;
+
+	/**
+	 * Custom token provider (overrides tenantKey and authToken if provided).
 	 */
 	readonly tokenProvider?: TokenProvider;
 }

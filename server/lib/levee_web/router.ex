@@ -139,6 +139,13 @@ defmodule LeveeWeb.Router do
     post "/tenants/:id/secrets/:slot", TenantAdminController, :regenerate_secret
   end
 
+  # Token minting (requires valid session)
+  scope "/api/tenants", LeveeWeb do
+    pipe_through [:api, :session_auth]
+
+    post "/:tenant_id/token-mint", TokenMintController, :create
+  end
+
   # Session-auth admin routes (for admin UI SPA)
   pipeline :admin_session do
     plug :accepts, ["json"]

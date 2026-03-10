@@ -125,6 +125,7 @@ export class InsecureLeveeTokenProvider implements ITokenProvider {
 export class RemoteLeveeTokenProvider implements ITokenProvider {
 	private readonly tokenEndpoint: string;
 	private readonly user: LeveeUser;
+	private readonly authToken?: string;
 	private cachedTokens: Map<string, { token: string; expiresAt: number }>;
 
 	/**
@@ -132,10 +133,16 @@ export class RemoteLeveeTokenProvider implements ITokenProvider {
 	 *
 	 * @param tokenEndpoint - The URL endpoint for fetching tokens
 	 * @param user - User information to send with token requests
+	 * @param authToken - Optional authentication token (e.g., session token) sent as Bearer header
 	 */
-	public constructor(tokenEndpoint: string, user: LeveeUser) {
+	public constructor(
+		tokenEndpoint: string,
+		user: LeveeUser,
+		authToken?: string,
+	) {
 		this.tokenEndpoint = tokenEndpoint;
 		this.user = user;
+		this.authToken = authToken;
 		this.cachedTokens = new Map();
 	}
 
@@ -188,11 +195,16 @@ export class RemoteLeveeTokenProvider implements ITokenProvider {
 		}
 
 		// Fetch new token
+		const headers: Record<string, string> = {
+			"Content-Type": "application/json",
+		};
+		if (this.authToken) {
+			headers["Authorization"] = `Bearer ${this.authToken}`;
+		}
+
 		const response = await fetch(this.tokenEndpoint, {
 			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
+			headers,
 			body: JSON.stringify({
 				tenantId,
 				documentId,
