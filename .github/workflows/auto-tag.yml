@@ -50,5 +50,13 @@ jobs:
         with:
           working-directory: client
           projects: levee-driver,levee-client
-          create-release: true
           token: ${{ steps.app-token.outputs.token }}
+
+      - name: Trigger npm publish
+        if: steps.auto-tag.outputs.created-tags != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          CREATED_TAGS: ${{ steps.auto-tag.outputs.created-tags }}
+        run: |
+          gh workflow run "Client npm Publish" \
+            --field tags="$CREATED_TAGS"
