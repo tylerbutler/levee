@@ -135,7 +135,7 @@ pub fn list_documents(
   tenant_id: String,
 ) -> Result(List(Document), StorageError) {
   let docs =
-    uset.tab2list(from: tables.documents)
+    set.to_list(from: tables.documents)
     |> result.unwrap([])
     |> list.filter_map(fn(entry) {
       let #(#(tid, _), doc) = entry
