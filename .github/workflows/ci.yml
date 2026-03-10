@@ -252,7 +252,7 @@ jobs:
 
       - name: Install Playwright browsers
         working-directory: client
-        run: pnpm exec --filter levee-e2e playwright install --with-deps chromium
+        run: pnpm --filter levee-e2e exec playwright install --with-deps chromium
 
       - name: Run E2E tests
         working-directory: client/packages/e2e
