@@ -32,6 +32,11 @@ defmodule Levee.Storage do
   end
 
   @impl Levee.Storage.Behaviour
+  def list_documents(tenant_id) do
+    backend().list_documents(tenant_id)
+  end
+
+  @impl Levee.Storage.Behaviour
   def update_document_sequence(tenant_id, document_id, sequence_number) do
     backend().update_document_sequence(tenant_id, document_id, sequence_number)
   end

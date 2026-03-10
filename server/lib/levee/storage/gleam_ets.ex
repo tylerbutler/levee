@@ -66,6 +66,13 @@ defmodule Levee.Storage.GleamETS do
   end
 
   @impl Levee.Storage.Behaviour
+  def list_documents(tenant_id) do
+    case @gleam_ets.list_documents(tables(), tenant_id) do
+      {:ok, docs} -> {:ok, Enum.map(docs, &@interop.document_to_map/1)}
+    end
+  end
+
+  @impl Levee.Storage.Behaviour
   def update_document_sequence(tenant_id, document_id, sequence_number) do
     case @gleam_ets.update_document_sequence(tables(), tenant_id, document_id, sequence_number) do
       {:ok, doc} -> {:ok, @interop.document_to_map(doc)}
