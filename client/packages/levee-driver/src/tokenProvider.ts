@@ -124,20 +124,22 @@ export class InsecureLeveeTokenProvider implements ITokenProvider {
  */
 export class RemoteLeveeTokenProvider implements ITokenProvider {
 	private readonly tokenEndpoint: string;
-	private readonly user: LeveeUser;
+	private readonly user: LeveeUser | undefined;
 	private readonly authToken?: string;
 	private cachedTokens: Map<string, { token: string; expiresAt: number }>;
+	private _resolvedUser: LeveeUser | undefined;
 
 	/**
 	 * Creates a new RemoteLeveeTokenProvider.
 	 *
 	 * @param tokenEndpoint - The URL endpoint for fetching tokens
-	 * @param user - User information to send with token requests
+	 * @param user - Optional user information to send with token requests.
+	 *   When omitted, user identity is determined server-side from the auth token.
 	 * @param authToken - Optional authentication token (e.g., session token) sent as Bearer header
 	 */
 	public constructor(
 		tokenEndpoint: string,
-		user: LeveeUser,
+		user?: LeveeUser,
 		authToken?: string,
 	) {
 		this.tokenEndpoint = tokenEndpoint;
@@ -170,9 +172,39 @@ export class RemoteLeveeTokenProvider implements ITokenProvider {
 
 	/**
 	 * Gets the current user associated with this token provider.
+	 * Returns the server-resolved user if available, otherwise the configured user.
 	 */
-	public get currentUser(): LeveeUser {
-		return this.user;
+	public get currentUser(): LeveeUser | undefined {
+		return this._resolvedUser ?? this.user;
+	}
+
+	/**
+	 * The user identity returned by the token-mint endpoint.
+	 * Available after the first successful token fetch.
+	 */
+	public get resolvedUser(): LeveeUser | undefined {
+		return this._resolvedUser;
+	}
+
+	/**
+	 * Fetches a token from the remote endpoint and resolves user identity.
+	 * Call this before constructing Fluid containers when user info is needed upfront.
+	 *
+	 * @param tenantId - The tenant ID
+	 * @param documentId - A document ID (used for the initial token request)
+	 * @returns The resolved user identity from the server
+	 */
+	public async resolveUser(
+		tenantId: string,
+		documentId = "",
+	): Promise<LeveeUser> {
+		await this.fetchToken(tenantId, documentId, "orderer", true);
+		if (!this._resolvedUser) {
+			throw new Error(
+				"Token-mint endpoint did not return user info. Ensure the server is up to date.",
+			);
+		}
+		return this._resolvedUser;
 	}
 
 	/**
@@ -219,7 +251,16 @@ export class RemoteLeveeTokenProvider implements ITokenProvider {
 			);
 		}
 
-		const data = (await response.json()) as { jwt: string; expiresIn?: number };
+		const data = (await response.json()) as {
+			jwt: string;
+			expiresIn?: number;
+			user?: { id: string; name?: string };
+		};
+
+		// Store server-resolved user identity
+		if (data.user) {
+			this._resolvedUser = { id: data.user.id, name: data.user.name };
+		}
 
 		// Cache the token
 		const expiresIn = data.expiresIn ?? 3600;

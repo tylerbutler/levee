@@ -37,8 +37,10 @@ defmodule LeveeWeb.TokenMintControllerTest do
         |> put_req_header("authorization", "Bearer #{session.id}")
         |> post("/api/tenants/#{@tenant_id}/token-mint", %{documentId: "doc-123"})
 
-      assert %{"jwt" => jwt, "expiresIn" => 3600} = json_response(conn, 200)
+      assert %{"jwt" => jwt, "expiresIn" => 3600, "user" => resp_user} = json_response(conn, 200)
       assert is_binary(jwt)
+      assert resp_user["id"] == user.id
+      assert resp_user["name"] == "Mint User"
 
       # Verify the JWT can be decoded and has correct claims
       {:ok, claims} = JWT.verify(jwt, @tenant_id)

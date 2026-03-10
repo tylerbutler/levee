@@ -22,7 +22,7 @@ defmodule LeveeWeb.TokenMintController do
       {:ok, token} ->
         conn
         |> put_status(:ok)
-        |> json(%{jwt: token, expiresIn: 3600})
+        |> json(%{jwt: token, expiresIn: 3600, user: %{id: user.id, name: user.display_name}})
 
       {:error, {:tenant_secret_not_found, _}} ->
         conn
