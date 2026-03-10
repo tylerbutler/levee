@@ -27,6 +27,7 @@ config :levee, LeveeWeb.Endpoint, http: [port: String.to_integer(System.get_env(
 #   DATABASE_URL=postgres://user:pass@host:5432/levee
 # Then set the storage backend in your config:
 #   config :levee, :storage_backend, Levee.Storage.GleamPG
+#   config :levee, :storage_backend, Levee.Storage.GleamMesa
 if database_url = System.get_env("DATABASE_URL") do
   config :levee, :database_url, database_url
 end

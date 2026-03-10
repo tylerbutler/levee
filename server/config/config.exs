@@ -10,7 +10,11 @@ import Config
 config :levee,
   generators: [timestamp_type: :utc_datetime],
   ecto_repos: [Levee.Store],
-  # Storage backend: Levee.Storage.GleamETS (default) or Levee.Storage.Postgres
+  # Storage backend options:
+  # - Levee.Storage.GleamETS (default)
+  # - Levee.Storage.GleamPG
+  # - Levee.Storage.GleamMesa
+  # - Levee.Storage.Postgres (legacy)
   storage_backend: Levee.Storage.GleamETS,
   # GitHub username allow list for OAuth login. nil = allow all, [] = allow none.
   # Override via GITHUB_ALLOWED_USERS env var (comma-separated).
