@@ -26,6 +26,24 @@ const TRAILING_SLASH_REGEX = /\/$/;
 const PROTOCOL_REGEX = /^(levee|phoenix):/;
 
 /**
+ * Derives a WebSocket URL from an HTTP URL.
+ *
+ * @param httpUrl - HTTP base URL (e.g., "http://localhost:4000" or "https://levee.example.com")
+ * @returns WebSocket URL with /socket path (e.g., "ws://localhost:4000/socket")
+ */
+export function deriveSocketUrl(httpUrl: string): string {
+	const url = httpUrl.replace(TRAILING_SLASH_REGEX, "");
+	if (url.startsWith("https://")) {
+		return `wss://${url.slice("https://".length)}/socket`;
+	}
+	if (url.startsWith("http://")) {
+		return `ws://${url.slice("http://".length)}/socket`;
+	}
+	// Fallback: assume ws:// and append /socket
+	return `ws://${url}/socket`;
+}
+
+/**
  * URL resolver for connecting to a Levee server.
  *
  * @remarks
@@ -44,20 +62,27 @@ export class LeveeUrlResolver implements IUrlResolver {
 	/**
 	 * Creates a new LeveeUrlResolver.
 	 *
-	 * @param socketUrl - WebSocket URL for Phoenix socket (e.g., ws://localhost:4000/socket)
+	 * @param socketUrl - WebSocket URL for Phoenix socket (e.g., ws://localhost:4000/socket).
+	 *   If omitted, derived automatically from httpUrl.
 	 * @param httpUrl - HTTP base URL for REST API (e.g., http://localhost:4000)
 	 * @param defaultTenantId - Default tenant ID to use when not specified in URL
 	 */
 	public constructor(
-		socketUrl: string,
+		socketUrl: string | undefined,
 		httpUrl: string,
 		defaultTenantId = DEFAULT_TENANT_ID,
 	) {
-		// Ensure socket URL ends with /socket if not already
-		this.socketUrl = socketUrl.endsWith("/socket")
-			? socketUrl
-			: `${socketUrl}/socket`;
 		this.httpUrl = httpUrl.replace(TRAILING_SLASH_REGEX, ""); // Remove trailing slash
+
+		// Derive socketUrl from httpUrl if not provided
+		if (socketUrl) {
+			this.socketUrl = socketUrl.endsWith("/socket")
+				? socketUrl
+				: `${socketUrl}/socket`;
+		} else {
+			this.socketUrl = deriveSocketUrl(this.httpUrl);
+		}
+
 		this.defaultTenantId = defaultTenantId;
 	}
 
