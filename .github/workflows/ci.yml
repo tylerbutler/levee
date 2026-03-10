@@ -32,7 +32,7 @@ jobs:
 
       - name: Check for changelog entries
         id: changelog
-        uses: tylerbutler/actions/changie-check@fix/changie-check-projects # ratchet:tylerbutler/actions/changie-check@main
+        uses: tylerbutler/actions/changie-check@d6442585b31f72e73b950f455deab089211ef1ed # ratchet:tylerbutler/actions/changie-check@main
         with:
           working-directory: client
           projects: levee-driver,levee-client
