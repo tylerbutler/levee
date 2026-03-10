@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
-      - uses: tylerbutler/actions/changie-auto-tag@16768298299d70597eae956677ec18593ce76c0d # ratchet:tylerbutler/actions/changie-auto-tag@main
+      - uses: tylerbutler/actions/changie-auto-tag@4c6b22106fa7156926918c47847e7d9fbc0e8f9f # ratchet:tylerbutler/actions/changie-auto-tag@main
         with:
           working-directory: server
           tag-prefix: 'server/'
@@ -26,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
-      - uses: tylerbutler/actions/changie-auto-tag@16768298299d70597eae956677ec18593ce76c0d # ratchet:tylerbutler/actions/changie-auto-tag@main
+      - uses: tylerbutler/actions/changie-auto-tag@4c6b22106fa7156926918c47847e7d9fbc0e8f9f # ratchet:tylerbutler/actions/changie-auto-tag@main
         id: auto-tag
         with:
           working-directory: client
