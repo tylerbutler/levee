@@ -17,6 +17,37 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  client-changelog-check:
+    name: Changelog Check
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for changelog entries
+        id: changelog
+        uses: tylerbutler/actions/changie-check@4c6b22106fa7156926918c47847e7d9fbc0e8f9f # ratchet:tylerbutler/actions/changie-check@main
+        with:
+          working-directory: client
+          base-sha: ${{ github.event.pull_request.base.sha }}
+          head-sha: ${{ github.event.pull_request.head.sha }}
+
+      - name: Comment on PR
+        if: steps.changelog.outputs.has-entries == 'true'
+        uses: marocchino/sticky-pull-request-comment@52423e01640425a022ef5fd42c6fb5f633a02728 # ratchet:marocchino/sticky-pull-request-comment@v2
+        with:
+          header: changelog-preview
+          message: |
+            ### Changelog Preview
+
+            ${{ steps.changelog.outputs.preview }}
+
   server-test:
     name: Server Tests
     runs-on: ubuntu-latest
