@@ -33,8 +33,11 @@ importers:
   packages/e2e:
     devDependencies:
       '@playwright/test':
-        specifier: ^1.58.0
+        specifier: ^1.50.0
         version: 1.58.2
+      '@types/node':
+        specifier: ^20.19.25
+        version: 20.19.33
 
   packages/levee-client:
     dependencies:

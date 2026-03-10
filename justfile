@@ -86,10 +86,12 @@ test-integration-run:
 # Run admin e2e tests (starts Docker server, runs Playwright, stops server)
 test-e2e:
     cd client && pnpm test:integration:up
+    cd client && pnpm exec --filter levee-e2e playwright install --with-deps chromium
     cd client/packages/e2e && pnpm exec playwright test; result=$?; cd ../.. && pnpm test:integration:down; exit $result
 
 # Run admin e2e tests (assumes server already running)
 test-e2e-run:
+    cd client && pnpm exec --filter levee-e2e playwright install --with-deps chromium
     cd client/packages/e2e && pnpm exec playwright test
 
 # === QUALITY ===
@@ -193,8 +195,8 @@ test-pg: db-start
 
 # === CI ===
 
-# Full validation workflow (server + client)
-ci: format lint test build
+# Full validation workflow (server + client + e2e)
+ci: format lint test build test-e2e
 
 alias pr := ci
 
@@ -222,9 +224,10 @@ setup-elixir:
 setup-client:
     cd client && pnpm install
 
-# Install E2E test dependencies
+# Install E2E test dependencies (Playwright browsers)
 setup-e2e:
-    cd e2e && pnpm install
+    cd client && pnpm install
+    cd client && pnpm exec --filter levee-e2e playwright install --with-deps chromium
 
 # === DEVELOPMENT ===
 
