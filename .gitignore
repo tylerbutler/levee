@@ -16,6 +16,9 @@ server/tmp/
 # index.html is hand-maintained; only ignore Gleam build output
 server/priv/static/admin/levee_admin/
 
+# DETS storage files (shelf persistence)
+server/priv/storage/
+
 # Elixir artifacts
 erl_crash.dump
 *.ez

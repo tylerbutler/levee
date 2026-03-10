@@ -49,9 +49,20 @@ pub type Tables =
 // ETS backend initialization
 // ---------------------------------------------------------------------------
 
-/// Initialize ETS tables. Returns a Tables handle.
-pub fn ets_init() -> Tables {
-  ets.init()
+/// Initialize persistent ETS tables backed by DETS.
+/// The data_dir is the directory where DETS files will be stored.
+pub fn ets_init(data_dir: String) -> Tables {
+  ets.init(data_dir)
+}
+
+/// Close all tables, persisting data to disk.
+pub fn ets_close(tables: Tables) -> Nil {
+  ets.close(tables)
+}
+
+/// Save all tables to disk without closing them.
+pub fn ets_save(tables: Tables) -> Nil {
+  ets.save(tables)
 }
 
 // ---------------------------------------------------------------------------
