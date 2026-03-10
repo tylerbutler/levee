@@ -8,6 +8,7 @@ import levee_oauth/error.{type OAuthError, ConfigMissing}
 
 /// Load GitHub OAuth config from environment variables.
 /// Reads GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_REDIRECT_URI.
+/// Requests read:org scope to support team membership checks.
 pub fn load_github_config() -> Result(vestibule_config.Config, OAuthError) {
   use client_id <- result.try(require_env("GITHUB_CLIENT_ID"))
   use client_secret <- result.try(require_env("GITHUB_CLIENT_SECRET"))
@@ -25,7 +26,10 @@ pub fn build_github_config(
   use <- guard_not_empty(client_id, "GITHUB_CLIENT_ID")
   use <- guard_not_empty(client_secret, "GITHUB_CLIENT_SECRET")
   use <- guard_not_empty(redirect_uri, "GITHUB_REDIRECT_URI")
-  Ok(vestibule_config.new(client_id, client_secret, redirect_uri))
+  let config =
+    vestibule_config.new(client_id, client_secret, redirect_uri)
+    |> vestibule_config.with_scopes(["user:email", "read:org"])
+  Ok(config)
 }
 
 fn require_env(name: String) -> Result(String, OAuthError) {
