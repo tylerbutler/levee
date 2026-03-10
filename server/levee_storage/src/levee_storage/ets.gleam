@@ -129,6 +129,24 @@ pub fn get_document(
   }
 }
 
+/// List all documents for a tenant.
+pub fn list_documents(
+  tables: Tables,
+  tenant_id: String,
+) -> Result(List(Document), StorageError) {
+  let docs =
+    uset.tab2list(from: tables.documents)
+    |> result.unwrap([])
+    |> list.filter_map(fn(entry) {
+      let #(#(tid, _), doc) = entry
+      case tid == tenant_id {
+        True -> Ok(doc)
+        False -> Error(Nil)
+      }
+    })
+  Ok(docs)
+}
+
 /// Update the sequence number of a document.
 pub fn update_document_sequence(
   tables: Tables,

@@ -150,6 +150,17 @@ defmodule LeveeWeb.Router do
 
     get "/", TenantAdminController, :index
     post "/", TenantAdminController, :create
+
+    # Document admin routes (read-only) — must come before /:id catch-all
+    get "/:tenant_id/documents", DocumentAdminController, :index
+    get "/:tenant_id/documents/:id", DocumentAdminController, :show
+    get "/:tenant_id/documents/:id/deltas", DocumentAdminController, :deltas
+    get "/:tenant_id/documents/:id/summaries", DocumentAdminController, :summaries
+    get "/:tenant_id/refs", DocumentAdminController, :refs
+    get "/:tenant_id/git/blobs/:sha", DocumentAdminController, :blob
+    get "/:tenant_id/git/trees/:sha", DocumentAdminController, :tree
+    get "/:tenant_id/git/commits/:sha", DocumentAdminController, :commit
+
     get "/:id", TenantAdminController, :show
     delete "/:id", TenantAdminController, :delete
     post "/:id/secrets/:slot", TenantAdminController, :regenerate_secret

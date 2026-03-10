@@ -110,6 +110,11 @@ defmodule Levee.Storage.GleamPG do
   end
 
   @impl Levee.Storage.Behaviour
+  def list_documents(_tenant_id) do
+    {:error, :not_implemented}
+  end
+
+  @impl Levee.Storage.Behaviour
   def update_document_sequence(tenant_id, document_id, sequence_number) do
     case @gleam_pg.update_document_sequence(conn(), tenant_id, document_id, sequence_number) do
       {:ok, doc} -> {:ok, @interop.document_to_map(doc)}
