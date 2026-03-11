@@ -14,7 +14,7 @@ default:
 # === BUILD ===
 
 # Build everything (server + client)
-build: build-server build-client
+build: build-server build-client build-sandbag
 
 # Build server (Gleam + admin + Elixir)
 build-server: build-gleam build-admin build-elixir
