@@ -193,4 +193,12 @@ defmodule LeveeWeb.Router do
     get "/", AdminController, :index
     get "/*path", AdminController, :index
   end
+
+  # Sandbag - Testing hub SPA (serves index.html for all /sandbag/* paths)
+  scope "/sandbag", LeveeWeb do
+    pipe_through :browser
+
+    get "/", SandbagController, :index
+    get "/*path", SandbagController, :index
+  end
 end

@@ -41,6 +41,12 @@ build-elixir: build-gleam
 build-client:
     cd client && pnpm install && pnpm build
 
+# Build Sandbag testing hub and copy to priv/static/sandbag
+build-sandbag:
+    cd client/packages/sandbag && pnpm build
+    mkdir -p server/priv/static/sandbag
+    cp -r client/packages/sandbag/build/* server/priv/static/sandbag/
+
 # === TESTING ===
 
 # Run all tests (server + client)
@@ -234,6 +240,10 @@ server: build-gleam build-admin
 # Start Phoenix server with IEx
 iex: build-gleam build-admin
     cd server && LEVEE_TENANT_ID=fluid LEVEE_TENANT_KEY=dev-tenant-secret-key iex -S mix phx.server
+
+# Start Sandbag dev server (SvelteKit dev mode, proxies API to Phoenix)
+dev-sandbag:
+    cd client/packages/sandbag && pnpm dev
 
 # === DOCKER ===
 
