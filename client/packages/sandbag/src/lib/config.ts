@@ -9,7 +9,7 @@ export interface LeveeConfig {
 const defaults: Omit<LeveeConfig, "documentId"> = {
 	httpUrl: "http://localhost:4000",
 	socketUrl: "ws://localhost:4000/socket",
-	tenantId: "fluid",
+	tenantId: "sandbag",
 	tenantKey: "dev-tenant-secret-key",
 };
 

@@ -55,6 +55,7 @@ defmodule Levee.Application do
   defp register_dev_tenants do
     if Application.get_env(:levee, :env) in [:dev, :test] do
       Levee.Auth.TenantSecrets.register_dev_tenant("dev-tenant")
+      Levee.Auth.TenantSecrets.register_tenant("sandbag", "dev-tenant-secret-key")
     end
   end
 
