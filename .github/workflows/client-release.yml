@@ -1,8 +1,12 @@
 name: Client npm Publish
 
 on:
-  push:
-    tags: ['levee-driver/v*', 'levee-client/v*']
+  workflow_dispatch:
+    inputs:
+      tags:
+        description: 'Space-separated list of tags to publish and release (e.g. "levee-driver/v0.1.0 levee-client/v0.1.0")'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -49,3 +53,27 @@ jobs:
             cat pnpm-publish-summary.json >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Create GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAGS: ${{ inputs.tags }}
+        working-directory: client
+        run: |
+          CHANGES_DIR=$(grep '^changesDir:' .changie.yaml | awk '{print $2}' || echo ".changes")
+          SEP=$(grep '^projectsVersionSeparator:' .changie.yaml | awk '{print $2}' | tr -d "\"'" 2>/dev/null || true)
+          SEP="${SEP:-/}"
+
+          for tag in $TAGS; do
+            # Extract project and version suffix from tag (e.g. levee-driver/v0.1.0)
+            project="${tag%${SEP}*}"
+            ver_suffix="${tag#*${SEP}}"
+            NOTES_FILE="${CHANGES_DIR}/${project}/${ver_suffix}.md"
+
+            echo "Creating release for $tag"
+            if [ -f "$NOTES_FILE" ]; then
+              gh release create "$tag" --title "$tag" --notes-file "$NOTES_FILE"
+            else
+              gh release create "$tag" --title "$tag" --generate-notes
+            fi
+          done
