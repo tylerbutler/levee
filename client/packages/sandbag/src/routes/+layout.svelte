@@ -1,8 +1,8 @@
 <script lang="ts">
-	import "../app.css";
-	import { base } from "$app/paths";
+import "../app.css";
+import { base } from "$app/paths";
 
-	let { children } = $props();
+let { children } = $props();
 </script>
 
 <div class="app-shell">

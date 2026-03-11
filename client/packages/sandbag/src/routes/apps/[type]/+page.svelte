@@ -1,34 +1,34 @@
 <script lang="ts">
-	import { onMount, onDestroy } from "svelte";
-	import { page } from "$app/state";
-	import { loadApp } from "$lib/registry";
-	import { parseConfigFromParams } from "$lib/config";
+import { onDestroy, onMount } from "svelte";
+import { page } from "$app/state";
+import { parseConfigFromParams } from "$lib/config";
+import { loadApp } from "$lib/registry";
 
-	let container: HTMLDivElement;
-	let unmount: (() => void) | undefined;
-	let error = $state<string | undefined>();
-	let loading = $state(true);
+let container: HTMLDivElement;
+let unmount: (() => void) | undefined;
+let error = $state<string | undefined>();
+let loading = $state(true);
 
-	const appType = $derived(page.params.type);
+const appType = $derived(page.params.type);
 
-	onMount(async () => {
-		const config = parseConfigFromParams(new URLSearchParams(page.url.search));
-		try {
-			const app = await loadApp(appType);
-			if (!app) {
-				error = `Unknown app type: ${appType}`;
-				loading = false;
-				return;
-			}
-			const result = await app.mount(container, config);
-			unmount = result.unmount;
-		} catch (err) {
-			error = err instanceof Error ? err.message : String(err);
+onMount(async () => {
+	const config = parseConfigFromParams(new URLSearchParams(page.url.search));
+	try {
+		const app = await loadApp(appType);
+		if (!app) {
+			error = `Unknown app type: ${appType}`;
+			loading = false;
+			return;
 		}
-		loading = false;
-	});
+		const result = await app.mount(container, config);
+		unmount = result.unmount;
+	} catch (err) {
+		error = err instanceof Error ? err.message : String(err);
+	}
+	loading = false;
+});
 
-	onDestroy(() => unmount?.());
+onDestroy(() => unmount?.());
 </script>
 
 {#if error}

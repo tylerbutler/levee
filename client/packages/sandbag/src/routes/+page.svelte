@@ -1,45 +1,45 @@
 <script lang="ts">
-	import { base } from "$app/paths";
-	import { loadAllApps, type AppType } from "$lib/registry";
-	import type { SandbagApp } from "$lib/types";
-	import {
-		listSandbags,
-		createSandbag,
-		deleteSandbag,
-		type SandbagRecord,
-	} from "$lib/api";
+import { base } from "$app/paths";
+import {
+	createSandbag,
+	deleteSandbag,
+	listSandbags,
+	type SandbagRecord,
+} from "$lib/api";
+import { type AppType, loadAllApps } from "$lib/registry";
+import type { SandbagApp } from "$lib/types";
 
-	let showCreateDialog = $state(false);
-	let newSandbagName = $state("");
-	let selectedAppType = $state("dice-roller");
-	let sandbags = $state<SandbagRecord[]>([]);
-	let apps = $state<SandbagApp[]>([]);
-	let appsLoaded = $state(false);
+let showCreateDialog = $state(false);
+let newSandbagName = $state("");
+let selectedAppType = $state("dice-roller");
+let sandbags = $state<SandbagRecord[]>([]);
+let apps = $state<SandbagApp[]>([]);
+let appsLoaded = $state(false);
 
-	$effect(() => {
-		sandbags = listSandbags();
-		loadAllApps().then((loaded) => {
-			apps = loaded;
-			appsLoaded = true;
-		});
+$effect(() => {
+	sandbags = listSandbags();
+	loadAllApps().then((loaded) => {
+		apps = loaded;
+		appsLoaded = true;
 	});
+});
 
-	function appInfo(type: string): SandbagApp | undefined {
-		return apps.find((a) => a.id === type);
-	}
+function appInfo(type: string): SandbagApp | undefined {
+	return apps.find((a) => a.id === type);
+}
 
-	function handleCreate() {
-		if (!newSandbagName.trim()) return;
-		createSandbag(newSandbagName.trim(), selectedAppType);
-		sandbags = listSandbags();
-		newSandbagName = "";
-		showCreateDialog = false;
-	}
+function handleCreate() {
+	if (!newSandbagName.trim()) return;
+	createSandbag(newSandbagName.trim(), selectedAppType);
+	sandbags = listSandbags();
+	newSandbagName = "";
+	showCreateDialog = false;
+}
 
-	function handleDelete(id: string) {
-		deleteSandbag(id);
-		sandbags = listSandbags();
-	}
+function handleDelete(id: string) {
+	deleteSandbag(id);
+	sandbags = listSandbags();
+}
 </script>
 
 <div class="dashboard">

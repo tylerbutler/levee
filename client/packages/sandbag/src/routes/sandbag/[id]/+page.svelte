@@ -1,27 +1,25 @@
 <script lang="ts">
-	import { page } from "$app/state";
-	import { base } from "$app/paths";
-	import { getSandbag, buildAppUrl } from "$lib/api";
-	import { loadApp } from "$lib/registry";
-	import type { SandbagApp } from "$lib/types";
+import { base } from "$app/paths";
+import { page } from "$app/state";
+import { buildAppUrl, getSandbag } from "$lib/api";
+import { loadApp } from "$lib/registry";
+import type { SandbagApp } from "$lib/types";
 
-	const sandbagId = $derived(page.params.id);
-	const sandbag = $derived(getSandbag(sandbagId));
-	const iframeSrc = $derived(
-		sandbag
-			? buildAppUrl(sandbag.appType, sandbag.documentId || undefined)
-			: "",
-	);
+const sandbagId = $derived(page.params.id);
+const sandbag = $derived(getSandbag(sandbagId));
+const iframeSrc = $derived(
+	sandbag ? buildAppUrl(sandbag.appType, sandbag.documentId || undefined) : "",
+);
 
-	let appInfo = $state<SandbagApp | undefined>();
+let appInfo = $state<SandbagApp | undefined>();
 
-	$effect(() => {
-		if (sandbag) {
-			loadApp(sandbag.appType).then((info) => {
-				appInfo = info;
-			});
-		}
-	});
+$effect(() => {
+	if (sandbag) {
+		loadApp(sandbag.appType).then((info) => {
+			appInfo = info;
+		});
+	}
+});
 </script>
 
 <div class="sandbag-view">
