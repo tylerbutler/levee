@@ -24,7 +24,7 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
 
-      - uses: tylerbutler/actions/changie-auto-tag@4c6b22106fa7156926918c47847e7d9fbc0e8f9f # ratchet:tylerbutler/actions/changie-auto-tag@main
+      - uses: tylerbutler/actions/changie-auto-tag@d6442585b31f72e73b950f455deab089211ef1ed # ratchet:tylerbutler/actions/changie-auto-tag@main
         with:
           working-directory: server
           tag-prefix: 'server/'
@@ -45,7 +45,7 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
 
-      - uses: tylerbutler/actions/changie-auto-tag@4c6b22106fa7156926918c47847e7d9fbc0e8f9f # ratchet:tylerbutler/actions/changie-auto-tag@main
+      - uses: tylerbutler/actions/changie-auto-tag@d6442585b31f72e73b950f455deab089211ef1ed # ratchet:tylerbutler/actions/changie-auto-tag@main
         id: auto-tag
         with:
           working-directory: client

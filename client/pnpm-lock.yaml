@@ -294,6 +294,9 @@ importers:
       '@fluidframework/sequence':
         specifier: <2.100.0
         version: 2.81.1
+      '@fluidframework/shared-object-base':
+        specifier: <2.100.0
+        version: 2.81.1
       '@tylerbu/levee-client':
         specifier: workspace:^
         version: link:../levee-client
