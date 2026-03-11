@@ -12,6 +12,11 @@
 	"license": "MIT",
 	"author": "Tyler Butler <tyler@tylerbutler.com>",
 	"type": "module",
+	"main": "./src/index.ts",
+	"exports": {
+		".": "./src/index.ts",
+		"./sandbag": "./src/sandbag.ts"
+	},
 	"scripts": {
 		"build:compile": "tsc --project ./tsconfig.json",
 		"build:vite": "vite build",

@@ -1,0 +1,29 @@
+{
+	"name": "@tylerbu/sandbag",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Testing hub for Levee collaborative document service",
+	"license": "MIT",
+	"author": "Tyler Butler <tyler@tylerbutler.com>",
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+	},
+	"dependencies": {
+		"@tylerbu/levee-example": "workspace:^",
+		"@tylerbu/levee-presence-tracker": "workspace:^",
+		"@tylerbu/levee-todo-list": "workspace:^"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-static": "^3.0.8",
+		"@sveltejs/kit": "^2.16.0",
+		"@sveltejs/vite-plugin-svelte": "^5.0.0",
+		"svelte": "^5.0.0",
+		"svelte-check": "^4.0.0",
+		"typescript": "~5.9.3",
+		"vite": "^6.0.0"
+	}
+}
