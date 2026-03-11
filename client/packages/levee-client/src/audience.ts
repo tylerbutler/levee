@@ -1,4 +1,3 @@
-import { assert } from "@fluidframework/core-utils/internal";
 import type { IClient } from "@fluidframework/driver-definitions";
 
 import type { LeveeMember, LeveeUser } from "./interfaces.js";
@@ -14,12 +13,13 @@ export function createLeveeAudienceMember(
 	audienceMember: IClient,
 ): LeveeMember {
 	const leveeUser = audienceMember.user as Partial<LeveeUser>;
-	assert(
-		leveeUser !== undefined &&
-			typeof leveeUser.id === "string" &&
-			typeof leveeUser.name === "string",
-		'Specified user was not of type "LeveeUser".',
-	);
+	if (
+		leveeUser === undefined ||
+		typeof leveeUser.id !== "string" ||
+		typeof leveeUser.name !== "string"
+	) {
+		throw new Error('Specified user was not of type "LeveeUser".');
+	}
 
 	return {
 		id: leveeUser.id,
