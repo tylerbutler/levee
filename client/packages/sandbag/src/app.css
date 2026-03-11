@@ -1,0 +1,78 @@
+:root {
+	--color-bg: #f8fafc;
+	--color-surface: #ffffff;
+	--color-border: #e2e8f0;
+	--color-text: #1e293b;
+	--color-text-muted: #64748b;
+	--color-primary: #3b82f6;
+	--color-primary-hover: #2563eb;
+	--color-danger: #ef4444;
+	--color-danger-hover: #dc2626;
+	--color-success: #22c55e;
+	--color-warning: #f59e0b;
+	--radius: 8px;
+	--shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+	--shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+	--font-mono: "JetBrains Mono", "Fira Code", monospace;
+}
+
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+body {
+	font-family:
+		-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	background: var(--color-bg);
+	color: var(--color-text);
+	line-height: 1.6;
+}
+
+a {
+	color: var(--color-primary);
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+button {
+	cursor: pointer;
+	border: none;
+	border-radius: var(--radius);
+	padding: 0.5rem 1rem;
+	font-size: 0.875rem;
+	font-weight: 500;
+	transition: background-color 0.15s;
+}
+
+.btn-primary {
+	background: var(--color-primary);
+	color: white;
+}
+
+.btn-primary:hover {
+	background: var(--color-primary-hover);
+}
+
+.btn-danger {
+	background: var(--color-danger);
+	color: white;
+}
+
+.btn-danger:hover {
+	background: var(--color-danger-hover);
+}
+
+.btn-outline {
+	background: transparent;
+	border: 1px solid var(--color-border);
+	color: var(--color-text);
+}
+
+.btn-outline:hover {
+	background: var(--color-bg);
+}

@@ -12,6 +12,11 @@
 	"license": "MIT",
 	"author": "Tyler Butler <tyler@tylerbutler.com>",
 	"type": "module",
+	"main": "./src/index.ts",
+	"exports": {
+		".": "./src/index.ts",
+		"./sandbag": "./src/sandbag.ts"
+	},
 	"scripts": {
 		"build:compile": "tsc --project ./tsconfig.json",
 		"build:vite": "vite build",
@@ -26,13 +31,12 @@
 		"test:e2e:ui": "playwright test --ui"
 	},
 	"dependencies": {
-		"@fluidframework/core-interfaces": "~2.81.0",
-		"@fluidframework/merge-tree": "~2.81.0",
-		"@fluidframework/react": "~2.81.0",
-		"@fluidframework/sequence": "~2.81.0",
-		"@fluidframework/shared-object-base": "~2.81.0",
+		"@fluidframework/merge-tree": "<2.100.0",
+		"@fluidframework/react": "<2.100.0",
+		"@fluidframework/sequence": "<2.100.0",
+		"@fluidframework/shared-object-base": "<2.100.0",
 		"@tylerbu/levee-client": "workspace:^",
-		"fluid-framework": "~2.81.0",
+		"fluid-framework": "<2.100.0",
 		"react": "^18.3.1",
 		"react-dom": "^18.3.1"
 	},

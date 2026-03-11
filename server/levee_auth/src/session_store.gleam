@@ -1,4 +1,4 @@
-//// In-memory store for users and sessions.
+//// In-memory store for users, sessions, and memberships.
 ////
 //// This is a temporary implementation for development/testing.
 //// Will be replaced with database storage when available.
@@ -9,6 +9,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import session.{type Session}
+import tenant.{type Membership}
 import user.{type User}
 
 // ---------------------------------------------------------------------------
@@ -29,6 +30,12 @@ pub type Message {
     reply_to: Subject(Result(Session, Nil)),
   )
   DeleteSession(id: String)
+  StoreMembership(membership: Membership)
+  GetMembership(
+    user_id: String,
+    tenant_id: String,
+    reply_to: Subject(Result(Membership, Nil)),
+  )
   Clear
   Shutdown
 }
@@ -38,7 +45,11 @@ pub type Message {
 // ---------------------------------------------------------------------------
 
 type State {
-  State(users: Dict(String, User), sessions: Dict(String, Session))
+  State(
+    users: Dict(String, User),
+    sessions: Dict(String, Session),
+    memberships: Dict(#(String, String), Membership),
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -48,7 +59,11 @@ type State {
 /// Start the session store actor.
 pub fn start() -> Result(Subject(Message), actor.StartError) {
   actor.new_with_initialiser(5000, fn(subject) {
-    actor.initialised(State(users: dict.new(), sessions: dict.new()))
+    actor.initialised(State(
+      users: dict.new(),
+      sessions: dict.new(),
+      memberships: dict.new(),
+    ))
     |> actor.returning(subject)
     |> Ok
   })
@@ -111,7 +126,23 @@ pub fn delete_session(actor: Subject(Message), id: String) -> Nil {
   process.send(actor, DeleteSession(id:))
 }
 
-/// Clear all users and sessions (test helper, fire-and-forget).
+/// Store a membership (fire-and-forget).
+pub fn store_membership(actor: Subject(Message), membership: Membership) -> Nil {
+  process.send(actor, StoreMembership(membership:))
+}
+
+/// Get a user's membership in a specific tenant.
+pub fn get_membership(
+  actor: Subject(Message),
+  user_id: String,
+  tenant_id: String,
+) -> Result(Membership, Nil) {
+  process.call(actor, 5000, fn(reply_to) {
+    GetMembership(user_id:, tenant_id:, reply_to:)
+  })
+}
+
+/// Clear all users, sessions, and memberships (test helper, fire-and-forget).
 pub fn clear(actor: Subject(Message)) -> Nil {
   process.send(actor, Clear)
 }
@@ -177,8 +208,24 @@ fn handle_message(state: State, message: Message) -> actor.Next(State, Message) 
       actor.continue(State(..state, sessions: new_sessions))
     }
 
+    StoreMembership(membership:) -> {
+      let key = #(membership.user_id, membership.tenant_id)
+      let new_memberships = dict.insert(state.memberships, key, membership)
+      actor.continue(State(..state, memberships: new_memberships))
+    }
+
+    GetMembership(user_id:, tenant_id:, reply_to:) -> {
+      let key = #(user_id, tenant_id)
+      process.send(reply_to, dict.get(state.memberships, key))
+      actor.continue(state)
+    }
+
     Clear -> {
-      actor.continue(State(users: dict.new(), sessions: dict.new()))
+      actor.continue(State(
+        users: dict.new(),
+        sessions: dict.new(),
+        memberships: dict.new(),
+      ))
     }
 
     Shutdown -> {

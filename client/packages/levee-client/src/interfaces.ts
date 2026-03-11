@@ -37,8 +37,10 @@ export interface LeveeConnectionConfig {
 
 	/**
 	 * WebSocket URL for Phoenix socket (e.g., "ws://localhost:4000/socket").
+	 * Optional — derived automatically from httpUrl if not provided
+	 * (http → ws, https → wss).
 	 */
-	readonly socketUrl: string;
+	readonly socketUrl?: string;
 
 	/**
 	 * Tenant ID (defaults to "fluid").
@@ -54,11 +56,22 @@ export interface LeveeConnectionConfig {
 
 	/**
 	 * User information for token generation and audience identification.
+	 * Required when using `tenantKey` or `tokenProvider`.
+	 * Optional when using `authToken` — user identity will be resolved
+	 * from the server via the token-mint endpoint.
 	 */
-	readonly user: DriverLeveeUser;
+	readonly user?: DriverLeveeUser;
 
 	/**
-	 * Custom token provider (overrides tenantKey if provided).
+	 * Authentication token (e.g., session token from OAuth login).
+	 * When provided without a custom `tokenProvider`, the client will
+	 * automatically create a RemoteLeveeTokenProvider that sends this
+	 * token as a Bearer header to the Levee token-mint endpoint.
+	 */
+	readonly authToken?: string;
+
+	/**
+	 * Custom token provider (overrides tenantKey and authToken if provided).
 	 */
 	readonly tokenProvider?: TokenProvider;
 }

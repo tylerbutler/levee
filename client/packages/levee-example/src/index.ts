@@ -20,3 +20,5 @@ export {
 } from "./diceRoller.js";
 // Driver utilities
 export { createLeveeDriver, type LeveeDriverConfig } from "./driver.js";
+// Sandbag-compatible mount
+export { type MountConfig, mount } from "./mount.js";

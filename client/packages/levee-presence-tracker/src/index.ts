@@ -20,4 +20,6 @@ export {
 	type IMouseTrackerEvents,
 	MouseTracker,
 } from "./MouseTracker.js";
+// Sandbag-compatible mount
+export { type MountConfig, mount } from "./mount.js";
 export { type EventMap, TypedEventEmitter } from "./TypedEventEmitter.js";

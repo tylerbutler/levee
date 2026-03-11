@@ -56,4 +56,4 @@ export {
 	RemoteLeveeTokenProvider,
 } from "./tokenProvider.js";
 // URL Resolver
-export { LeveeUrlResolver } from "./urlResolver.js";
+export { deriveSocketUrl, LeveeUrlResolver } from "./urlResolver.js";

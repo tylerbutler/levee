@@ -87,9 +87,12 @@ describe("Container Lifecycle", () => {
 			// Use the server-generated document ID from the resolved URL
 			const serverDocId = container1.resolvedUrl?.id;
 			expect(serverDocId).toBeDefined();
+			if (!serverDocId) {
+				throw new Error("Expected server document ID after attach");
+			}
 
 			// Then load it using the server-generated ID
-			const loadRequest = driver.createLoadExistingRequest(serverDocId!);
+			const loadRequest = driver.createLoadExistingRequest(serverDocId);
 			const container2 = await loader.resolve(loadRequest);
 
 			expect(container2.closed).toBe(false);
@@ -134,7 +137,10 @@ describe("Container Lifecycle", () => {
 				// Use the server-generated document ID to load from second client
 				const serverDocId = container1.resolvedUrl?.id;
 				expect(serverDocId).toBeDefined();
-				const loadRequest = driver.createLoadExistingRequest(serverDocId!);
+				if (!serverDocId) {
+					throw new Error("Expected server document ID after attach");
+				}
+				const loadRequest = driver.createLoadExistingRequest(serverDocId);
 				const container2 = await loader.resolve(loadRequest);
 				const diceRoller2 = await getDiceRollerFromContainer(container2);
 

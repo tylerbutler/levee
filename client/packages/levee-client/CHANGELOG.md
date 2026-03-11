@@ -1,7 +1,18 @@
-# @tylerbu/levee-client
+## v0.1.2 - 2026-03-11
 
-## 0.0.2
+### Dependencies
 
-### Patch Changes
+- Relaxed Fluid Framework version constraints from ~2.81.0 to <2.100.0 and removed unused dependencies.
 
-- Update documentation _[`39f8132`](https://github.com/tylerbutler/tools-monorepo/commit/39f81320a5245759b9a797105ac5ffe3caf996f9) [@tylerbutler](https://github.com/tylerbutler)_
+## v0.1.1 - 2026-03-10
+
+### Changed
+
+- Force publish due to release pipeline issues.
+
+## v0.1.0 - 2026-03-10
+
+### Added
+
+- Initial release.
+

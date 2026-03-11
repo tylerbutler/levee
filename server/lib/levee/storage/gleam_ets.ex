@@ -1,9 +1,14 @@
 defmodule Levee.Storage.GleamETS do
   @moduledoc """
-  ETS storage backend implemented in Gleam via the levee_storage package.
+  Persistent ETS storage backend implemented in Gleam via the levee_storage package.
 
   This module bridges the Elixir `Levee.Storage.Behaviour` interface to
-  the Gleam `levee_storage` ETS implementation using bravo for typed ETS access.
+  the Gleam `levee_storage` ETS implementation using shelf for persistent
+  ETS tables backed by DETS.
+
+  Data is stored in-memory via ETS for fast reads and persisted to DETS
+  files on disk. Tables are saved on terminate and periodically via
+  a configurable save interval.
   """
 
   use GenServer
@@ -22,8 +27,11 @@ defmodule Levee.Storage.GleamETS do
               :levee_storage@types
             ]}
 
+  # Save to disk every 30 seconds
+  @save_interval_ms 30_000
+
   # ---------------------------------------------------------------------------
-  # GenServer (owns the ETS tables)
+  # GenServer (owns the ETS/DETS tables)
   # ---------------------------------------------------------------------------
 
   def start_link(opts \\ []) do
@@ -32,10 +40,47 @@ defmodule Levee.Storage.GleamETS do
 
   @impl true
   def init(_opts) do
-    tables = @gleam_ets.init()
+    data_dir = data_dir()
+    File.mkdir_p!(data_dir)
+
+    tables = @gleam_ets.init(data_dir)
     # Store tables handle in persistent_term for fast access from any process
     :persistent_term.put(:levee_storage_tables, tables)
+
+    # Schedule periodic saves
+    schedule_save()
+
     {:ok, %{tables: tables}}
+  end
+
+  @impl true
+  def terminate(_reason, state) do
+    # Save and close all tables on shutdown
+    @gleam_ets.close(state.tables)
+    :persistent_term.erase(:levee_storage_tables)
+  end
+
+  @impl true
+  def handle_info(:periodic_save, state) do
+    @gleam_ets.save(state.tables)
+    schedule_save()
+    {:noreply, state}
+  end
+
+  def handle_info(_msg, state) do
+    {:noreply, state}
+  end
+
+  defp schedule_save do
+    Process.send_after(self(), :periodic_save, @save_interval_ms)
+  end
+
+  defp data_dir do
+    Application.get_env(:levee, :storage_data_dir, default_data_dir())
+  end
+
+  defp default_data_dir do
+    Path.join(File.cwd!(), "priv/storage/dets")
   end
 
   defp tables do

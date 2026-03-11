@@ -4,7 +4,7 @@
 //// across both ETS and PostgreSQL backends.
 ////
 //// For ETS storage, each entity is stored as a tuple
-//// `#(key, value)` in a bravo USet or OSet.
+//// `#(key, value)` in a shelf persistent set (PSet).
 
 import gleam/dynamic.{type Dynamic}
 import gleam/option.{type Option}

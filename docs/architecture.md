@@ -749,6 +749,81 @@ http://host:port/tenantId/documentId
 
 ---
 
+# Two Auth Systems
+
+Levee has two independent authentication systems:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 1. USER AUTH (sessions)                                     │
+│    GitHub OAuth → session token (ses_xxx)                    │
+│    Used for: Admin UI, /api/auth/* routes                   │
+│                                                             │
+│ 2. DOCUMENT AUTH (JWTs)                                     │
+│    Signed with tenant secret (HS256)                        │
+│    Used for: /documents/*, /deltas/*, /repos/*, WebSocket   │
+│    Claims: {tenantId, documentId, scopes, user, exp}        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+# Token-Mint: Bridging Auth Systems
+
+`POST /api/tenants/:tenant_id/token-mint` bridges session auth → document JWTs
+
+```
+ User's App                       Levee Server
+ ─────────                        ────────────
+
+ 1. User logs in via              GitHub OAuth callback
+    GitHub OAuth            ───►  creates session (ses_xxx)
+
+ 2. App opens a Fluid doc         LeveeClient created with
+    in the app                    RemoteLeveeTokenProvider
+
+ 3. RemoteLeveeTokenProvider      POST /api/tenants/:tid/token-mint
+    needs a document JWT    ───►  Authorization: Bearer ses_xxx
+                                  Body: {documentId, scopes}
+
+ 4. Server validates:             SessionAuth plug
+    - session token valid?        ✓ extracts current_user
+    - user member of tenant?      ✓ checks Membership
+    - scopes allowed for role?    ✓ filters by role
+
+ 5. Server mints JWT              token.create_document_token()
+    with tenant secret      ───►  signs with tenant's HS256 key
+
+ 6. Returns {jwt, expiresIn}      Client caches and uses for
+                                  WebSocket + REST operations
+```
+
+---
+
+# Token-Mint: Components
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| `SessionAuth` plug | Exists | Validates session token, sets `current_user` |
+| `token.create_document_token/5` | Exists | Gleam function, mints JWT with scopes |
+| `scopes.filter_for_role/2` | Exists | Filters scopes by role |
+| `TenantSecrets.get_secrets/1` | Exists | Gets tenant signing key |
+| `TokenMintController` | New | `POST /api/tenants/:tid/token-mint` |
+| `RemoteLeveeTokenProvider` | Updated | Sends session token as Bearer header |
+| `LeveeClient` | Updated | `authToken` config auto-creates provider |
+
+**Client usage:**
+```typescript
+const client = new LeveeClient({
+  tenantId: "my-tenant",
+  authToken: sessionToken, // from OAuth login
+  // auto-constructs RemoteLeveeTokenProvider
+  // pointed at /api/tenants/{tenantId}/token-mint
+});
+```
+
+---
+
 # Part 3: The Client Layer
 
 ---
@@ -950,9 +1025,11 @@ connection.on("nack", (nack) => {
 
 3. **Separation of orderer and storage tokens**
 
-4. **Message buffering** during connection setup
+4. **Token-mint** bridges user auth (sessions) and document auth (JWTs)
 
-5. **Fluid Framework compatibility** via standard interfaces
+5. **Message buffering** during connection setup
+
+6. **Fluid Framework compatibility** via standard interfaces
 
 ---
 
