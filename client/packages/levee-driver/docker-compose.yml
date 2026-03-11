@@ -1,5 +1,9 @@
 # Docker Compose for Levee server integration testing
 #
+# Uses the published ghcr.io image by default.
+# To build from local source instead, use the local override:
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --wait --build
+#
 # Usage:
 #   docker compose up -d          # Start server
 #   docker compose down           # Stop server
@@ -11,9 +15,7 @@
 
 services:
   levee:
-    build:
-      context: ../../../server
-      dockerfile: Dockerfile
+    image: ghcr.io/tylerbutler/levee:latest
     ports:
       - "4000:4000"
     environment:

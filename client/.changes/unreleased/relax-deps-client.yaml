@@ -1,0 +1,4 @@
+project: levee-client
+kind: Dependencies
+body: Relaxed Fluid Framework version constraints from ~2.81.0 to <2.100.0 and removed unused dependencies.
+time: 2026-03-11T00:00:00.000000000Z

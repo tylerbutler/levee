@@ -43,11 +43,11 @@
 		"test:vitest": "vitest run test"
 	},
 	"dependencies": {
-		"@fluidframework/core-interfaces": "~2.81.0",
-		"@fluidframework/driver-definitions": "~2.81.0",
-		"@fluidframework/protocol-definitions": "~4.0.0",
-		"@fluidframework/routerlicious-driver": "~2.81.0",
-		"@fluidframework/telemetry-utils": "~2.81.0",
+		"@fluidframework/core-interfaces": "<2.100.0",
+		"@fluidframework/driver-definitions": "<2.100.0",
+		"@fluidframework/protocol-definitions": "<5.0.0",
+		"@fluidframework/routerlicious-driver": "<2.100.0",
+		"@fluidframework/telemetry-utils": "<2.100.0",
 		"jose": "^6.0.11",
 		"phoenix": "^1.7.14",
 		"uuid": "^11.0.5"
