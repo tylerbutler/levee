@@ -29,6 +29,7 @@
 		"@fluidframework/merge-tree": "<2.100.0",
 		"@fluidframework/react": "<2.100.0",
 		"@fluidframework/sequence": "<2.100.0",
+		"@fluidframework/shared-object-base": "<2.100.0",
 		"@tylerbu/levee-client": "workspace:^",
 		"fluid-framework": "<2.100.0",
 		"react": "^18.3.1",
