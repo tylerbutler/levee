@@ -14,6 +14,7 @@ import {
 	isDebugEnabled,
 	LeveeDebugLogger,
 	type LeveeResolvedUrl,
+	type SerializationFormat,
 } from "./contracts.js";
 import { LeveeDocumentService } from "./leveeDocumentService.js";
 import { RestWrapper } from "./restWrapper.js";
@@ -57,6 +58,7 @@ export class LeveeDocumentServiceFactory implements IDocumentServiceFactory {
 
 	private readonly tokenProvider: ITokenProvider;
 	private readonly debug: boolean;
+	private _serialization: SerializationFormat;
 	private readonly logger: LeveeDebugLogger;
 
 	/**
@@ -64,11 +66,35 @@ export class LeveeDocumentServiceFactory implements IDocumentServiceFactory {
 	 *
 	 * @param tokenProvider - Token provider for authentication
 	 * @param debug - Whether to enable debug logging
+	 * @param serialization - Serialization format for WebSocket channels (default: "json")
 	 */
-	public constructor(tokenProvider: ITokenProvider, debug?: boolean) {
+	public constructor(
+		tokenProvider: ITokenProvider,
+		debug?: boolean,
+		serialization?: SerializationFormat,
+	) {
 		this.tokenProvider = tokenProvider;
 		this.debug = isDebugEnabled(debug);
+		this._serialization = serialization ?? "json";
 		this.logger = new LeveeDebugLogger("Factory", this.debug);
+	}
+
+	/**
+	 * The serialization format used for new WebSocket connections.
+	 *
+	 * @remarks
+	 * Changing this value affects only *future* connections. Existing connections
+	 * continue using whatever format they were created with. To force a reconnect
+	 * with the new format, dispose the current connection — the Fluid runtime will
+	 * call {@link LeveeDocumentService.connectToDeltaStream} again automatically.
+	 */
+	public get serialization(): SerializationFormat {
+		return this._serialization;
+	}
+
+	public set serialization(format: SerializationFormat) {
+		this._serialization = format;
+		this.logger.log(`Serialization format changed to ${format}`);
 	}
 
 	/**
@@ -91,6 +117,7 @@ export class LeveeDocumentServiceFactory implements IDocumentServiceFactory {
 			resolvedUrl,
 			this.tokenProvider,
 			this.debug,
+			this._serialization,
 		);
 	}
 
@@ -157,6 +184,11 @@ export class LeveeDocumentServiceFactory implements IDocumentServiceFactory {
 			},
 		};
 
-		return new LeveeDocumentService(updatedUrl, this.tokenProvider, this.debug);
+		return new LeveeDocumentService(
+			updatedUrl,
+			this.tokenProvider,
+			this.debug,
+			this._serialization,
+		);
 	}
 }

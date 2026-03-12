@@ -50,6 +50,8 @@ defmodule Levee.MixProject do
       {:jose, "~> 1.11"},
       # CORS support
       {:cors_plug, "~> 3.0"},
+      # MessagePack serialization for WebSocket channels
+      {:msgpax, "~> 2.4"},
       # Tenant ID generation
       {:unique_names_generator, "~> 0.2.0"}
     ]

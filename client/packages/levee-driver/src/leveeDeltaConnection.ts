@@ -27,7 +27,9 @@ import {
 	LeveeDebugLogger,
 	normalizeConnectedResponse,
 	normalizeOpPayload,
+	type SerializationFormat,
 } from "./contracts.js";
+import { decodeMsgpack, encodeMsgpack } from "./msgpackSerializer.js";
 
 /**
  * Timeout for channel join operations in milliseconds.
@@ -63,6 +65,7 @@ export class LeveeDeltaConnection
 	 * @param client - Client information
 	 * @param mode - Connection mode (read or write)
 	 * @param debug - Whether to enable debug logging
+	 * @param serialization - Serialization format for WebSocket channels
 	 * @returns Promise resolving to the established connection
 	 */
 	public static async create(
@@ -73,6 +76,7 @@ export class LeveeDeltaConnection
 		client: IClient,
 		mode: ConnectionMode = "write",
 		debug?: boolean,
+		serialization?: SerializationFormat,
 	): Promise<LeveeDeltaConnection> {
 		const connection = new LeveeDeltaConnection(
 			socketUrl,
@@ -82,6 +86,7 @@ export class LeveeDeltaConnection
 			client,
 			mode,
 			debug,
+			serialization,
 		);
 
 		await connection.connect();
@@ -120,6 +125,7 @@ export class LeveeDeltaConnection
 	private readonly token: string;
 	private readonly clientInfo: IClient;
 	private readonly requestedMode: ConnectionMode;
+	private readonly serialization: SerializationFormat;
 	private readonly logger: LeveeDebugLogger;
 
 	private constructor(
@@ -130,6 +136,7 @@ export class LeveeDeltaConnection
 		client: IClient,
 		mode: ConnectionMode,
 		debug?: boolean,
+		serialization?: SerializationFormat,
 	) {
 		super((eventName, error) =>
 			console.error(`Error in event ${String(eventName)}:`, error),
@@ -141,6 +148,7 @@ export class LeveeDeltaConnection
 		this.token = token;
 		this.clientInfo = client;
 		this.requestedMode = mode;
+		this.serialization = serialization ?? "json";
 		this.logger = new LeveeDebugLogger("DeltaConnection", debug);
 
 		// Set up early handlers for messages that arrive before full setup
@@ -157,6 +165,19 @@ export class LeveeDeltaConnection
 	 */
 	public get disposed(): boolean {
 		return this._disposed;
+	}
+
+	/**
+	 * The serialization format active on this connection.
+	 *
+	 * @remarks
+	 * This is set at connection time and cannot be changed for an active
+	 * connection. To switch formats, change the serialization on the
+	 * {@link LeveeDocumentService} or {@link LeveeDocumentServiceFactory} and
+	 * trigger a reconnect.
+	 */
+	public get activeSerialization(): SerializationFormat {
+		return this.serialization;
 	}
 
 	/**
@@ -240,9 +261,17 @@ export class LeveeDeltaConnection
 		this.logger.log(`Connecting to ${this.socketUrl}`);
 
 		// Create Phoenix socket with auth token
+		const useMsgpack = this.serialization === "msgpack";
 		this.socket = new Socket(this.socketUrl, {
 			params: { token: this.token },
 			timeout: SOCKET_CONNECT_TIMEOUT_MS,
+			...(useMsgpack
+				? {
+						vsn: "3.0.0",
+						encode: encodeMsgpack,
+						decode: decodeMsgpack,
+					}
+				: {}),
 		});
 
 		// Set up socket error handling

@@ -26,6 +26,7 @@ export type {
 	LeveeTokenClaims,
 	LeveeUser,
 	NackResponse,
+	SerializationFormat,
 	ServiceConfiguration,
 } from "./contracts.js";
 export {
