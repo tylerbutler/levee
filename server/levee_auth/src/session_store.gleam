@@ -1,14 +1,15 @@
-//// In-memory store for users, sessions, and memberships.
+//// Persistent store for users, sessions, and memberships.
 ////
-//// This is a temporary implementation for development/testing.
-//// Will be replaced with database storage when available.
+//// Uses shelf/set (ETS + DETS) for typed, persistent key-value storage.
+//// Data is persisted to DETS files on disk and survives restarts.
 
-import gleam/dict.{type Dict}
 import gleam/erlang/process.{type Subject}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
+import gleam/result
 import session.{type Session}
+import shelf/set.{type PSet}
 import tenant.{type Membership}
 import user.{type User}
 
@@ -41,29 +42,56 @@ pub type Message {
 }
 
 // ---------------------------------------------------------------------------
-// State
+// State — shelf-backed persistent tables
 // ---------------------------------------------------------------------------
 
-type State {
-  State(
-    users: Dict(String, User),
-    sessions: Dict(String, Session),
-    memberships: Dict(#(String, String), Membership),
+pub type Tables {
+  Tables(
+    users: PSet(String, User),
+    sessions: PSet(String, Session),
+    memberships: PSet(#(String, String), Membership),
   )
+}
+
+fn dets_path(data_dir: String, table_name: String) -> String {
+  data_dir <> "/" <> table_name <> ".dets"
+}
+
+/// Open all persistent tables. Call once at startup.
+pub fn init_tables(data_dir: String) -> Tables {
+  let assert Ok(users) =
+    set.open(name: "levee_auth_users", path: dets_path(data_dir, "auth_users"))
+  let assert Ok(sessions) =
+    set.open(
+      name: "levee_auth_sessions",
+      path: dets_path(data_dir, "auth_sessions"),
+    )
+  let assert Ok(memberships) =
+    set.open(
+      name: "levee_auth_memberships",
+      path: dets_path(data_dir, "auth_memberships"),
+    )
+  Tables(users:, sessions:, memberships:)
+}
+
+/// Close all tables, persisting data to disk.
+pub fn close_tables(tables: Tables) -> Nil {
+  let _ = set.close(tables.users)
+  let _ = set.close(tables.sessions)
+  let _ = set.close(tables.memberships)
+  Nil
 }
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
-/// Start the session store actor.
-pub fn start() -> Result(Subject(Message), actor.StartError) {
+/// Start the session store actor with persistent shelf tables.
+pub fn start(data_dir: String) -> Result(Subject(Message), actor.StartError) {
+  let tables = init_tables(data_dir)
+
   actor.new_with_initialiser(5000, fn(subject) {
-    actor.initialised(State(
-      users: dict.new(),
-      sessions: dict.new(),
-      memberships: dict.new(),
-    ))
+    actor.initialised(tables)
     |> actor.returning(subject)
     |> Ok
   })
@@ -151,43 +179,54 @@ pub fn clear(actor: Subject(Message)) -> Nil {
 // Message handler
 // ---------------------------------------------------------------------------
 
-fn handle_message(state: State, message: Message) -> actor.Next(State, Message) {
+fn handle_message(
+  tables: Tables,
+  message: Message,
+) -> actor.Next(Tables, Message) {
   case message {
     StoreUser(user:) -> {
-      let new_users = dict.insert(state.users, user.id, user)
-      actor.continue(State(..state, users: new_users))
+      let _ = set.insert(into: tables.users, key: user.id, value: user)
+      actor.continue(tables)
     }
 
     GetUser(id:, reply_to:) -> {
-      process.send(reply_to, dict.get(state.users, id))
-      actor.continue(state)
+      let result =
+        set.lookup(from: tables.users, key: id) |> result.replace_error(Nil)
+      process.send(reply_to, result)
+      actor.continue(tables)
     }
 
     FindUserByEmail(email:, reply_to:) -> {
-      let result = find_user_where(state.users, fn(u) { u.email == email })
+      let result = find_user_where(tables.users, fn(u) { u.email == email })
       process.send(reply_to, result)
-      actor.continue(state)
+      actor.continue(tables)
     }
 
     FindUserByGithubId(github_id:, reply_to:) -> {
       let result =
-        find_user_where(state.users, fn(u) { u.github_id == Some(github_id) })
+        find_user_where(tables.users, fn(u) { u.github_id == Some(github_id) })
       process.send(reply_to, result)
-      actor.continue(state)
+      actor.continue(tables)
     }
 
     UserCount(reply_to:) -> {
-      process.send(reply_to, dict.size(state.users))
-      actor.continue(state)
+      let count =
+        set.size(of: tables.users)
+        |> result.unwrap(0)
+      process.send(reply_to, count)
+      actor.continue(tables)
     }
 
     StoreSession(session:) -> {
-      let new_sessions = dict.insert(state.sessions, session.id, session)
-      actor.continue(State(..state, sessions: new_sessions))
+      let _ = set.insert(into: tables.sessions, key: session.id, value: session)
+      actor.continue(tables)
     }
 
     GetSession(id:, tenant_id:, reply_to:) -> {
-      let result = case dict.get(state.sessions, id) {
+      let result = case
+        set.lookup(from: tables.sessions, key: id)
+        |> result.replace_error(Nil)
+      {
         Error(Nil) -> Error(Nil)
         Ok(s) ->
           case tenant_id {
@@ -200,35 +239,38 @@ fn handle_message(state: State, message: Message) -> actor.Next(State, Message) 
           }
       }
       process.send(reply_to, result)
-      actor.continue(state)
+      actor.continue(tables)
     }
 
     DeleteSession(id:) -> {
-      let new_sessions = dict.delete(state.sessions, id)
-      actor.continue(State(..state, sessions: new_sessions))
+      let _ = set.delete_key(from: tables.sessions, key: id)
+      actor.continue(tables)
     }
 
     StoreMembership(membership:) -> {
       let key = #(membership.user_id, membership.tenant_id)
-      let new_memberships = dict.insert(state.memberships, key, membership)
-      actor.continue(State(..state, memberships: new_memberships))
+      let _ = set.insert(into: tables.memberships, key: key, value: membership)
+      actor.continue(tables)
     }
 
     GetMembership(user_id:, tenant_id:, reply_to:) -> {
       let key = #(user_id, tenant_id)
-      process.send(reply_to, dict.get(state.memberships, key))
-      actor.continue(state)
+      let result =
+        set.lookup(from: tables.memberships, key: key)
+        |> result.replace_error(Nil)
+      process.send(reply_to, result)
+      actor.continue(tables)
     }
 
     Clear -> {
-      actor.continue(State(
-        users: dict.new(),
-        sessions: dict.new(),
-        memberships: dict.new(),
-      ))
+      let _ = set.delete_all(from: tables.users)
+      let _ = set.delete_all(from: tables.sessions)
+      let _ = set.delete_all(from: tables.memberships)
+      actor.continue(tables)
     }
 
     Shutdown -> {
+      close_tables(tables)
       actor.stop()
     }
   }
@@ -250,10 +292,17 @@ fn extract_subject(
 
 /// Find the first user matching a predicate.
 fn find_user_where(
-  users: Dict(String, User),
+  users: PSet(String, User),
   predicate: fn(User) -> Bool,
 ) -> Result(User, Nil) {
   users
-  |> dict.values
-  |> list.find(predicate)
+  |> set.to_list
+  |> result.unwrap([])
+  |> list.find_map(fn(entry) {
+    let #(_key, u) = entry
+    case predicate(u) {
+      True -> Ok(u)
+      False -> Error(Nil)
+    }
+  })
 }

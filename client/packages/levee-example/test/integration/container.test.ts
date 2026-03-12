@@ -122,7 +122,9 @@ describe("Container Lifecycle", () => {
 	describe.runIf(serverAvailable)("Collaborative Sync", () => {
 		it(
 			"synchronizes dice rolls between clients",
-			{ timeout: 30_000 },
+			{
+				timeout: 30_000,
+			},
 			async () => {
 				// Create first client
 				const createRequest = driver.createCreateNewRequest(
