@@ -416,7 +416,8 @@ defmodule Levee.Auth.GleamBridge do
       Levee.Auth.TenantSecrets.list_tenants()
       |> Enum.each(fn tenant_id ->
         case get_membership(user_id, tenant_id) do
-          {:ok, _} -> :ok
+          {:ok, _} ->
+            :ok
 
           :error ->
             membership = create_membership(user_id, tenant_id, :member)
