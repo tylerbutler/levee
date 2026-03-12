@@ -174,7 +174,7 @@ defmodule LeveeWeb.OAuthController do
             :ok
 
           :error ->
-            membership = GleamBridge.create_membership(user.id, "sandbag", "editor")
+            membership = GleamBridge.create_membership(user.id, "sandbag", "member")
             GleamBridge.store_membership(membership)
         end
 
