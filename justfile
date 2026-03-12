@@ -286,6 +286,10 @@ docker-verify tag=docker_image:
     docker logs "$container_name" 2>&1
     exit 1
 
+# Build and run Docker image locally on port 4000
+docker-run tag=docker_image: (docker-build tag)
+    docker run --rm -it -p 4000:4000 {{tag}}
+
 # Build and verify Docker image
 docker-test tag=docker_image: (docker-build tag) (docker-verify tag)
 
