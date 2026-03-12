@@ -66,9 +66,15 @@ defmodule LeveeWeb.Router do
     get "/me", AuthController, :me
   end
 
-  # Document Operations (Storage Service) - write access for create
+  # Document creation - write access, but skip document validation since the document
+  # doesn't exist yet and the body "id" field would conflict with the JWT's placeholder.
+  pipeline :create_access do
+    plug :accepts, ["json"]
+    plug Auth, scopes: ["doc:read", "doc:write"], validate_document: false
+  end
+
   scope "/documents", LeveeWeb do
-    pipe_through :write_access
+    pipe_through :create_access
 
     # POST /documents/:tenant_id - Create document
     post "/:tenant_id", DocumentController, :create
