@@ -1,72 +1,138 @@
 <script lang="ts">
 import { base } from "$app/paths";
+import { goto } from "$app/navigation";
 import { page } from "$app/state";
-import { buildAppUrl, getSandbag } from "$lib/api";
+import { getSandbag, updateSandbag } from "$lib/api";
 import { getAuthToken } from "$lib/auth.svelte";
+import { parseConfigFromParams } from "$lib/config";
 import { loadApp } from "$lib/registry";
 import type { SandbagApp } from "$lib/types";
+import { onDestroy, onMount } from "svelte";
 
 const sandbagId = $derived(page.params.id);
 const sandbag = $derived(getSandbag(sandbagId));
-const authToken = $derived(getAuthToken());
-const iframeSrc = $derived(
-	sandbag
-		? buildAppUrl(
-				sandbag.appType,
-				sandbag.documentId || undefined,
-				authToken ?? undefined,
-			)
-		: "",
+
+// Document ID and app type can come from query params (shared link) or localStorage record
+const params = $derived(new URLSearchParams(page.url.search));
+const appType = $derived(
+	params.get("appType") ?? sandbag?.appType,
+);
+const documentId = $derived(
+	params.get("documentId") ?? (sandbag?.documentId || undefined),
 );
 
+let container: HTMLDivElement;
+let unmount: (() => void) | undefined;
+let error = $state<string | undefined>();
+let loading = $state(true);
 let appInfo = $state<SandbagApp | undefined>();
+let shareUrl = $state<string | undefined>();
 
-$effect(() => {
-	if (sandbag) {
-		loadApp(sandbag.appType).then((info) => {
-			appInfo = info;
-		});
+onMount(async () => {
+	if (!appType) {
+		error = sandbag
+			? `Unknown app type`
+			: `Sandbag "${sandbagId}" not found. The link may have been created on another device.`;
+		loading = false;
+		return;
 	}
+
+	try {
+		const app = await loadApp(appType);
+		if (!app) {
+			error = `Unknown app type: ${appType}`;
+			loading = false;
+			return;
+		}
+		appInfo = app;
+
+		const baseConfig = parseConfigFromParams(params);
+		const authToken = getAuthToken();
+		const config = {
+			...baseConfig,
+			...(authToken ? { authToken } : {}),
+			...(documentId ? { documentId } : {}),
+		};
+
+		const result = await app.mount(container, config);
+		unmount = result.unmount;
+
+		// Persist documentId to localStorage if we have a record
+		if (sandbag && result.documentId && result.documentId !== sandbag.documentId) {
+			updateSandbag(sandbagId, { documentId: result.documentId });
+		}
+
+		// Update URL with documentId and appType so the link is self-contained
+		const url = new URL(window.location.href);
+		let urlChanged = false;
+		if (result.documentId && url.searchParams.get("documentId") !== result.documentId) {
+			url.searchParams.set("documentId", result.documentId);
+			urlChanged = true;
+		}
+		if (appType && !url.searchParams.has("appType")) {
+			url.searchParams.set("appType", appType);
+			urlChanged = true;
+		}
+		if (urlChanged) {
+			await goto(`${url.pathname}${url.search}`, { replaceState: true });
+		}
+		shareUrl = url.toString();
+	} catch (err) {
+		error = err instanceof Error ? err.message : String(err);
+	}
+	loading = false;
 });
+
+onDestroy(() => unmount?.());
+
+function copyShareLink() {
+	if (shareUrl) {
+		navigator.clipboard.writeText(shareUrl);
+	}
+}
 </script>
 
 <div class="sandbag-view">
-	{#if sandbag && appInfo}
-		<div class="view-header">
-			<a href="{base}/" class="back-link">← Dashboard</a>
+	<div class="view-header">
+		<a href="{base}/" class="back-link">← Dashboard</a>
+		{#if appInfo}
 			<span class="header-icon">{appInfo.icon}</span>
-			<h1>{sandbag.name}</h1>
+		{/if}
+		<h1>{sandbag?.name ?? appInfo?.label ?? "Sandbag"}</h1>
+		{#if appInfo}
 			<span class="header-type">{appInfo.label}</span>
-			<div class="view-actions">
-				<button
-					class="btn-outline"
-					onclick={() => navigator.clipboard.writeText(window.location.href)}
-				>
-					📋 Copy Link
-				</button>
-				<button
-					class="btn-outline"
-					onclick={() => window.open(window.location.href, "_blank")}
-				>
-					↗ New Tab
-				</button>
-			</div>
+		{/if}
+		<div class="view-actions">
+			<button class="btn-outline" onclick={copyShareLink} disabled={!shareUrl}>
+				📋 Copy Link
+			</button>
+			<button
+				class="btn-outline"
+				onclick={() => {
+					if (shareUrl) window.open(shareUrl, "_blank");
+				}}
+				disabled={!shareUrl}
+			>
+				↗ New Tab
+			</button>
 		</div>
+	</div>
 
-		<div class="iframe-container">
-			<iframe
-				src={iframeSrc}
-				title="{appInfo.label}: {sandbag.name}"
-				sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-			></iframe>
-		</div>
-	{:else}
-		<div class="not-found">
-			<h2>Sandbag not found</h2>
-			<p>The sandbag "{sandbagId}" doesn't exist.</p>
-			<a href="{base}/">← Back to Dashboard</a>
+	{#if error}
+		<div class="error">
+			<p>Failed to load app: {error}</p>
 		</div>
 	{/if}
+
+	{#if loading}
+		<div class="loading">Loading {appType}…</div>
+	{/if}
+
+	<div
+		bind:this={container}
+		class="app-container"
+		class:hidden={loading || !!error}
+	></div>
 </div>
 
 <style>
@@ -115,7 +181,7 @@ $effect(() => {
 		gap: 0.5rem;
 	}
 
-	.iframe-container {
+	.app-container {
 		flex: 1;
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius);
@@ -123,20 +189,21 @@ $effect(() => {
 		background: white;
 	}
 
-	.iframe-container iframe {
-		width: 100%;
-		height: 100%;
-		border: none;
+	.hidden {
+		display: none;
 	}
 
-	.not-found {
-		text-align: center;
-		padding: 4rem 2rem;
-		color: var(--color-text-muted);
+	.loading,
+	.error {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 200px;
+		font-size: 1rem;
+		color: #64748b;
 	}
 
-	.not-found h2 {
-		color: var(--color-text);
-		margin-bottom: 0.5rem;
+	.error {
+		color: #dc2626;
 	}
 </style>
