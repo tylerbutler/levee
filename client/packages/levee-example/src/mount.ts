@@ -19,6 +19,7 @@ export interface MountConfig {
 	httpUrl?: string;
 	socketUrl?: string;
 	tenantKey?: string;
+	authToken?: string;
 	tenantId?: string;
 	documentId?: string;
 }

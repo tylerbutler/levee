@@ -2,13 +2,21 @@
 import { base } from "$app/paths";
 import { page } from "$app/state";
 import { buildAppUrl, getSandbag } from "$lib/api";
+import { getAuthToken } from "$lib/auth.svelte";
 import { loadApp } from "$lib/registry";
 import type { SandbagApp } from "$lib/types";
 
 const sandbagId = $derived(page.params.id);
 const sandbag = $derived(getSandbag(sandbagId));
+const authToken = $derived(getAuthToken());
 const iframeSrc = $derived(
-	sandbag ? buildAppUrl(sandbag.appType, sandbag.documentId || undefined) : "",
+	sandbag
+		? buildAppUrl(
+				sandbag.appType,
+				sandbag.documentId || undefined,
+				authToken ?? undefined,
+			)
+		: "",
 );
 
 let appInfo = $state<SandbagApp | undefined>();
@@ -49,7 +57,7 @@ $effect(() => {
 			<iframe
 				src={iframeSrc}
 				title="{appInfo.label}: {sandbag.name}"
-				sandbox="allow-scripts allow-same-origin allow-popups"
+				sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
 			></iframe>
 		</div>
 	{:else}

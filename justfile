@@ -250,9 +250,9 @@ dev-sandbag:
 # Docker image name
 docker_image := "levee-server"
 
-# Build Docker image locally
+# Build Docker image locally (uses root Dockerfile with client + server)
 docker-build tag=docker_image:
-    docker build -t {{tag}} ./server
+    docker build -t {{tag}} .
 
 # Verify Docker image starts and passes health check
 docker-verify tag=docker_image:
@@ -265,12 +265,6 @@ docker-verify tag=docker_image:
     echo "Starting container from {{tag}}..."
     docker run -d --name "$container_name" \
         -p 0:4000 \
-        -e PHX_SERVER=true \
-        -e PHX_HOST=localhost \
-        -e PORT=4000 \
-        -e SECRET_KEY_BASE=dev-only-secret-key-base-at-least-64-characters-long-for-phoenix-framework \
-        -e LEVEE_TENANT_ID=fluid \
-        -e LEVEE_TENANT_KEY=dev-tenant-secret-key \
         "{{tag}}"
 
     # Get the randomly assigned host port

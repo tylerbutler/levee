@@ -40,10 +40,10 @@ defmodule Levee.Application do
     opts = [strategy: :one_for_one, name: Levee.Supervisor]
     result = Supervisor.start_link(children, opts)
 
-    # Register dev tenant in dev/test environments
+    # Register tenants after supervisor starts
     case result do
       {:ok, _pid} ->
-        register_dev_tenants()
+        register_tenants()
 
       _ ->
         :ok
@@ -52,11 +52,15 @@ defmodule Levee.Application do
     result
   end
 
-  defp register_dev_tenants do
+  defp register_tenants do
     if Application.get_env(:levee, :env) in [:dev, :test] do
       Levee.Auth.TenantSecrets.register_dev_tenant("dev-tenant")
-      Levee.Auth.TenantSecrets.register_tenant("sandbag", "dev-tenant-secret-key")
     end
+
+    # Always register sandbag tenant (used by Sandbag testing hub).
+    # In prod, LEVEE_TENANT_ID=sandbag handles initial registration via
+    # init_from_env/0; this is a no-op if already registered by env vars.
+    Levee.Auth.TenantSecrets.register_tenant("sandbag", "dev-tenant-secret-key")
   end
 
   # Tell Phoenix to update the endpoint configuration

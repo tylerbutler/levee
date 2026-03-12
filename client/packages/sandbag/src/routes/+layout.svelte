@@ -1,8 +1,45 @@
 <script lang="ts">
 import "../app.css";
+import { onMount } from "svelte";
+import { goto } from "$app/navigation";
 import { base } from "$app/paths";
+import { page } from "$app/state";
+import {
+	checkSession,
+	getAuthUser,
+	hasCheckedSession,
+	isAuthenticated,
+	logout,
+} from "$lib/auth.svelte";
 
 let { children } = $props();
+
+const isLoginPage = $derived(page.url.pathname.endsWith("/login"));
+const isAppPage = $derived(page.url.pathname.includes("/apps/"));
+
+onMount(async () => {
+	// App pages (loaded in iframes) receive auth via URL params, skip guard
+	if (isAppPage) return;
+
+	await checkSession();
+	if (!isAuthenticated() && !isLoginPage) {
+		goto(`${base}/login`);
+	}
+});
+
+// Redirect when auth state changes (e.g., after logout)
+$effect(() => {
+	if (hasCheckedSession() && !isAuthenticated() && !isLoginPage && !isAppPage) {
+		goto(`${base}/login`);
+	}
+});
+
+const authUser = $derived(getAuthUser());
+
+async function handleLogout() {
+	await logout();
+	goto(`${base}/login`);
+}
 </script>
 
 <div class="app-shell">
@@ -12,6 +49,15 @@ let { children } = $props();
 			<span class="logo-text">Sandbag</span>
 		</a>
 		<span class="tagline">Levee Testing Hub</span>
+
+		{#if authUser && !isLoginPage}
+			<div class="user-info">
+				<span class="user-name">{authUser.display_name ?? authUser.email}</span>
+				<button class="btn-outline btn-sm" onclick={handleLogout}>
+					Log out
+				</button>
+			</div>
+		{/if}
 	</header>
 
 	<main class="app-main">
@@ -57,6 +103,23 @@ let { children } = $props();
 	.tagline {
 		color: var(--color-text-muted);
 		font-size: 0.875rem;
+	}
+
+	.user-info {
+		margin-left: auto;
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.user-name {
+		font-size: 0.875rem;
+		color: var(--color-text-muted);
+	}
+
+	.btn-sm {
+		padding: 0.25rem 0.625rem;
+		font-size: 0.8125rem;
 	}
 
 	.app-main {

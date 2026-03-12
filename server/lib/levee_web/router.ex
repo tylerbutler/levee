@@ -43,6 +43,13 @@ defmodule LeveeWeb.Router do
     get "/health", HealthController, :index
   end
 
+  # Root redirect to admin UI
+  scope "/", LeveeWeb do
+    pipe_through :browser
+
+    get "/", RedirectController, :admin
+  end
+
   # Auth API routes (public - no JWT required)
   scope "/api/auth", LeveeWeb do
     pipe_through :api

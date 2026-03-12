@@ -20,6 +20,7 @@ export interface MountConfig {
 	httpUrl?: string;
 	socketUrl?: string;
 	tenantKey?: string;
+	authToken?: string;
 	documentId?: string;
 }
 
@@ -46,7 +47,6 @@ export async function mount(
 ): Promise<{ unmount: () => void; documentId: string }> {
 	const httpUrl = config.httpUrl ?? "http://localhost:4000";
 	const socketUrl = config.socketUrl ?? "ws://localhost:4000/socket";
-	const tenantKey = config.tenantKey ?? "dev-tenant-secret-key";
 
 	// Build the DOM structure the app expects
 	element.innerHTML = `
@@ -79,14 +79,21 @@ export async function mount(
 
 	const userId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
-	const client = new LeveeClient({
-		connection: {
-			httpUrl,
-			socketUrl,
-			tenantKey,
-			user: { id: userId, name: `User ${userId.slice(-5)}` },
-		},
-	});
+	const connectionConfig: import("@tylerbu/levee-client").LeveeConnectionConfig =
+		config.authToken
+			? {
+					httpUrl,
+					socketUrl,
+					authToken: config.authToken,
+				}
+			: {
+					httpUrl,
+					socketUrl,
+					tenantKey: config.tenantKey ?? "dev-tenant-secret-key",
+					user: { id: userId, name: `User ${userId.slice(-5)}` },
+				};
+
+	const client = new LeveeClient({ connection: connectionConfig });
 
 	let container: IFluidContainer<typeof containerSchema>;
 	let documentId: string;

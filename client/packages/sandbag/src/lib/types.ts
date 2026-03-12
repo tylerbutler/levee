@@ -25,6 +25,7 @@ export interface SandbagMountConfig {
 	socketUrl?: string;
 	tenantKey?: string;
 	tenantId?: string;
+	authToken?: string;
 	documentId?: string;
 }
 
