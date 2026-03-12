@@ -1,22 +1,20 @@
 <script lang="ts">
-import { base } from "$app/paths";
+import { onDestroy, onMount } from "svelte";
 import { goto } from "$app/navigation";
+import { base } from "$app/paths";
 import { page } from "$app/state";
 import { getSandbag, updateSandbag } from "$lib/api";
 import { getAuthToken } from "$lib/auth.svelte";
 import { parseConfigFromParams } from "$lib/config";
 import { loadApp } from "$lib/registry";
 import type { SandbagApp } from "$lib/types";
-import { onDestroy, onMount } from "svelte";
 
 const sandbagId = $derived(page.params.id);
 const sandbag = $derived(getSandbag(sandbagId));
 
 // Document ID and app type can come from query params (shared link) or localStorage record
 const params = $derived(new URLSearchParams(page.url.search));
-const appType = $derived(
-	params.get("appType") ?? sandbag?.appType,
-);
+const appType = $derived(params.get("appType") ?? sandbag?.appType);
 const documentId = $derived(
 	params.get("documentId") ?? (sandbag?.documentId || undefined),
 );
@@ -58,14 +56,21 @@ onMount(async () => {
 		unmount = result.unmount;
 
 		// Persist documentId to localStorage if we have a record
-		if (sandbag && result.documentId && result.documentId !== sandbag.documentId) {
+		if (
+			sandbag &&
+			result.documentId &&
+			result.documentId !== sandbag.documentId
+		) {
 			updateSandbag(sandbagId, { documentId: result.documentId });
 		}
 
 		// Update URL with documentId and appType so the link is self-contained
 		const url = new URL(window.location.href);
 		let urlChanged = false;
-		if (result.documentId && url.searchParams.get("documentId") !== result.documentId) {
+		if (
+			result.documentId &&
+			url.searchParams.get("documentId") !== result.documentId
+		) {
 			url.searchParams.set("documentId", result.documentId);
 			urlChanged = true;
 		}

@@ -130,12 +130,15 @@ export class LeveeDocumentServiceFactory implements IDocumentServiceFactory {
 			this.debug,
 		);
 
-		// Build request body — include initial summary if provided so the server
-		// can persist the snapshot as git objects (blobs, trees, commit, ref).
-		// Without this, other clients cannot load the container.
-		const body: Record<string, unknown> = createNewSummary
-			? { summary: createNewSummary }
-			: {};
+		// Build request body — include the client-chosen document ID and the
+		// initial summary so the server can persist the snapshot as git objects
+		// (blobs, trees, commit, ref). Without the summary, other clients
+		// cannot load the container. Without the ID, the server generates a
+		// different one and the ref won't match what the client expects.
+		const body: Record<string, unknown> = {
+			...(leveeUrl.documentId ? { id: leveeUrl.documentId } : {}),
+			...(createNewSummary ? { summary: createNewSummary } : {}),
+		};
 
 		// Create document - server generates and returns the document ID
 		const documentId = await restWrapper.post<string>(
