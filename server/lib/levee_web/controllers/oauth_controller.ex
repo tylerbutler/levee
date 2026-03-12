@@ -136,7 +136,7 @@ defmodule LeveeWeb.OAuthController do
   defp handle_successful_auth(conn, auth) do
     # Extract fields from vestibule Auth record
     # Auth is a Gleam record: {:auth, uid, provider, info, credentials, extra}
-    {_tag, uid, _provider, info, _credentials, _extra} = auth
+    {_tag, uid, _provider, info, credentials, _extra} = auth
     github_id = uid
 
     # Extract user info from vestibule UserInfo record
@@ -146,7 +146,11 @@ defmodule LeveeWeb.OAuthController do
     display_name = unwrap_option(name) || github_username || ""
     email_str = unwrap_option(email) || ""
 
-    case check_github_allowed(github_username) do
+    # Extract access token from vestibule Credentials record
+    # Credentials: {:credentials, token, refresh_token, token_type, expires_at, scopes}
+    {_tag, access_token, _refresh, _type, _expires, _scopes} = credentials
+
+    case check_github_access(github_username, access_token) do
       :ok ->
         user =
           case GleamBridge.find_user_by_github_id(github_id) do
@@ -203,27 +207,50 @@ defmodule LeveeWeb.OAuthController do
     {"#{redirect_to}#{separator}token=#{token}", conn}
   end
 
-  # Check if a GitHub username is on the allow list.
-  # Returns :ok if allowed, :denied if not.
-  defp check_github_allowed(username) do
-    case Application.get_env(:levee, :github_allowed_users) do
-      nil ->
+  # Check if a GitHub user is allowed to log in based on username allow list
+  # and/or team membership. Uses OR logic: if either check passes, access is granted.
+  # If neither is configured, all users are allowed.
+  defp check_github_access(username, access_token) do
+    allowed_users = Application.get_env(:levee, :github_allowed_users)
+    allowed_teams = Application.get_env(:levee, :github_allowed_teams)
+
+    case {allowed_users, allowed_teams} do
+      {nil, nil} ->
+        # No restrictions configured, allow everyone
         :ok
 
-      [] ->
-        :denied
+      _ ->
+        user_result = check_github_allowed_users(username, allowed_users)
+        team_result = check_github_allowed_teams(access_token, username, allowed_teams)
 
-      allowed_users when is_list(allowed_users) ->
-        # GitHub usernames are case-insensitive, so we downcase both sides
-        # to avoid config mismatches (e.g. "TylerBu" vs "tylerbu").
-        downcased = String.downcase(username || "")
-
-        if Enum.any?(allowed_users, &(String.downcase(&1) == downcased)) do
+        if user_result == :ok or team_result == :ok do
           :ok
         else
           :denied
         end
     end
+  end
+
+  # Check if a GitHub username is on the allow list.
+  defp check_github_allowed_users(_username, nil), do: :denied
+  defp check_github_allowed_users(_username, []), do: :denied
+
+  defp check_github_allowed_users(username, allowed_users) when is_list(allowed_users) do
+    downcased = String.downcase(username || "")
+
+    if Enum.any?(allowed_users, &(String.downcase(&1) == downcased)) do
+      :ok
+    else
+      :denied
+    end
+  end
+
+  # Check if a GitHub user belongs to any of the allowed teams.
+  defp check_github_allowed_teams(_access_token, _username, nil), do: :denied
+  defp check_github_allowed_teams(_access_token, _username, []), do: :denied
+
+  defp check_github_allowed_teams(access_token, username, teams) when is_list(teams) do
+    Levee.Auth.GitHub.member_of_any_team?(access_token, username, teams)
   end
 
   # Gleam Option type: {:some, value} or :none

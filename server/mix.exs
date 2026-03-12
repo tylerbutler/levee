@@ -50,6 +50,8 @@ defmodule Levee.MixProject do
       {:jose, "~> 1.11"},
       # CORS support
       {:cors_plug, "~> 3.0"},
+      # HTTP client
+      {:req, "~> 0.5"},
       # Tenant ID generation
       {:unique_names_generator, "~> 0.2.0"}
     ]

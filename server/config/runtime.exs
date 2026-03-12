@@ -51,6 +51,29 @@ if allowed_users = System.get_env("GITHUB_ALLOWED_USERS") do
   end
 end
 
+# GitHub team allow list (comma-separated org/team-slug pairs).
+# Only users who belong to at least one listed team can log in via GitHub OAuth.
+# If both GITHUB_ALLOWED_USERS and GITHUB_ALLOWED_TEAMS are set,
+# a user is allowed if they match either check (OR logic).
+# Unset or empty = no team restriction.
+if allowed_teams = System.get_env("GITHUB_ALLOWED_TEAMS") do
+  teams =
+    allowed_teams
+    |> String.split(",")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.flat_map(fn entry ->
+      case String.split(entry, "/", parts: 2) do
+        [org, team] when org != "" and team != "" -> [{org, team}]
+        _ -> []
+      end
+    end)
+
+  if teams != [] do
+    config :levee, :github_allowed_teams, teams
+  end
+end
+
 if config_env() == :prod do
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you

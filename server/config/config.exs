@@ -14,7 +14,11 @@ config :levee,
   storage_backend: Levee.Storage.GleamETS,
   # GitHub username allow list for OAuth login. nil = allow all, [] = allow none.
   # Override via GITHUB_ALLOWED_USERS env var (comma-separated).
-  github_allowed_users: nil
+  github_allowed_users: nil,
+  # GitHub team allow list for OAuth login. nil = no team restriction.
+  # Override via GITHUB_ALLOWED_TEAMS env var (comma-separated org/team-slug pairs).
+  # If both allowed_users and allowed_teams are set, either check grants access (OR).
+  github_allowed_teams: nil
 
 # Configure the endpoint
 config :levee, LeveeWeb.Endpoint,
