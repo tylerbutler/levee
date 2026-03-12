@@ -108,6 +108,8 @@ export class LeveeUrlResolver implements IUrlResolver {
 				storageUrl: `${this.httpUrl}/repos/${tenantId}`,
 			},
 			tokens: {},
+			appName: request.headers?.["appName"] as string | undefined,
+			appVersion: request.headers?.["appVersion"] as string | undefined,
 		};
 
 		return resolvedUrl;
@@ -139,10 +141,16 @@ export class LeveeUrlResolver implements IUrlResolver {
 	 * @param tenantId - Optional tenant ID (uses default if not specified)
 	 * @returns A request object for creating a new document
 	 */
-	public createCreateNewRequest(tenantId?: string): IRequest {
+	public createCreateNewRequest(
+		tenantId?: string,
+		options?: { appName?: string; appVersion?: string },
+	): IRequest {
 		return {
 			url: `${this.httpUrl}/${tenantId ?? this.defaultTenantId}`,
-			headers: {},
+			headers: {
+				...(options?.appName ? { appName: options.appName } : {}),
+				...(options?.appVersion ? { appVersion: options.appVersion } : {}),
+			},
 		};
 	}
 

@@ -99,6 +99,8 @@ pub fn create_document(
   tenant_id: String,
   document_id: String,
   sequence_number: Int,
+  app_name: Option(String),
+  app_version: Option(String),
 ) -> Result(Document, StorageError) {
   let now = utc_now()
   let doc =
@@ -106,6 +108,8 @@ pub fn create_document(
       id: document_id,
       tenant_id: tenant_id,
       sequence_number: sequence_number,
+      app_name: app_name,
+      app_version: app_version,
       created_at: now,
       updated_at: now,
     )

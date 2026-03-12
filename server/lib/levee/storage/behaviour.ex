@@ -17,6 +17,8 @@ defmodule Levee.Storage.Behaviour do
           id: document_id(),
           tenant_id: tenant_id(),
           sequence_number: non_neg_integer(),
+          app_name: String.t() | nil,
+          app_version: String.t() | nil,
           created_at: DateTime.t(),
           updated_at: DateTime.t()
         }

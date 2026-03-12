@@ -18,7 +18,7 @@ const isLoginPage = $derived(page.url.pathname.endsWith("/login"));
 const isAppPage = $derived(page.url.pathname.includes("/apps/"));
 
 onMount(async () => {
-	// App pages (loaded in iframes) receive auth via URL params, skip guard
+	// App pages are standalone; auth is handled via URL params or localStorage
 	if (isAppPage) return;
 
 	await checkSession();

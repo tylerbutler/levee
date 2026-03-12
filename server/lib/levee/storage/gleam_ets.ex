@@ -94,8 +94,10 @@ defmodule Levee.Storage.GleamETS do
   @impl Levee.Storage.Behaviour
   def create_document(tenant_id, document_id, params) do
     sn = params[:sequence_number] || 0
+    app_name = wrap_option(params[:app_name])
+    app_version = wrap_option(params[:app_version])
 
-    case @gleam_ets.create_document(tables(), tenant_id, document_id, sn) do
+    case @gleam_ets.create_document(tables(), tenant_id, document_id, sn, app_name, app_version) do
       {:ok, doc} -> {:ok, @interop.document_to_map(doc)}
       {:error, :already_exists} -> {:error, :already_exists}
       {:error, reason} -> {:error, reason}
@@ -312,4 +314,8 @@ defmodule Levee.Storage.GleamETS do
       {:ok, summaries} -> {:ok, Enum.map(summaries, &@interop.summary_to_map/1)}
     end
   end
+
+  # Convert nil to Gleam's :none, non-nil to {:some, val}
+  defp wrap_option(nil), do: :none
+  defp wrap_option(val), do: {:some, val}
 end

@@ -75,11 +75,16 @@ export function createLeveeDriver(config: LeveeDriverConfig = {}) {
 	/**
 	 * Creates a request for a new document.
 	 */
-	function createCreateNewRequest(documentId: string): IRequest {
+	function createCreateNewRequest(
+		documentId: string,
+		options?: { appName?: string; appVersion?: string },
+	): IRequest {
 		return {
 			url: `${tenantId}/${documentId}`,
 			headers: {
 				createNew: true,
+				...(options?.appName ? { appName: options.appName } : {}),
+				...(options?.appVersion ? { appVersion: options.appVersion } : {}),
 			},
 		};
 	}

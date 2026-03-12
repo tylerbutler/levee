@@ -21,6 +21,8 @@ export interface MountConfig {
 	tenantKey?: string;
 	authToken?: string;
 	documentId?: string;
+	appName?: string;
+	appVersion?: string;
 }
 
 /**
@@ -70,6 +72,10 @@ export async function mount(
 		({ container } = await client.createContainer(
 			todoListContainerSchema,
 			"2",
+			{
+				...(config.appName ? { appName: config.appName } : {}),
+				...(config.appVersion ? { appVersion: config.appVersion } : {}),
+			},
 		));
 		documentId = await container.attach();
 	}

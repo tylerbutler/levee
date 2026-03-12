@@ -22,6 +22,8 @@ export interface MountConfig {
 	tenantKey?: string;
 	authToken?: string;
 	documentId?: string;
+	appName?: string;
+	appVersion?: string;
 }
 
 const containerSchema = {
@@ -108,7 +110,10 @@ export async function mount(
 		));
 	} else {
 		setStatus("Creating new container...");
-		({ container } = await client.createContainer(containerSchema, "2"));
+		({ container } = await client.createContainer(containerSchema, "2", {
+			...(config.appName ? { appName: config.appName } : {}),
+			...(config.appVersion ? { appVersion: config.appVersion } : {}),
+		}));
 		documentId = await container.attach();
 	}
 

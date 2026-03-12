@@ -188,6 +188,7 @@ export class LeveeClient {
 	public async createContainer<TContainerSchema extends ContainerSchema>(
 		containerSchema: TContainerSchema,
 		compatibilityMode: CompatibilityMode,
+		options?: { appName?: string; appVersion?: string },
 	): Promise<{
 		container: IFluidContainer<TContainerSchema>;
 		services: LeveeContainerServices;
@@ -214,7 +215,10 @@ export class LeveeClient {
 					"Cannot attach container. Container is not in detached state.",
 				);
 			}
-			const request = this.urlResolver.createCreateNewRequest();
+			const request = this.urlResolver.createCreateNewRequest(
+				undefined,
+				options,
+			);
 			await container.attach(request);
 			if (container.resolvedUrl === undefined) {
 				throw new Error("Resolved Url not available on attached container");

@@ -14,6 +14,41 @@ defmodule LeveeWeb.DocumentController do
   alias Levee.Documents.Registry
 
   @doc """
+  List all documents for a tenant.
+
+  GET /documents/:tenant_id
+  """
+  def index(conn, %{"tenant_id" => tenant_id}) do
+    case Storage.list_documents(tenant_id) do
+      {:ok, docs} ->
+        documents =
+          Enum.map(docs, fn doc ->
+            session_alive =
+              case Registry.get_session(tenant_id, doc.id) do
+                {:ok, _pid} -> true
+                _ -> false
+              end
+
+            %{
+              id: doc.id,
+              tenantId: doc.tenant_id,
+              sequenceNumber: doc.sequence_number,
+              appName: doc.app_name,
+              appVersion: doc.app_version,
+              sessionAlive: session_alive
+            }
+          end)
+
+        json(conn, %{documents: documents})
+
+      {:error, reason} ->
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{error: inspect(reason)})
+    end
+  end
+
+  @doc """
   Create a new document.
 
   POST /documents/:tenant_id
@@ -28,7 +63,13 @@ defmodule LeveeWeb.DocumentController do
     document_id = params["id"] || generate_document_id()
     sequence_number = params["sequenceNumber"] || 0
 
-    case Storage.create_document(tenant_id, document_id, %{sequence_number: sequence_number}) do
+    create_params = %{
+      sequence_number: sequence_number,
+      app_name: params["appName"],
+      app_version: params["appVersion"]
+    }
+
+    case Storage.create_document(tenant_id, document_id, create_params) do
       {:ok, _document} ->
         if summary = params["summary"] do
           process_initial_summary(tenant_id, document_id, summary)

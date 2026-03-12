@@ -138,6 +138,8 @@ export class LeveeDocumentServiceFactory implements IDocumentServiceFactory {
 		const body: Record<string, unknown> = {
 			...(leveeUrl.documentId ? { id: leveeUrl.documentId } : {}),
 			...(createNewSummary ? { summary: createNewSummary } : {}),
+			...(leveeUrl.appName ? { appName: leveeUrl.appName } : {}),
+			...(leveeUrl.appVersion ? { appVersion: leveeUrl.appVersion } : {}),
 		};
 
 		// Create document - server generates and returns the document ID

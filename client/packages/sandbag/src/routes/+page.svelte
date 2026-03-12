@@ -1,223 +1,182 @@
 <script lang="ts">
-import { base } from "$app/paths";
-import {
-	createSandbag,
-	deleteSandbag,
-	listSandbags,
-	type SandbagRecord,
-} from "$lib/api";
-import { type AppType, loadAllApps } from "$lib/registry";
+import { buildAppUrl } from "$lib/api";
+import { getAuthToken } from "$lib/auth.svelte";
+import { loadAllApps } from "$lib/registry";
 import type { SandbagApp } from "$lib/types";
 
-let showCreateDialog = $state(false);
-let newSandbagName = $state("");
-let selectedAppType = $state("dice-roller");
-let sandbags = $state<SandbagRecord[]>([]);
+interface Document {
+	id: string;
+	tenantId: string;
+	sequenceNumber: number;
+	sessionAlive: boolean;
+	appName: string | null;
+	appVersion: string | null;
+}
+
 let apps = $state<SandbagApp[]>([]);
+let documents = $state<Document[]>([]);
 let appsLoaded = $state(false);
+let docsLoading = $state(true);
+let docsError = $state<string | undefined>();
+
+/** Map from package name → app descriptor for reverse lookup. */
+let appsByPackage = $derived(new Map(apps.map((a) => [a.packageName, a])));
+
+function appForDocument(doc: Document): SandbagApp | undefined {
+	if (!doc.appName) return undefined;
+	return appsByPackage.get(doc.appName);
+}
 
 $effect(() => {
-	sandbags = listSandbags();
 	loadAllApps().then((loaded) => {
 		apps = loaded;
 		appsLoaded = true;
 	});
+	fetchDocuments();
 });
 
-function appInfo(type: string): SandbagApp | undefined {
-	return apps.find((a) => a.id === type);
-}
+async function fetchDocuments() {
+	const token = getAuthToken();
+	if (!token) {
+		docsLoading = false;
+		return;
+	}
 
-function handleCreate() {
-	if (!newSandbagName.trim()) return;
-	createSandbag(newSandbagName.trim(), selectedAppType);
-	sandbags = listSandbags();
-	newSandbagName = "";
-	showCreateDialog = false;
-}
-
-function handleDelete(id: string) {
-	deleteSandbag(id);
-	sandbags = listSandbags();
+	try {
+		const res = await fetch(`/api/documents/sandbag`, {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+		if (!res.ok) {
+			docsError = `Failed to load documents (${res.status})`;
+			docsLoading = false;
+			return;
+		}
+		const data = (await res.json()) as { documents: Document[] };
+		documents = data.documents;
+	} catch (err) {
+		docsError = err instanceof Error ? err.message : String(err);
+	}
+	docsLoading = false;
 }
 </script>
 
 <div class="dashboard">
 	<div class="dashboard-header">
 		<h1>Sandbags</h1>
-		<button class="btn-primary" onclick={() => (showCreateDialog = true)}>
-			+ New Sandbag
-		</button>
 	</div>
 
-	{#if sandbags.length === 0}
-		<div class="empty-state">
-			<div class="empty-icon">🏖️</div>
-			<h2>No sandbags yet</h2>
-			<p>Create your first sandbag to start testing collaborative apps.</p>
-			<button class="btn-primary" onclick={() => (showCreateDialog = true)}>
-				Create a Sandbag
-			</button>
-		</div>
-	{:else}
-		<div class="sandbag-grid">
-			{#each sandbags as sandbag (sandbag.id)}
-				{@const info = appInfo(sandbag.appType)}
-				<div class="sandbag-card">
-					<div class="card-header">
-						<span class="card-icon">{info?.icon ?? "📦"}</span>
-						<span class="card-type">{info?.label ?? sandbag.appType}</span>
-					</div>
-					<h3 class="card-name">{sandbag.name}</h3>
-					<p class="card-meta">
-						Created {new Date(sandbag.createdAt).toLocaleDateString()}
-					</p>
-					<div class="card-actions">
-						<a href="{base}/sandbag/{sandbag.id}" class="btn-primary">
-							Open
-						</a>
-						<button
-							class="btn-danger"
-							onclick={() => handleDelete(sandbag.id)}
-						>
-							Delete
-						</button>
-					</div>
-				</div>
-			{/each}
-		</div>
-	{/if}
-
-	{#if showCreateDialog && appsLoaded}
-		<!-- svelte-ignore a11y_click_events_have_key_events -->
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="dialog-overlay" onclick={() => (showCreateDialog = false)}>
-			<div class="dialog" onclick={(e) => e.stopPropagation()}>
-				<h2>Create a new Sandbag</h2>
-
-				<label class="field">
-					<span>Name</span>
-					<input
-						type="text"
-						bind:value={newSandbagName}
-						placeholder="My test sandbag"
-					/>
-				</label>
-
-				<fieldset class="field">
-					<legend>App Type</legend>
-					<div class="app-type-grid">
-						{#each apps as app}
-							<label
-								class="app-type-option"
-								class:selected={selectedAppType === app.id}
-							>
-								<input
-									type="radio"
-									name="appType"
-									value={app.id}
-									bind:group={selectedAppType}
-								/>
-								<span class="app-type-icon">{app.icon}</span>
-								<span class="app-type-label">{app.label}</span>
-								<span class="app-type-desc">{app.description}</span>
-							</label>
-						{/each}
-					</div>
-				</fieldset>
-
-				<div class="dialog-actions">
-					<button
-						class="btn-outline"
-						onclick={() => (showCreateDialog = false)}
-					>
-						Cancel
-					</button>
-					<button class="btn-primary" onclick={handleCreate}>
-						Create
-					</button>
-				</div>
+	<section>
+		<h2>New</h2>
+		{#if !appsLoaded}
+			<div class="loading">Loading apps…</div>
+		{:else}
+			<div class="app-grid">
+				{#each apps as app (app.id)}
+					<a href={buildAppUrl(app.id)} class="app-card">
+						<span class="card-icon">{app.icon}</span>
+						<h3 class="card-name">{app.label}</h3>
+						<p class="card-desc">{app.description}</p>
+					</a>
+				{/each}
 			</div>
-		</div>
-	{/if}
+		{/if}
+	</section>
+
+	<section>
+		<h2>Documents</h2>
+		{#if docsLoading}
+			<div class="loading">Loading documents…</div>
+		{:else if docsError}
+			<div class="error">{docsError}</div>
+		{:else if documents.length === 0}
+			<p class="empty">No documents yet. Create one by selecting an app above.</p>
+		{:else}
+			<div class="doc-list">
+				{#each documents as doc (doc.id)}
+					{@const app = appForDocument(doc)}
+					<div class="doc-row">
+						{#if app}
+							<a href={buildAppUrl(app.id, doc.id)} class="doc-link" title="Open as {app.label}">
+								<span class="doc-icon">{app.icon}</span>
+								<span class="doc-id">{doc.id}</span>
+							</a>
+						{:else}
+							<span class="doc-icon">📄</span>
+							<span class="doc-id">{doc.id}</span>
+						{/if}
+						<span class="doc-app-name">{app?.label ?? doc.appName ?? "Unknown"}</span>
+						<span class="doc-seq">seq {doc.sequenceNumber}</span>
+						{#if doc.sessionAlive}
+							<span class="doc-status active">active</span>
+						{:else}
+							<span class="doc-status">idle</span>
+						{/if}
+					</div>
+				{/each}
+			</div>
+		{/if}
+	</section>
 </div>
 
 <style>
 	.dashboard {
 		display: flex;
 		flex-direction: column;
-		gap: 1.5rem;
-	}
-
-	.dashboard-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
+		gap: 2rem;
 	}
 
 	.dashboard-header h1 {
 		font-size: 1.75rem;
 	}
 
-	.empty-state {
-		text-align: center;
-		padding: 4rem 2rem;
-		background: var(--color-surface);
-		border-radius: var(--radius);
-		border: 1px solid var(--color-border);
-	}
-
-	.empty-icon {
-		font-size: 3rem;
-		margin-bottom: 1rem;
-	}
-
-	.empty-state h2 {
-		margin-bottom: 0.5rem;
+	section h2 {
+		font-size: 1.25rem;
+		margin-bottom: 0.75rem;
 		color: var(--color-text);
 	}
 
-	.empty-state p {
+	.loading {
+		text-align: center;
+		padding: 2rem;
 		color: var(--color-text-muted);
-		margin-bottom: 1.5rem;
 	}
 
-	.sandbag-grid {
+	.error {
+		color: #dc2626;
+		padding: 1rem;
+	}
+
+	.empty {
+		color: var(--color-text-muted);
+		padding: 1rem 0;
+	}
+
+	.app-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+		grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
 		gap: 1rem;
 	}
 
-	.sandbag-card {
+	.app-card {
 		background: var(--color-surface);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius);
 		padding: 1.25rem;
 		box-shadow: var(--shadow);
 		transition: box-shadow 0.15s;
+		text-decoration: none;
+		color: inherit;
+		display: block;
 	}
 
-	.sandbag-card:hover {
+	.app-card:hover {
 		box-shadow: var(--shadow-md);
 	}
 
-	.card-header {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		margin-bottom: 0.75rem;
-	}
-
 	.card-icon {
-		font-size: 1.25rem;
-	}
-
-	.card-type {
-		font-size: 0.75rem;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: var(--color-text-muted);
-		font-weight: 600;
+		font-size: 2rem;
+		display: block;
+		margin-bottom: 0.75rem;
 	}
 
 	.card-name {
@@ -225,128 +184,74 @@ function handleDelete(id: string) {
 		margin-bottom: 0.25rem;
 	}
 
-	.card-meta {
+	.card-desc {
 		font-size: 0.8125rem;
 		color: var(--color-text-muted);
-		margin-bottom: 1rem;
 	}
 
-	.card-actions {
+	.doc-list {
 		display: flex;
-		gap: 0.5rem;
+		flex-direction: column;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius);
+		overflow: hidden;
 	}
 
-	.card-actions a {
+	.doc-row {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		padding: 0.75rem 1rem;
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.doc-row:last-child {
+		border-bottom: none;
+	}
+
+	.doc-id {
+		font-family: monospace;
+		font-size: 0.875rem;
+	}
+
+	.doc-seq {
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+	}
+
+	.doc-status {
+		font-size: 0.75rem;
+		padding: 0.125rem 0.5rem;
+		border-radius: 9999px;
+		background: var(--color-bg);
+		color: var(--color-text-muted);
+	}
+
+	.doc-status.active {
+		background: #dcfce7;
+		color: #166534;
+	}
+
+	.doc-link {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 		text-decoration: none;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		padding: 0.5rem 1rem;
-		border-radius: var(--radius);
-		font-size: 0.875rem;
-		font-weight: 500;
+		color: inherit;
 	}
 
-	.dialog-overlay {
-		position: fixed;
-		inset: 0;
-		background: rgba(0, 0, 0, 0.4);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 100;
+	.doc-link:hover .doc-id {
+		text-decoration: underline;
 	}
 
-	.dialog {
-		background: var(--color-surface);
-		border-radius: var(--radius);
-		padding: 1.5rem;
-		width: 90%;
-		max-width: 500px;
-		box-shadow: var(--shadow-md);
+	.doc-icon {
+		font-size: 1.25rem;
+		flex-shrink: 0;
 	}
 
-	.dialog h2 {
-		margin-bottom: 1.25rem;
-	}
-
-	.field {
-		display: flex;
-		flex-direction: column;
-		gap: 0.375rem;
-		margin-bottom: 1rem;
-		border: none;
-		padding: 0;
-	}
-
-	.field span,
-	.field legend {
-		font-size: 0.875rem;
-		font-weight: 500;
-		color: var(--color-text);
-	}
-
-	.field input[type="text"] {
-		padding: 0.5rem 0.75rem;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius);
-		font-size: 0.9375rem;
-	}
-
-	.app-type-grid {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		margin-top: 0.25rem;
-	}
-
-	.app-type-option {
-		display: grid;
-		grid-template-columns: auto auto 1fr;
-		grid-template-rows: auto auto;
-		gap: 0 0.5rem;
-		padding: 0.75rem;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius);
-		cursor: pointer;
-		transition: border-color 0.15s;
-	}
-
-	.app-type-option:hover {
-		border-color: var(--color-primary);
-	}
-
-	.app-type-option.selected {
-		border-color: var(--color-primary);
-		background: #eff6ff;
-	}
-
-	.app-type-option input[type="radio"] {
-		display: none;
-	}
-
-	.app-type-icon {
-		grid-row: 1 / 3;
-		font-size: 1.5rem;
-		display: flex;
-		align-items: center;
-	}
-
-	.app-type-label {
-		font-weight: 600;
-		font-size: 0.9375rem;
-	}
-
-	.app-type-desc {
-		grid-column: 2 / 4;
-		font-size: 0.8125rem;
+	.doc-app-name {
+		font-size: 0.75rem;
 		color: var(--color-text-muted);
-	}
-
-	.dialog-actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: 0.5rem;
-		margin-top: 1.5rem;
+		margin-left: auto;
 	}
 </style>

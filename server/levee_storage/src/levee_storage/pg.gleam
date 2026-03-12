@@ -30,16 +30,20 @@ pub fn create_document(
   tenant_id: String,
   document_id: String,
   sequence_number: Int,
+  app_name: Option(String),
+  app_version: Option(String),
 ) -> Result(Document, StorageError) {
   let result =
     pog.query(
-      "INSERT INTO documents (tenant_id, id, sequence_number)
-       VALUES ($1, $2, $3)
-       RETURNING id, tenant_id, sequence_number, created_at, updated_at",
+      "INSERT INTO documents (tenant_id, id, sequence_number, app_name, app_version)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, tenant_id, sequence_number, app_name, app_version, created_at, updated_at",
     )
     |> pog.parameter(pog.text(tenant_id))
     |> pog.parameter(pog.text(document_id))
     |> pog.parameter(pog.int(sequence_number))
+    |> pog.parameter(pog.nullable(pog.text, app_name))
+    |> pog.parameter(pog.nullable(pog.text, app_version))
     |> pog.returning(document_decoder())
     |> pog.execute(conn)
 
@@ -58,7 +62,7 @@ pub fn get_document(
 ) -> Result(Document, StorageError) {
   let result =
     pog.query(
-      "SELECT id, tenant_id, sequence_number, created_at, updated_at
+      "SELECT id, tenant_id, sequence_number, app_name, app_version, created_at, updated_at
        FROM documents WHERE tenant_id = $1 AND id = $2",
     )
     |> pog.parameter(pog.text(tenant_id))
@@ -104,12 +108,16 @@ fn document_decoder() -> decode.Decoder(Document) {
   use id <- decode.field(0, decode.string)
   use tid <- decode.field(1, decode.string)
   use sn <- decode.field(2, decode.int)
-  use created <- decode.field(3, decode.dynamic)
-  use updated <- decode.field(4, decode.dynamic)
+  use app_name <- decode.field(3, decode.optional(decode.string))
+  use app_version <- decode.field(4, decode.optional(decode.string))
+  use created <- decode.field(5, decode.dynamic)
+  use updated <- decode.field(6, decode.dynamic)
   decode.success(Document(
     id:,
     tenant_id: tid,
     sequence_number: sn,
+    app_name:,
+    app_version:,
     created_at: pg_timestamp_to_datetime(created),
     updated_at: pg_timestamp_to_datetime(updated),
   ))

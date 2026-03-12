@@ -1,27 +1,50 @@
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
+import { goto } from "$app/navigation";
+import { base } from "$app/paths";
 import { page } from "$app/state";
+import { getAuthToken } from "$lib/auth.svelte";
 import { parseConfigFromParams } from "$lib/config";
 import { loadApp } from "$lib/registry";
+
+const appType = $derived(page.params.type);
+const documentId = $derived(page.params.documentId);
 
 let container: HTMLDivElement;
 let unmount: (() => void) | undefined;
 let error = $state<string | undefined>();
 let loading = $state(true);
 
-const appType = $derived(page.params.type);
-
 onMount(async () => {
-	const config = parseConfigFromParams(new URLSearchParams(page.url.search));
+	const params = new URLSearchParams(page.url.search);
+	const baseConfig = parseConfigFromParams(params);
+	const authToken = params.get("authToken") ?? getAuthToken();
+
 	try {
-		const app = await loadApp(appType);
+		const app = await loadApp(appType!);
 		if (!app) {
 			error = `Unknown app type: ${appType}`;
 			loading = false;
 			return;
 		}
+
+		const config = {
+			...baseConfig,
+			...(authToken ? { authToken } : {}),
+			...(documentId ? { documentId } : {}),
+			appName: app.packageName,
+			appVersion: app.packageVersion,
+		};
+
 		const result = await app.mount(container, config);
 		unmount = result.unmount;
+
+		// After creating a new document, put the documentId in the URL
+		if (result.documentId && result.documentId !== documentId) {
+			await goto(`${base}/apps/${appType}/${result.documentId}`, {
+				replaceState: true,
+			});
+		}
 	} catch (err) {
 		error = err instanceof Error ? err.message : String(err);
 	}

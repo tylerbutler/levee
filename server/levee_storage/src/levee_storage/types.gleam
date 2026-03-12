@@ -15,6 +15,8 @@ pub type Document {
     id: String,
     tenant_id: String,
     sequence_number: Int,
+    app_name: Option(String),
+    app_version: Option(String),
     created_at: Dynamic,
     updated_at: Dynamic,
   )

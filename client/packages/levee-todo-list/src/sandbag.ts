@@ -5,5 +5,7 @@ export default {
 	label: "Todo List",
 	icon: "✅",
 	description: "Collaborative todo list with SharedTree",
+	packageName: "@tylerbu/levee-todo-list",
+	packageVersion: "0.0.1",
 	mount,
 };

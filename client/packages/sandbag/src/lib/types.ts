@@ -13,6 +13,10 @@ export interface SandbagApp {
 	icon: string;
 	/** Short description */
 	description: string;
+	/** Package name from package.json, e.g., "@tylerbu/levee-example" */
+	packageName: string;
+	/** Package version from package.json */
+	packageVersion: string;
 	/** Mount the app into a DOM element. Returns cleanup + the created documentId. */
 	mount: (
 		element: HTMLElement,
@@ -27,6 +31,8 @@ export interface SandbagMountConfig {
 	tenantId?: string;
 	authToken?: string;
 	documentId?: string;
+	appName?: string;
+	appVersion?: string;
 }
 
 export interface SandbagMountResult {

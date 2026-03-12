@@ -27,8 +27,9 @@ get_key(Map, AtomKey) ->
 
 %% --- Gleam type → atom-keyed map ---
 
-document_to_map({document, Id, TenantId, Sn, CreatedAt, UpdatedAt}) ->
+document_to_map({document, Id, TenantId, Sn, AppName, AppVersion, CreatedAt, UpdatedAt}) ->
     #{id => Id, tenant_id => TenantId, sequence_number => Sn,
+      app_name => unwrap_option(AppName), app_version => unwrap_option(AppVersion),
       created_at => CreatedAt, updated_at => UpdatedAt}.
 
 delta_to_map({delta, Sn, ClientId, Csn, Rsn, Msn, Type, Contents, Metadata, Ts}) ->

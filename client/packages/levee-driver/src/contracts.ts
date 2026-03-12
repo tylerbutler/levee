@@ -62,6 +62,16 @@ export interface LeveeResolvedUrl extends IResolvedUrl {
 	 * JWT tokens for authentication.
 	 */
 	tokens: { [scope: string]: string };
+
+	/**
+	 * Name of the app that created this document (e.g., package name).
+	 */
+	appName?: string;
+
+	/**
+	 * Version of the app that created this document.
+	 */
+	appVersion?: string;
 }
 
 /**

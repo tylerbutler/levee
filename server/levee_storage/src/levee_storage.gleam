@@ -74,8 +74,17 @@ pub fn ets_create_document(
   tenant_id: String,
   document_id: String,
   sequence_number: Int,
+  app_name: Option(String),
+  app_version: Option(String),
 ) -> Result(Document, StorageError) {
-  ets.create_document(tables, tenant_id, document_id, sequence_number)
+  ets.create_document(
+    tables,
+    tenant_id,
+    document_id,
+    sequence_number,
+    app_name,
+    app_version,
+  )
 }
 
 pub fn ets_get_document(

@@ -159,6 +159,13 @@ defmodule LeveeWeb.Router do
     post "/:tenant_id/token-mint", TokenMintController, :create
   end
 
+  # Document listing (requires valid session, any user)
+  scope "/api/documents", LeveeWeb do
+    pipe_through [:api, :session_auth]
+
+    get "/:tenant_id", DocumentController, :index
+  end
+
   # Session-auth admin routes (for admin UI SPA)
   pipeline :admin_session do
     plug :accepts, ["json"]

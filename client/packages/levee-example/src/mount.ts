@@ -22,6 +22,8 @@ export interface MountConfig {
 	authToken?: string;
 	tenantId?: string;
 	documentId?: string;
+	appName?: string;
+	appVersion?: string;
 }
 
 /**
@@ -57,7 +59,10 @@ export async function mount(
 		container = await loader.resolve(request);
 	} else {
 		documentId = generateDocumentId();
-		const request = driver.createCreateNewRequest(documentId);
+		const request = driver.createCreateNewRequest(documentId, {
+			appName: config.appName,
+			appVersion: config.appVersion,
+		});
 		container = await loader.createDetachedContainer(
 			DiceRollerContainerCodeDetails,
 		);
