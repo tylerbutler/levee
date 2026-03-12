@@ -42,7 +42,9 @@ describe.runIf(serverAvailable)("LeveeClient Integration", () => {
 	describe("createContainer", () => {
 		it(
 			"creates a detached container and attaches it",
-			{ timeout: 30_000 },
+			{
+				timeout: 30_000,
+			},
 			async () => {
 				const { container, services } = await client.createContainer(
 					testSchema,
@@ -68,7 +70,9 @@ describe.runIf(serverAvailable)("LeveeClient Integration", () => {
 
 		it(
 			"container has initialObjects from schema",
-			{ timeout: 30_000 },
+			{
+				timeout: 30_000,
+			},
 			async () => {
 				const { container } = await client.createContainer(testSchema, "2");
 				containersToDispose.push(container);
@@ -120,7 +124,9 @@ describe.runIf(serverAvailable)("LeveeClient Integration", () => {
 
 		it(
 			"loaded container has initialObjects accessible",
-			{ timeout: 30_000 },
+			{
+				timeout: 30_000,
+			},
 			async () => {
 				const { container: created } = await client.createContainer(
 					testSchema,
@@ -146,7 +152,9 @@ describe.runIf(serverAvailable)("LeveeClient Integration", () => {
 	describe("data round-trip", () => {
 		it(
 			"create -> set value -> attach -> load -> verify value",
-			{ timeout: 45_000 },
+			{
+				timeout: 45_000,
+			},
 			async () => {
 				// Create container and set data
 				const { container: created } = await client.createContainer(

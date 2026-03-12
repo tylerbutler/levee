@@ -3,6 +3,7 @@ defmodule Levee.Auth.SessionStoreSupervisor do
   Starts and registers the Gleam session store actor.
 
   Holds the actor Subject so Elixir callers can access it via `get_actor/0`.
+  The session store persists data to DETS files in the configured data directory.
   """
   use GenServer
 
@@ -21,7 +22,10 @@ defmodule Levee.Auth.SessionStoreSupervisor do
 
   @impl true
   def init(_) do
-    case :session_store.start() do
+    data_dir = data_dir()
+    File.mkdir_p!(data_dir)
+
+    case :session_store.start(data_dir) do
       {:ok, actor} -> {:ok, actor}
       {:error, reason} -> {:stop, reason}
     end
@@ -30,5 +34,13 @@ defmodule Levee.Auth.SessionStoreSupervisor do
   @impl true
   def handle_call(:get_actor, _from, actor) do
     {:reply, actor, actor}
+  end
+
+  defp data_dir do
+    Application.get_env(:levee, :auth_data_dir, default_data_dir())
+  end
+
+  defp default_data_dir do
+    Path.join(File.cwd!(), "priv/storage/auth")
   end
 end

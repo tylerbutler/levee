@@ -11,6 +11,7 @@ gleam_time = ">= 1.0.0 and < 2.0.0"
 gleam_otp = ">= 0.14.0 and < 2.0.0"
 gleam_erlang = ">= 0.34.0 and < 2.0.0"
 youid = ">= 1.0.0 and < 2.0.0"
+shelf = { git = "https://github.com/tylerbutler/shelf", ref = "3a756bfca128b8f05f43ff7b4e85bac454e207dd" }
 
 [dev-dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"
