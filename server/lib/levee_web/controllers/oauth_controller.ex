@@ -168,6 +168,16 @@ defmodule LeveeWeb.OAuthController do
               new_user
           end
 
+        # Ensure user has membership in the sandbag tenant
+        case GleamBridge.get_membership(user.id, "sandbag") do
+          {:ok, _} ->
+            :ok
+
+          :error ->
+            membership = GleamBridge.create_membership(user.id, "sandbag", "editor")
+            GleamBridge.store_membership(membership)
+        end
+
         session = GleamBridge.create_session(user.id, nil)
         GleamBridge.store_session(session)
 
