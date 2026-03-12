@@ -399,6 +399,39 @@ defmodule Levee.Auth.GleamBridge do
     end
   end
 
+  @doc """
+  Auto-add a user as a `:member` of every registered tenant.
+
+  **This intentionally breaks tenant isolation.** Levee is a testing and
+  development service where any authenticated user should be able to create
+  and join documents in any tenant (e.g. the Sandbag testing hub). In a
+  production multi-tenant system you would use invites or explicit membership
+  grants instead.
+
+  Set `LEVEE_DISABLE_AUTO_MEMBERSHIP=true` to disable this behaviour and
+  require explicit tenant membership.
+  """
+  def ensure_membership_in_all_tenants(user_id) do
+    if auto_membership_enabled?() do
+      Levee.Auth.TenantSecrets.list_tenants()
+      |> Enum.each(fn tenant_id ->
+        case get_membership(user_id, tenant_id) do
+          {:ok, _} -> :ok
+
+          :error ->
+            membership = create_membership(user_id, tenant_id, :member)
+            store_membership(membership)
+        end
+      end)
+    end
+
+    :ok
+  end
+
+  defp auto_membership_enabled? do
+    System.get_env("LEVEE_DISABLE_AUTO_MEMBERSHIP") not in ["true", "1"]
+  end
+
   # ─────────────────────────────────────────────────────────────────────────────
   # Scope Functions
   # ─────────────────────────────────────────────────────────────────────────────

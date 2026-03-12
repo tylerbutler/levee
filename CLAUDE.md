@@ -251,6 +251,7 @@ GET    /admin/*path                       SPA catch-all
 |----------|---------|
 | `LEVEE_TENANT_ID` | Auto-register tenant at startup |
 | `LEVEE_TENANT_KEY` | Secret for auto-registered tenant |
+| `LEVEE_DISABLE_AUTO_MEMBERSHIP` | Set `true` to disable auto-adding users to all tenants on login |
 | `SECRET_KEY_BASE` | Phoenix secret (production) |
 | `PHX_HOST` | Host for production |
 | `PORT` | HTTP port (default: 4000) |

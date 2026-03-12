@@ -171,6 +171,8 @@ defmodule LeveeWeb.OAuthController do
         session = GleamBridge.create_session(user.id, nil)
         GleamBridge.store_session(session)
 
+        GleamBridge.ensure_membership_in_all_tenants(user.id)
+
         {redirect_url, conn} = get_redirect_url(conn, session.id)
 
         conn

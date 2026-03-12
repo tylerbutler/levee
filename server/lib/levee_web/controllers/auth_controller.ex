@@ -30,6 +30,8 @@ defmodule LeveeWeb.AuthController do
         session = GleamBridge.create_session(user.id, nil)
         GleamBridge.store_session(session)
 
+        GleamBridge.ensure_membership_in_all_tenants(user.id)
+
         conn
         |> put_status(:created)
         |> json(%{
@@ -81,6 +83,8 @@ defmodule LeveeWeb.AuthController do
       {%{} = user, true} ->
         session = GleamBridge.create_session(user.id, nil)
         GleamBridge.store_session(session)
+
+        GleamBridge.ensure_membership_in_all_tenants(user.id)
 
         conn
         |> put_status(:ok)
