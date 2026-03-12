@@ -6,10 +6,12 @@
  */
 
 import type { IRequest } from "@fluidframework/core-interfaces/legacy";
+import type { TokenProvider } from "@tylerbu/levee-driver";
 import {
 	InsecureLeveeTokenProvider,
 	LeveeDocumentServiceFactory,
 	LeveeUrlResolver,
+	RemoteLeveeTokenProvider,
 } from "@tylerbu/levee-driver";
 
 // Default configuration for local development
@@ -26,8 +28,10 @@ export interface LeveeDriverConfig {
 	httpUrl?: string;
 	/** WebSocket URL of the Levee server */
 	socketUrl?: string;
-	/** Tenant secret key for authentication */
+	/** Tenant secret key for authentication (dev only) */
 	tenantKey?: string;
+	/** Session auth token (overrides tenantKey) */
+	authToken?: string;
 	/** Tenant ID */
 	tenantId?: string;
 	/** User information */
@@ -43,15 +47,24 @@ export interface LeveeDriverConfig {
 export function createLeveeDriver(config: LeveeDriverConfig = {}) {
 	const httpUrl = config.httpUrl ?? DEFAULT_HTTP_URL;
 	const socketUrl = config.socketUrl ?? DEFAULT_SOCKET_URL;
-	const tenantKey = config.tenantKey ?? DEFAULT_TENANT_KEY;
 	const tenantId = config.tenantId ?? DEFAULT_TENANT_ID;
 	const user = config.user ?? {
 		id: `user-${Date.now()}`,
 		name: "Anonymous User",
 	};
 
-	// Create token provider for authentication
-	const tokenProvider = new InsecureLeveeTokenProvider(tenantKey, user);
+	// Create token provider: prefer authToken (remote), fall back to tenantKey (insecure)
+	let tokenProvider: TokenProvider;
+	if (config.authToken) {
+		tokenProvider = new RemoteLeveeTokenProvider(
+			`${httpUrl}/api/tenants/${tenantId}/token-mint`,
+			user,
+			config.authToken,
+		);
+	} else {
+		const tenantKey = config.tenantKey ?? DEFAULT_TENANT_KEY;
+		tokenProvider = new InsecureLeveeTokenProvider(tenantKey, user);
+	}
 
 	// Create URL resolver
 	const urlResolver = new LeveeUrlResolver(socketUrl, httpUrl);

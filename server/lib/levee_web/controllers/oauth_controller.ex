@@ -8,11 +8,20 @@ defmodule LeveeWeb.OAuthController do
   @doc """
   Phase 1: Redirect the user to the OAuth provider's authorization page.
   """
-  def request(conn, %{"provider" => provider}) do
+  def request(conn, %{"provider" => provider} = params) do
     actor = Levee.OAuth.StateStoreSupervisor.get_actor()
 
     case :levee_oauth.begin_auth(provider, actor) do
       {:ok, url} ->
+        conn =
+          case params["redirect_url"] do
+            nil ->
+              conn
+
+            redirect_url ->
+              put_resp_cookie(conn, "oauth_redirect_url", redirect_url, max_age: 600)
+          end
+
         redirect(conn, external: url)
 
       {:error, {:unknown_provider, _name}} ->
@@ -162,20 +171,36 @@ defmodule LeveeWeb.OAuthController do
         session = GleamBridge.create_session(user.id, nil)
         GleamBridge.store_session(session)
 
-        redirect_url = get_redirect_url(conn, session.id)
-        redirect(conn, external: redirect_url)
+        {redirect_url, conn} = get_redirect_url(conn, session.id)
+
+        conn
+        |> delete_resp_cookie("oauth_redirect_url")
+        |> redirect(external: redirect_url)
 
       :denied ->
         require Logger
         Logger.warning("GitHub login denied for user not on allow list: #{github_username}")
-        redirect(conn, to: "/admin?error=not_authorized")
+        {base_url, conn} = get_redirect_url(conn, "")
+        # Strip the empty token param and add error instead
+        error_url =
+          base_url
+          |> String.replace(~r/[?&]token=$/, "")
+          |> then(fn url ->
+            separator = if String.contains?(url, "?"), do: "&", else: "?"
+            "#{url}#{separator}error=not_authorized"
+          end)
+
+        conn
+        |> delete_resp_cookie("oauth_redirect_url")
+        |> redirect(to: error_url)
     end
   end
 
   defp get_redirect_url(conn, token) do
-    redirect_to = conn.params["redirect_url"] || "/admin"
+    conn = fetch_cookies(conn)
+    redirect_to = conn.cookies["oauth_redirect_url"] || "/admin"
     separator = if String.contains?(redirect_to, "?"), do: "&", else: "?"
-    "#{redirect_to}#{separator}token=#{token}"
+    {"#{redirect_to}#{separator}token=#{token}", conn}
   end
 
   # Check if a GitHub username is on the allow list.

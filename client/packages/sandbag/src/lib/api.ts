@@ -76,10 +76,17 @@ export function deleteSandbag(id: string): void {
  * Build the iframe URL for a given app type, pointing to the
  * SvelteKit app page under /sandbag/apps/{type}.
  */
-export function buildAppUrl(appType: string, documentId?: string): string {
+export function buildAppUrl(
+	appType: string,
+	documentId?: string,
+	authToken?: string,
+): string {
 	const params = new URLSearchParams();
 	if (documentId) {
 		params.set("documentId", documentId);
+	}
+	if (authToken) {
+		params.set("authToken", authToken);
 	}
 	const query = params.toString();
 	return `${base}/apps/${appType}${query ? `?${query}` : ""}`;

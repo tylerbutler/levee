@@ -2,15 +2,14 @@ export interface LeveeConfig {
 	httpUrl: string;
 	socketUrl: string;
 	tenantId: string;
-	tenantKey: string;
+	authToken?: string;
 	documentId?: string;
 }
 
-const defaults: Omit<LeveeConfig, "documentId"> = {
+const defaults = {
 	httpUrl: "http://localhost:4000",
 	socketUrl: "ws://localhost:4000/socket",
 	tenantId: "sandbag",
-	tenantKey: "dev-tenant-secret-key",
 };
 
 /**
@@ -21,7 +20,7 @@ export function parseConfigFromParams(params: URLSearchParams): LeveeConfig {
 		httpUrl: params.get("httpUrl") ?? defaults.httpUrl,
 		socketUrl: params.get("socketUrl") ?? defaults.socketUrl,
 		tenantId: params.get("tenantId") ?? defaults.tenantId,
-		tenantKey: params.get("tenantKey") ?? defaults.tenantKey,
+		authToken: params.get("authToken") ?? undefined,
 		documentId: params.get("documentId") ?? undefined,
 	};
 }
