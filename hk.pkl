@@ -38,10 +38,11 @@ local client_linters = new Mapping<String, Step> {
 }
 
 // Full test suite (slower, for pre-push or manual checks)
+// Note: mix test runs the full suite (no {{files}} template), so batch must be
+// false to avoid launching parallel instances that fight over DETS table files.
 local test_linters = new Mapping<String, Step> {
     ["mix_test"] {
         glob = "server/**/*.ex"
-        batch = true
         check = "cd server && mix test"
     }
 }
@@ -97,7 +98,6 @@ hooks {
             ...config_linters
             ["mix_test"] {
                 glob = "server/**/*.ex"
-                batch = true
                 check = "cd server && mix test"
                 profiles = List("slow")
             }
