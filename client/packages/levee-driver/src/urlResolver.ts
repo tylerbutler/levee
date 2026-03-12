@@ -143,13 +143,13 @@ export class LeveeUrlResolver implements IUrlResolver {
 	 */
 	public createCreateNewRequest(
 		tenantId?: string,
-		options?: { appName?: string; appVersion?: string },
+		options?: { appName?: string | undefined; appVersion?: string | undefined },
 	): IRequest {
 		return {
 			url: `${this.httpUrl}/${tenantId ?? this.defaultTenantId}`,
 			headers: {
-				...(options?.appName ? { appName: options.appName } : {}),
-				...(options?.appVersion ? { appVersion: options.appVersion } : {}),
+				appName: options?.appName,
+				appVersion: options?.appVersion,
 			},
 		};
 	}

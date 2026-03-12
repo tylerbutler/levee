@@ -73,8 +73,8 @@ export async function mount(
 			todoListContainerSchema,
 			"2",
 			{
-				...(config.appName ? { appName: config.appName } : {}),
-				...(config.appVersion ? { appVersion: config.appVersion } : {}),
+				appName: config.appName,
+				appVersion: config.appVersion,
 			},
 		));
 		documentId = await container.attach();

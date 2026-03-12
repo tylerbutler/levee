@@ -136,10 +136,10 @@ export class LeveeDocumentServiceFactory implements IDocumentServiceFactory {
 		// cannot load the container. Without the ID, the server generates a
 		// different one and the ref won't match what the client expects.
 		const body: Record<string, unknown> = {
-			...(leveeUrl.documentId ? { id: leveeUrl.documentId } : {}),
-			...(createNewSummary ? { summary: createNewSummary } : {}),
-			...(leveeUrl.appName ? { appName: leveeUrl.appName } : {}),
-			...(leveeUrl.appVersion ? { appVersion: leveeUrl.appVersion } : {}),
+			id: leveeUrl.documentId,
+			summary: createNewSummary,
+			appName: leveeUrl.appName,
+			appVersion: leveeUrl.appVersion,
 		};
 
 		// Create document - server generates and returns the document ID

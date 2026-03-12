@@ -30,8 +30,8 @@ onMount(async () => {
 
 		const config = {
 			...baseConfig,
-			...(authToken ? { authToken } : {}),
-			...(documentId ? { documentId } : {}),
+			authToken: authToken ?? undefined,
+			documentId: documentId ?? undefined,
 			appName: app.packageName,
 			appVersion: app.packageVersion,
 		};

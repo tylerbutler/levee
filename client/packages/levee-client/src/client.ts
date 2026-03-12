@@ -188,7 +188,7 @@ export class LeveeClient {
 	public async createContainer<TContainerSchema extends ContainerSchema>(
 		containerSchema: TContainerSchema,
 		compatibilityMode: CompatibilityMode,
-		options?: { appName?: string; appVersion?: string },
+		options?: { appName?: string | undefined; appVersion?: string | undefined },
 	): Promise<{
 		container: IFluidContainer<TContainerSchema>;
 		services: LeveeContainerServices;

@@ -111,8 +111,8 @@ export async function mount(
 	} else {
 		setStatus("Creating new container...");
 		({ container } = await client.createContainer(containerSchema, "2", {
-			...(config.appName ? { appName: config.appName } : {}),
-			...(config.appVersion ? { appVersion: config.appVersion } : {}),
+			appName: config.appName,
+			appVersion: config.appVersion,
 		}));
 		documentId = await container.attach();
 	}

@@ -77,14 +77,14 @@ export function createLeveeDriver(config: LeveeDriverConfig = {}) {
 	 */
 	function createCreateNewRequest(
 		documentId: string,
-		options?: { appName?: string; appVersion?: string },
+		options?: { appName?: string | undefined; appVersion?: string | undefined },
 	): IRequest {
 		return {
 			url: `${tenantId}/${documentId}`,
 			headers: {
 				createNew: true,
-				...(options?.appName ? { appName: options.appName } : {}),
-				...(options?.appVersion ? { appVersion: options.appVersion } : {}),
+				appName: options?.appName,
+				appVersion: options?.appVersion,
 			},
 		};
 	}
