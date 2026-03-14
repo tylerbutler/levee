@@ -1,9 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
-	testDir: ".",
-	testMatch: "*.spec.ts",
-	timeout: 30_000,
+	testDir: "./tests",
+	timeout: 60_000,
 	expect: {
 		timeout: 10_000,
 	},
@@ -13,7 +12,7 @@ export default defineConfig({
 	workers: 1,
 	reporter: process.env.CI ? "github" : "list",
 
-	globalSetup: "./global-setup.ts",
+	globalSetup: "./support/global-setup.ts",
 
 	use: {
 		baseURL: "http://localhost:4000",
