@@ -14,7 +14,11 @@ import type { IClient } from "@fluidframework/protocol-definitions";
 import type { ITokenProvider } from "@fluidframework/routerlicious-driver";
 import { EventEmitterWithErrorHandling } from "@fluidframework/telemetry-utils/internal";
 
-import { isDebugEnabled, type LeveeResolvedUrl } from "./contracts.js";
+import {
+	isDebugEnabled,
+	type LeveeResolvedUrl,
+	type SerializationFormat,
+} from "./contracts.js";
 import { LeveeDeltaConnection } from "./leveeDeltaConnection.js";
 import { LeveeDeltaStorageService } from "./leveeDeltaStorageService.js";
 import { LeveeStorageService } from "./leveeStorageService.js";
@@ -41,6 +45,7 @@ export class LeveeDocumentService
 	private readonly tokenProvider: ITokenProvider;
 	private readonly restWrapper: RestWrapper;
 	private readonly debug: boolean;
+	private _serialization: SerializationFormat;
 	private _disposed = false;
 
 	/**
@@ -49,11 +54,13 @@ export class LeveeDocumentService
 	 * @param resolvedUrl - Resolved URL with connection details
 	 * @param tokenProvider - Token provider for authentication
 	 * @param debug - Whether to enable debug logging
+	 * @param serialization - Serialization format for WebSocket channels
 	 */
 	public constructor(
 		resolvedUrl: IResolvedUrl,
 		tokenProvider: ITokenProvider,
 		debug?: boolean,
+		serialization?: SerializationFormat,
 	) {
 		super((eventName, error) =>
 			console.error(`Error in event ${String(eventName)}:`, error),
@@ -62,6 +69,7 @@ export class LeveeDocumentService
 		this.resolvedUrl = resolvedUrl as LeveeResolvedUrl;
 		this.tokenProvider = tokenProvider;
 		this.debug = isDebugEnabled(debug);
+		this._serialization = serialization ?? "json";
 
 		this.restWrapper = new RestWrapper(
 			this.resolvedUrl.httpUrl,
@@ -78,6 +86,22 @@ export class LeveeDocumentService
 	 */
 	public get disposed(): boolean {
 		return this._disposed;
+	}
+
+	/**
+	 * The serialization format used for new delta stream connections.
+	 *
+	 * @remarks
+	 * Changing this value does not affect an active connection. It takes effect
+	 * the next time {@link LeveeDocumentService.connectToDeltaStream} is called
+	 * (e.g., after a disconnect/reconnect cycle).
+	 */
+	public get serialization(): SerializationFormat {
+		return this._serialization;
+	}
+
+	public set serialization(format: SerializationFormat) {
+		this._serialization = format;
 	}
 
 	/**
@@ -134,6 +158,7 @@ export class LeveeDocumentService
 			client,
 			mode,
 			this.debug,
+			this._serialization,
 		);
 	}
 

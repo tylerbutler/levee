@@ -12,8 +12,15 @@ defmodule LeveeWeb.Endpoint do
   ]
 
   # Fluid Framework WebSocket endpoint
+  # Supports both JSON (vsn ~> 2.0.0, default) and msgpack (vsn ~> 3.0.0) serialization.
+  # Clients select the format by passing vsn in the socket connection params.
   socket "/socket", LeveeWeb.UserSocket,
-    websocket: true,
+    websocket: [
+      serializer: [
+        {Phoenix.Socket.V2.JSONSerializer, "~> 2.0.0"},
+        {LeveeWeb.MsgpackSerializer, "~> 3.0.0"}
+      ]
+    ],
     longpoll: false
 
   # Serve at "/" the static files from "priv/static" directory.

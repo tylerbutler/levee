@@ -88,6 +88,18 @@ export interface LeveeUser {
 }
 
 /**
+ * Serialization format for WebSocket channel communication.
+ *
+ * @remarks
+ * - `"json"` — Default. Uses JSON text frames (Phoenix vsn 2.0.0).
+ * - `"msgpack"` — Uses MessagePack binary frames (Phoenix vsn 3.0.0).
+ *   Reduces payload size and can improve serialization performance.
+ *
+ * @public
+ */
+export type SerializationFormat = "json" | "msgpack";
+
+/**
  * Configuration for creating Levee driver components.
  */
 export interface LeveeConfig {
@@ -115,6 +127,13 @@ export interface LeveeConfig {
 	 * Whether to enable debug logging.
 	 */
 	debug?: boolean;
+
+	/**
+	 * Serialization format for WebSocket channel communication.
+	 *
+	 * @defaultValue `"json"`
+	 */
+	serialization?: SerializationFormat;
 }
 
 /**
