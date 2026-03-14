@@ -82,6 +82,10 @@ defmodule Levee.Application do
         # Gleam PG backend (PostgreSQL via gleam_pgo)
         [Levee.Storage.GleamPG]
 
+      Levee.Storage.GleamMesa ->
+        # Gleam Mesa backend (Mnesia via mesa)
+        [Levee.Storage.GleamMesa]
+
       Levee.Storage.GleamETS ->
         # Gleam ETS backend (default)
         [Levee.Storage.GleamETS]

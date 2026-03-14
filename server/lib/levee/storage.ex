@@ -6,6 +6,7 @@ defmodule Levee.Storage do
   The backend is configured via:
 
       config :levee, :storage_backend, Levee.Storage.GleamETS
+      # or Levee.Storage.GleamPG / Levee.Storage.GleamMesa
 
   All functions delegate to the configured backend module.
   """
