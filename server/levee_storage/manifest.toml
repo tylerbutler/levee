@@ -23,7 +23,7 @@ packages = [
   { name = "pg_types", version = "0.6.0", build_tools = ["rebar3"], requirements = [], otp_app = "pg_types", source = "hex", outer_checksum = "9949A4849DD13408FA249AB7B745E0D2DFDB9532AEE2B9722326E33CD082A778" },
   { name = "pgo", version = "0.20.0", build_tools = ["rebar3"], requirements = ["backoff", "opentelemetry_api", "pg_types"], otp_app = "pgo", source = "hex", outer_checksum = "2F11E6649CEB38E569EF56B16BE1D04874AE5B11A02867080A2817CE423C683B" },
   { name = "pog", version = "4.1.0", build_tools = ["gleam"], requirements = ["exception", "gleam_erlang", "gleam_otp", "gleam_stdlib", "gleam_time", "pgo"], otp_app = "pog", source = "hex", outer_checksum = "E4AFBA39A5FAA2E77291836C9683ADE882E65A06AB28CA7D61AE7A3AD61EBBD5" },
-  { name = "shelf", version = "0.1.0", build_tools = ["gleam"], requirements = ["gleam_erlang", "gleam_stdlib"], source = "git", repo = "https://github.com/tylerbutler/shelf", commit = "3a756bfca128b8f05f43ff7b4e85bac454e207dd" },
+  { name = "shelf", version = "0.1.0", build_tools = ["gleam"], requirements = ["gleam_erlang", "gleam_stdlib"], source = "git", repo = "https://github.com/tylerbutler/shelf", commit = "e92d136bf6296498d31fe0856570ba97d012cbd0" },
   { name = "simplifile", version = "2.3.2", build_tools = ["gleam"], requirements = ["filepath", "gleam_stdlib"], otp_app = "simplifile", source = "hex", outer_checksum = "E049B4DACD4D206D87843BCF4C775A50AE0F50A52031A2FFB40C9ED07D6EC70A" },
   { name = "snag", version = "1.2.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "snag", source = "hex", outer_checksum = "274F41D6C3ECF99F7686FDCE54183333E41D2C1CA5A3A673F9A8B2C7A4401077" },
   { name = "startest", version = "0.8.0", build_tools = ["gleam"], requirements = ["argv", "bigben", "exception", "gleam_community_ansi", "gleam_erlang", "gleam_javascript", "gleam_regexp", "gleam_stdlib", "gleam_time", "glint", "simplifile", "tom"], otp_app = "startest", source = "hex", outer_checksum = "47362F1D9DFEFC2F81C590F73A5BFBE902F427408EFBFB48765A05512AED02DC" },
@@ -37,5 +37,5 @@ gleam_json = { version = ">= 3.0.0 and < 4.0.0" }
 gleam_otp = { version = ">= 1.2.0 and < 2.0.0" }
 gleam_stdlib = { version = ">= 0.62.0 and < 2.0.0" }
 pog = { version = ">= 4.0.0 and < 5.0.0" }
-shelf = { git = "https://github.com/tylerbutler/shelf", ref = "3a756bfca128b8f05f43ff7b4e85bac454e207dd" }
+shelf = { git = "https://github.com/tylerbutler/shelf", ref = "e92d136bf6296498d31fe0856570ba97d012cbd0" }
 startest = { version = "~> 0.8" }

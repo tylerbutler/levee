@@ -3,6 +3,7 @@
 //// Uses shelf/set (ETS + DETS) for typed, persistent key-value storage.
 //// Data is persisted to DETS files on disk and survives restarts.
 
+import gleam/dynamic/decode
 import gleam/erlang/process.{type Subject}
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -53,26 +54,47 @@ pub type Tables {
   )
 }
 
-fn dets_path(data_dir: String, table_name: String) -> String {
-  data_dir <> "/" <> table_name <> ".dets"
-}
-
 /// Open all persistent tables. Call once at startup.
 pub fn init_tables(data_dir: String) -> Tables {
   let assert Ok(users) =
-    set.open(name: "levee_auth_users", path: dets_path(data_dir, "auth_users"))
+    set.open(
+      name: "levee_auth_users",
+      path: "auth_users.dets",
+      base_directory: data_dir,
+      key: decode.string,
+      value: trusted_decoder(),
+    )
   let assert Ok(sessions) =
     set.open(
       name: "levee_auth_sessions",
-      path: dets_path(data_dir, "auth_sessions"),
+      path: "auth_sessions.dets",
+      base_directory: data_dir,
+      key: decode.string,
+      value: trusted_decoder(),
     )
   let assert Ok(memberships) =
     set.open(
       name: "levee_auth_memberships",
-      path: dets_path(data_dir, "auth_memberships"),
+      path: "auth_memberships.dets",
+      base_directory: data_dir,
+      key: string_pair_key(),
+      value: trusted_decoder(),
     )
   Tables(users:, sessions:, memberships:)
 }
+
+fn trusted_decoder() -> decode.Decoder(a) {
+  decode.dynamic |> decode.map(coerce)
+}
+
+fn string_pair_key() -> decode.Decoder(#(String, String)) {
+  use a <- decode.field(0, decode.string)
+  use b <- decode.field(1, decode.string)
+  decode.success(#(a, b))
+}
+
+@external(erlang, "gleam_stdlib", "identity")
+fn coerce(value: a) -> b
 
 /// Close all tables, persisting data to disk.
 pub fn close_tables(tables: Tables) -> Nil {
@@ -87,10 +109,11 @@ pub fn close_tables(tables: Tables) -> Nil {
 // ---------------------------------------------------------------------------
 
 /// Start the session store actor with persistent shelf tables.
+/// Tables are opened inside the actor process so it becomes the ETS owner,
+/// which is required by shelf's protected table access model.
 pub fn start(data_dir: String) -> Result(Subject(Message), actor.StartError) {
-  let tables = init_tables(data_dir)
-
   actor.new_with_initialiser(5000, fn(subject) {
+    let tables = init_tables(data_dir)
     actor.initialised(tables)
     |> actor.returning(subject)
     |> Ok

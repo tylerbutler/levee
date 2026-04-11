@@ -8,7 +8,7 @@ gleam_stdlib = ">= 0.62.0 and < 2.0.0"
 gleam_json = ">= 3.0.0 and < 4.0.0"
 gleam_crypto = ">= 1.3.0 and < 2.0.0"
 gleam_erlang = ">= 0.34.0 and < 2.0.0"
-shelf = { git = "https://github.com/tylerbutler/shelf", ref = "3a756bfca128b8f05f43ff7b4e85bac454e207dd" }
+shelf = { git = "https://github.com/tylerbutler/shelf", ref = "e92d136bf6296498d31fe0856570ba97d012cbd0" }
 pog = ">= 4.0.0 and < 5.0.0"
 gleam_otp = ">= 1.2.0 and < 2.0.0"
 

@@ -3,7 +3,7 @@
 
 -export([identity/1, make_summary_meta/2, json_from_map/1,
          dynamic_to_json_string/1, json_string_to_dynamic/1,
-         pg_timestamp_to_datetime/1]).
+         pg_timestamp_to_datetime/1, make_table_public/1]).
 
 %% @doc Identity function for type coercion.
 identity(X) -> X.
@@ -46,3 +46,15 @@ pg_timestamp_to_datetime({{Year, Month, Day}, {Hour, Min, Sec}}) ->
 pg_timestamp_to_datetime(Other) ->
     %% Already a DateTime or something else, pass through
     Other.
+
+%% @doc Replace a shelf PSet's protected ETS table with a public one.
+%% Shelf creates protected tables (owner-only writes), but levee
+%% stores the table handle in persistent_term and writes from any process.
+%% Must be called from the table owner process (e.g., during GenServer init).
+make_table_public(PSet) ->
+    OldEts = element(2, PSet),
+    Type = proplists:get_value(type, ets:info(OldEts)),
+    NewEts = ets:new(shelf_ets, [Type, public, {keypos, 1}, {read_concurrency, true}]),
+    ets:foldl(fun(Entry, _) -> ets:insert(NewEts, Entry) end, ok, OldEts),
+    ets:delete(OldEts),
+    setelement(2, PSet, NewEts).
