@@ -6,10 +6,24 @@
 ////
 //// Deltas and summaries use USet (no ordered set in DETS) with
 //// sort-on-read for ordered queries.
+////
+//// ## ETS access mode
+////
+//// Shelf creates `protected` ETS tables (owner-only writes), but this
+//// module's tables are shared via `persistent_term` and written to from
+//// any process (controllers, channels, etc.). We swap each table to
+//// `public` access after opening — see `make_public` and ADR-001.
+////
+//// This is safe because per-document writes are serialized through the
+//// Session GenServer (`Levee.Documents.Session`). If a new code path
+//// writes to storage outside the Session GenServer, it must either
+//// serialize through its own process or use shelf's protected mode.
+//// See: docs/adr/001-ets-public-access.md
 
 import gleam/bit_array
 import gleam/crypto
 import gleam/dynamic.{type Dynamic}
+import gleam/dynamic/decode
 import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -44,21 +58,93 @@ pub type Tables {
 /// The data_dir is the directory where DETS files will be stored.
 pub fn init(data_dir: String) -> Tables {
   let assert Ok(documents) =
-    set.open(name: "levee_documents", path: dets_path(data_dir, "documents"))
+    set.open(
+      name: "levee_documents",
+      path: "documents.dets",
+      base_directory: data_dir,
+      key: string_pair_key(),
+      value: trusted_decoder(),
+    )
   let assert Ok(deltas) =
-    set.open(name: "levee_deltas", path: dets_path(data_dir, "deltas"))
+    set.open(
+      name: "levee_deltas",
+      path: "deltas.dets",
+      base_directory: data_dir,
+      key: string_string_int_key(),
+      value: trusted_decoder(),
+    )
   let assert Ok(blobs) =
-    set.open(name: "levee_blobs", path: dets_path(data_dir, "blobs"))
+    set.open(
+      name: "levee_blobs",
+      path: "blobs.dets",
+      base_directory: data_dir,
+      key: string_pair_key(),
+      value: trusted_decoder(),
+    )
   let assert Ok(trees) =
-    set.open(name: "levee_trees", path: dets_path(data_dir, "trees"))
+    set.open(
+      name: "levee_trees",
+      path: "trees.dets",
+      base_directory: data_dir,
+      key: string_pair_key(),
+      value: trusted_decoder(),
+    )
   let assert Ok(commits) =
-    set.open(name: "levee_commits", path: dets_path(data_dir, "commits"))
+    set.open(
+      name: "levee_commits",
+      path: "commits.dets",
+      base_directory: data_dir,
+      key: string_pair_key(),
+      value: trusted_decoder(),
+    )
   let assert Ok(refs) =
-    set.open(name: "levee_refs", path: dets_path(data_dir, "refs"))
+    set.open(
+      name: "levee_refs",
+      path: "refs.dets",
+      base_directory: data_dir,
+      key: string_pair_key(),
+      value: trusted_decoder(),
+    )
   let assert Ok(summaries) =
-    set.open(name: "levee_summaries", path: dets_path(data_dir, "summaries"))
+    set.open(
+      name: "levee_summaries",
+      path: "summaries.dets",
+      base_directory: data_dir,
+      key: string_string_int_key(),
+      value: trusted_decoder(),
+    )
+
+  // Shelf creates protected ETS tables (owner-only writes), but levee
+  // shares table handles via persistent_term for cross-process access.
+  let documents = make_public(documents)
+  let deltas = make_public(deltas)
+  let blobs = make_public(blobs)
+  let trees = make_public(trees)
+  let commits = make_public(commits)
+  let refs = make_public(refs)
+  let summaries = make_public(summaries)
 
   Tables(documents:, deltas:, blobs:, trees:, commits:, refs:, summaries:)
+}
+
+@external(erlang, "storage_ffi_helpers", "make_table_public")
+fn make_public(table: PSet(k, v)) -> PSet(k, v)
+
+fn trusted_decoder() -> decode.Decoder(a) {
+  decode.dynamic |> decode.map(coerce)
+}
+
+fn string_pair_key() -> decode.Decoder(#(String, String)) {
+  use a <- decode.field(0, decode.string)
+  use b <- decode.field(1, decode.string)
+  decode.success(#(a, b))
+}
+
+fn string_string_int_key() -> decode.Decoder(#(String, String, Int)) {
+  use a <- decode.field(0, decode.string)
+  use b <- decode.field(1, decode.string)
+  use c <- decode.field(2, decode.int)
+  decode.success(#(a, b, c))
 }
 
 /// Close all tables, persisting data to disk.
@@ -83,10 +169,6 @@ pub fn save(tables: Tables) -> Nil {
   let _ = set.save(tables.refs)
   let _ = set.save(tables.summaries)
   Nil
-}
-
-fn dets_path(data_dir: String, table_name: String) -> String {
-  data_dir <> "/" <> table_name <> ".dets"
 }
 
 // ---------------------------------------------------------------------------
