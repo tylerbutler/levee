@@ -75,6 +75,44 @@ pub fn complete_auth(
   }
 }
 
+/// Complete an OAuth callback where the provider returned an error.
+///
+/// State is still validated and consumed before the provider error is surfaced.
+pub fn complete_auth_error(
+  provider: String,
+  state: String,
+  error_code: String,
+  error_description: String,
+  store: Subject(state_store.Message),
+) -> Result(Auth, OAuthError) {
+  use strategy <- require_strategy(provider)
+  use code_verifier <- result.try(
+    state_store.validate_and_consume(store, state)
+    |> result.replace_error(StateStoreUnavailable),
+  )
+  use oauth_config <- result.try(config.load_github_config())
+
+  let callback_params =
+    dict.from_list([
+      #("error", error_code),
+      #("error_description", error_description),
+      #("state", state),
+    ])
+
+  case
+    vestibule.handle_callback(
+      strategy,
+      oauth_config,
+      callback_params,
+      state,
+      code_verifier,
+    )
+  {
+    Ok(auth) -> Ok(auth)
+    Error(err) -> Error(VestibuleError(err))
+  }
+}
+
 fn require_strategy(
   provider: String,
   next: fn(Strategy(Nil)) -> Result(a, OAuthError),

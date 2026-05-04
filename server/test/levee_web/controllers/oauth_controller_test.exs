@@ -75,11 +75,33 @@ defmodule LeveeWeb.OAuthControllerTest do
   end
 
   describe "callback/2" do
+    setup do
+      previous_env =
+        for key <- ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET", "GITHUB_REDIRECT_URI"],
+            into: %{},
+            do: {key, System.get_env(key)}
+
+      System.put_env("GITHUB_CLIENT_ID", "test-client")
+      System.put_env("GITHUB_CLIENT_SECRET", "test-secret")
+      System.put_env("GITHUB_REDIRECT_URI", "http://localhost:4000/auth/github/callback")
+
+      on_exit(fn ->
+        Enum.each(previous_env, fn
+          {key, nil} -> System.delete_env(key)
+          {key, value} -> System.put_env(key, value)
+        end)
+      end)
+    end
+
     test "returns 401 when provider returns error", %{conn: conn} do
+      actor = Levee.OAuth.StateStoreSupervisor.get_actor()
+      :levee_oauth@state_store.store(actor, "valid-state", "code-verifier", 180)
+
       conn =
         get(conn, "/auth/github/callback", %{
           "error" => "access_denied",
-          "error_description" => "User denied access"
+          "error_description" => "User denied access",
+          "state" => "valid-state"
         })
 
       body = json_response(conn, 401)
@@ -88,11 +110,49 @@ defmodule LeveeWeb.OAuthControllerTest do
     end
 
     test "returns 401 when provider returns error without description", %{conn: conn} do
-      conn = get(conn, "/auth/github/callback", %{"error" => "access_denied"})
+      actor = Levee.OAuth.StateStoreSupervisor.get_actor()
+
+      :levee_oauth@state_store.store(
+        actor,
+        "valid-state-without-description",
+        "code-verifier",
+        180
+      )
+
+      conn =
+        get(conn, "/auth/github/callback", %{
+          "error" => "access_denied",
+          "state" => "valid-state-without-description"
+        })
 
       body = json_response(conn, 401)
       assert body["error"]["code"] == "oauth_failed"
       assert body["error"]["message"] == "access_denied"
+    end
+
+    test "does not surface provider error details when state is invalid", %{conn: conn} do
+      conn =
+        get(conn, "/auth/github/callback", %{
+          "error" => "access_denied",
+          "error_description" => "User denied access",
+          "state" => "invalid-state"
+        })
+
+      body = json_response(conn, 401)
+      refute body["error"]["code"] == "oauth_failed"
+      refute body["error"]["message"] == "User denied access"
+    end
+
+    test "does not surface provider error details when state is missing", %{conn: conn} do
+      conn =
+        get(conn, "/auth/github/callback", %{
+          "error" => "access_denied",
+          "error_description" => "User denied access"
+        })
+
+      body = json_response(conn, 401)
+      refute body["error"]["code"] == "oauth_failed"
+      refute body["error"]["message"] == "User denied access"
     end
   end
 end

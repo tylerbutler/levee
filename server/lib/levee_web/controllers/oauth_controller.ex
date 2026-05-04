@@ -125,12 +125,52 @@ defmodule LeveeWeb.OAuthController do
     end
   end
 
-  def callback(conn, %{"provider" => _provider, "error" => error_code} = params) do
-    message = Map.get(params, "error_description", error_code)
+  def callback(conn, %{"provider" => provider, "error" => error_code, "state" => state} = params) do
+    actor = Levee.OAuth.StateStoreSupervisor.get_actor()
+    description = Map.get(params, "error_description", "")
 
+    case :levee_oauth.complete_auth_error(provider, state, error_code, description, actor) do
+      {:error, {:vestibule_error, {:provider_error, code, message, _uri}}} ->
+        provider_message =
+          case message do
+            "" -> code
+            message -> message
+          end
+
+        conn
+        |> put_resp_content_type("application/json")
+        |> send_resp(
+          401,
+          Jason.encode!(%{error: %{code: "oauth_failed", message: provider_message}})
+        )
+
+      {:error, {:vestibule_error, :state_mismatch}} ->
+        conn
+        |> put_resp_content_type("application/json")
+        |> send_resp(
+          401,
+          Jason.encode!(%{
+            error: %{code: "state_mismatch", message: "Authentication failed, please try again"}
+          })
+        )
+
+      {:error, _reason} ->
+        conn
+        |> put_resp_content_type("application/json")
+        |> send_resp(
+          401,
+          Jason.encode!(%{error: %{code: "auth_failed", message: "Authentication failed"}})
+        )
+    end
+  end
+
+  def callback(conn, %{"provider" => _provider, "error" => _error_code}) do
     conn
     |> put_resp_content_type("application/json")
-    |> send_resp(401, Jason.encode!(%{error: %{code: "oauth_failed", message: message}}))
+    |> send_resp(
+      401,
+      Jason.encode!(%{error: %{code: "auth_failed", message: "Authentication failed"}})
+    )
   end
 
   defp handle_successful_auth(conn, auth) do
