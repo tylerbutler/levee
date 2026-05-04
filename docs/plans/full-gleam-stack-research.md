@@ -99,7 +99,7 @@ Everything else is comparatively straightforward route/middleware porting.
 
 This is the core risk. The TypeScript client imports `phoenix` directly and uses Phoenix Channels semantics for socket construction, `channel.join().receive(...)`, `channel.push(...)`, event handlers, heartbeat, topic routing, reconnect, and optional msgpack serialization.[^15] Levee's endpoint currently accepts both Phoenix JSON serializer `~> 2.0.0` and a custom `LeveeWeb.MsgpackSerializer` for `~> 3.0.0`.[^16]
 
-The research found a promising candidate: `tylerbutler/beryl`, a Gleam library by Levee's author that implements Phoenix-compatible channel concepts, topic routing, PubSub via Erlang `pg`, Phoenix-style wire messages, and Wisp transport.[^17] However, it is pre-1.0, git-based, and depends on a forked Wisp commit; msgpack compatibility is not complete for Levee's v3 path.[^18]
+The research found a promising candidate: `tylerbutler/beryl`, a Gleam library by Levee's author that implements Phoenix-compatible channel concepts, topic routing, PubSub via Erlang `pg`, Phoenix-style wire messages, and Wisp transport.[^17] However, it is pre-1.0, git-based, and depends on a forked Wisp commit; msgpack compatibility is not complete for Levee's v3 path.[^18] The required upstream Beryl work is now tracked in dedicated issues so the migration can depend on explicit readiness criteria rather than a general "finish Beryl" task.[^29]
 
 The realistic WebSocket options are:
 
@@ -111,6 +111,18 @@ The realistic WebSocket options are:
 | Keep Phoenix for WebSockets | Port REST/OTP but retain Phoenix channel endpoint | Lowest immediate risk | Not a full Gleam stack |
 
 If "full Gleam stack" is a hard requirement, the recommended path is to preserve Phoenix wire compatibility in Gleam, not to change the client protocol first.
+
+### Beryl Readiness Tracking
+
+| Priority | Beryl issue | Why it matters for Levee |
+|---|---|---|
+| P0 | [`tylerbutler/beryl#42`: Wisp git-pin blocks Hex publishing][^29] | Levee should be able to consume Beryl as a stable Hex dependency instead of vendoring or git-pinning the library. |
+| P0 | [`tylerbutler/beryl#43`: add `handle_info` callback][^30] | Levee's current `DocumentChannel` receives ops, signals, session `DOWN` messages, and deferred catch-up through `handle_info`. |
+| P1 | [`tylerbutler/beryl#44`: `vsn` serializer negotiation and msgpack support][^31] | The TypeScript driver can use both JSON `vsn=2.0.0` and msgpack `vsn=3.0.0`; Beryl must preserve that compatibility if msgpack remains public API. |
+| P1 | [`tylerbutler/beryl#45`: preserve `broadcast_from` sender exclusion cross-node][^32] | Fluid signal semantics rely on avoiding sender echoes, including in clustered deployments. |
+| P1 | [`tylerbutler/beryl#46`: Phoenix-compatible `presence_diff` broadcast API][^33] | If Beryl becomes Levee's real-time/presence layer, presence changes need a documented Phoenix-compatible wire shape. |
+| P2 | [`tylerbutler/beryl#47`: end-to-end Phoenix wire contract tests][^34] | Compatibility with `phoenix.js` should be guarded by real WebSocket contract tests before Levee removes Phoenix Channels. |
+| P2 | [`tylerbutler/beryl#48`: segment-aware topic wildcard ergonomics][^35] | Levee can initially use `document:*`, but first-class matching for `document:{tenant_id}:{document_id}` would make multi-tenant routing safer. |
 
 ## OTP / Session Runtime Migration
 
@@ -151,14 +163,15 @@ Implement Wisp middleware equivalents for JWT auth, session auth, admin key auth
 
 ### Phase 4: Replace Phoenix Channels
 
-Either adopt beryl or implement an in-tree Phoenix-compatible channel layer over Mist. It must support:
+Either adopt beryl or implement an in-tree Phoenix-compatible channel layer over Mist. If adopting Beryl, treat issues #42 through #48 as the readiness checklist for this phase.[^29] It must support:
 
 - WebSocket path `/socket/websocket`
 - Phoenix frame shape `[join_ref, ref, topic, event, payload]`
 - `phx_join`, `phx_leave`, `phx_reply`, `phx_error`, `phx_close`
 - heartbeat replies on topic `"phoenix"`
 - Levee events: `connect_document`, `submitOp`, `submitSignal`, `noop`, `requestOps`, `op`, `signal`, `nack`, `summaryAck`, `summaryNack`
-- serializer selection for JSON `vsn=2.0.0` and msgpack `vsn=3.0.0` if msgpack support remains public API[^27]
+- server-originated channel messages equivalent to Phoenix `handle_info` for ops, signals, monitors, and catch-up[^30]
+- serializer selection for JSON `vsn=2.0.0` and msgpack `vsn=3.0.0` if msgpack support remains public API[^31]
 
 ### Phase 5: Remove Phoenix/Elixir shell
 
@@ -174,7 +187,7 @@ Port the root supervision tree to Gleam OTP, replace Phoenix telemetry with expl
 | Initial summary port breaks Fluid document attach/load | High | Port with golden fixtures and compare stored git object graph output |
 | JWT payload mismatch between JOSE and Gleam JWT modules | Medium | Add a dedicated `sign_fluid_token`/`verify_fluid_token` with fixture parity tests |
 | Wisp/Mist observability is less turnkey than Phoenix | Medium | Emit `:telemetry` events from request/channel wrappers |
-| beryl dependency instability | Medium | Vendor temporarily or wait for Hex release; keep protocol tests as contract |
+| beryl dependency instability | Medium | Track Beryl readiness issues #42-#48; vendor temporarily or wait for Hex release; keep protocol tests as contract |
 
 ## Confidence Assessment
 
@@ -220,3 +233,10 @@ The recommended next engineering step is not implementation; it is Phase 0 compa
 [^26]: Research report "HTTP controller migration", recommended migration order and controller notes.
 [^27]: Research report "Phoenix channel replacement", event inventory; `server/lib/levee_web/channels/document_channel.ex:54-330`; `server/lib/levee_web/channels/msgpack_serializer.ex:1-62`.
 [^28]: Research report "Full Gleam roadmap", deployment and operations implications; `server/lib/levee/application.ex:100-143`; `server/Dockerfile:102-105`.
+[^29]: [`tylerbutler/beryl#42`](https://github.com/tylerbutler/beryl/issues/42), "wisp git-pin in gleam.toml blocks Hex publishing"; `tylerbutler/beryl:gleam.toml`; `tylerbutler/beryl:manifest.toml`; upstream Wisp WebSocket PR [`gleam-wisp/wisp#144`](https://github.com/gleam-wisp/wisp/pull/144).
+[^30]: [`tylerbutler/beryl#43`](https://github.com/tylerbutler/beryl/issues/43), "Add handle_info callback to Channel for OTP message delivery"; `tylerbutler/beryl:src/beryl/channel.gleam`; `server/lib/levee_web/channels/document_channel.ex:254-318`.
+[^31]: [`tylerbutler/beryl#44`](https://github.com/tylerbutler/beryl/issues/44), "WebSocket transport missing vsn serializer negotiation and MessagePack support"; `tylerbutler/beryl:src/beryl/wire.gleam`; `tylerbutler/beryl:src/beryl/transport/websocket.gleam`; `server/lib/levee_web/endpoint.ex:17-24`; `server/lib/levee_web/channels/msgpack_serializer.ex:1-62`.
+[^32]: [`tylerbutler/beryl#45`](https://github.com/tylerbutler/beryl/issues/45), "broadcast_from drops sender exclusion on cross-node PubSub path"; `tylerbutler/beryl:src/beryl.gleam`; `tylerbutler/beryl:src/beryl/pubsub.gleam`; `server/lib/levee_web/channels/document_channel.ex:188-209`.
+[^33]: [`tylerbutler/beryl#46`](https://github.com/tylerbutler/beryl/issues/46), "Add Phoenix-compatible presence_diff broadcast API"; `tylerbutler/beryl:src/beryl/presence.gleam`; `tylerbutler/beryl:src/beryl.gleam`.
+[^34]: [`tylerbutler/beryl#47`](https://github.com/tylerbutler/beryl/issues/47), "Add end-to-end Phoenix wire protocol contract tests"; `tylerbutler/beryl:src/beryl/wire.gleam`; `tylerbutler/beryl:src/beryl/transport/websocket.gleam`; `client/packages/levee-driver/src/leveeDeltaConnection.ts`.
+[^35]: [`tylerbutler/beryl#48`](https://github.com/tylerbutler/beryl/issues/48), "topic.parse_pattern only supports trailing wildcard patterns"; `tylerbutler/beryl:src/beryl/topic.gleam`; `server/lib/levee_web/channels/user_socket.ex:5`; `server/lib/levee_web/channels/document_channel.ex:34-51`.
