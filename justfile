@@ -25,6 +25,7 @@ build-gleam:
     cd server/levee_auth && gleam build --target erlang
     cd server/levee_storage && gleam build --target erlang
     cd server/levee_oauth && gleam build --target erlang
+    cd server/levee_documents && gleam build --target erlang
     cd server/levee_server && gleam build --target erlang
     cd server/levee_admin && gleam build --target javascript
 

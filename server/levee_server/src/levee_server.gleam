@@ -3,6 +3,7 @@ import gleam/erlang/process
 import gleam/int
 import gleam/result
 import levee_server/proxy
+import levee_server/routes/read
 import mist
 import wisp
 import wisp/wisp_mist
@@ -35,7 +36,7 @@ pub fn main() -> Nil {
   process.sleep_forever()
 }
 
-fn handle_request(req: wisp.Request) -> wisp.Response {
+pub fn handle_request(req: wisp.Request) -> wisp.Response {
   // ═══════════════════════════════════════════════════════════════════
   // EXTENSION POINT — Phase 1+: add native Wisp routes here so that
   // routes handled natively take precedence over the proxy fallthrough.
@@ -50,5 +51,8 @@ fn handle_request(req: wisp.Request) -> wisp.Response {
   //
   // For Phase 0 every request is reverse-proxied to the Phoenix server.
   // ═══════════════════════════════════════════════════════════════════
-  proxy.handle(req)
+  case read.handle(req) {
+    Ok(response) -> response
+    Error(Nil) -> proxy.handle(req)
+  }
 }

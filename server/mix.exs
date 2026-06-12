@@ -78,6 +78,7 @@ defmodule Levee.MixProject do
       "levee_auth",
       "levee_oauth",
       "levee_storage",
+      "levee_documents",
       "levee_server"
     ]
 
