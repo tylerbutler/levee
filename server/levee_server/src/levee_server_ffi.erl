@@ -6,11 +6,15 @@
     put_tenant_secret/2,
     get_tenant_secrets/1,
     clear_tenant_secret/1,
+    list_tenants/0,
     dynamic_to_json/1,
     dynamic_to_base64/1,
     now_seconds/0,
+    now_iso8601/0,
     ensure_dir/1,
-    session_alive/2
+    session_alive/2,
+    get_auth_store/0,
+    put_auth_store/1
 ]).
 
 get_tables() ->
@@ -52,6 +56,18 @@ clear_tenant_secret(Tenant) ->
     persistent_term:erase({levee_server_tenant_secret, Tenant}),
     nil.
 
+list_tenants() ->
+    TestTenants =
+        [Tenant || {{levee_server_tenant_secret, Tenant}, _Secret} <- persistent_term:get()],
+    ElixirTenants =
+        try 'Elixir.Levee.Auth.TenantSecrets':list_tenants() of
+            Tenants when is_list(Tenants) -> Tenants;
+            _ -> []
+        catch
+            _:_ -> []
+        end,
+    lists:usort(TestTenants ++ ElixirTenants).
+
 dynamic_to_json(Value) ->
     iolist_to_binary(json:encode(Value)).
 
@@ -62,6 +78,12 @@ dynamic_to_base64(Value) ->
 
 now_seconds() ->
     erlang:system_time(second).
+
+now_iso8601() ->
+    unicode:characters_to_binary(
+        calendar:system_time_to_rfc3339(
+            erlang:system_time(second),
+            [{unit, second}, {offset, "Z"}])).
 
 ensure_dir(Path) ->
     ok = filelib:ensure_dir(filename:join(Path, <<"dummy">>)),
@@ -74,3 +96,25 @@ session_alive(Tenant, Document) ->
     catch
         _:_ -> false
     end.
+
+get_auth_store() ->
+    case get_test_auth_store() of
+        {ok, Store} -> {ok, Store};
+        {error, nil} -> get_elixir_auth_store()
+    end.
+
+get_test_auth_store() ->
+    try {ok, persistent_term:get(levee_server_auth_store)}
+    catch error:badarg -> {error, nil}
+    end.
+
+get_elixir_auth_store() ->
+    try 'Elixir.Levee.Auth.SessionStoreSupervisor':get_actor() of
+        Actor -> {ok, Actor}
+    catch
+        _:_ -> {error, nil}
+    end.
+
+put_auth_store(Store) ->
+    persistent_term:put(levee_server_auth_store, Store),
+    nil.

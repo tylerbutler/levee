@@ -3,7 +3,9 @@ import gleam/erlang/process
 import gleam/int
 import gleam/result
 import levee_server/proxy
+import levee_server/routes/auth_api
 import levee_server/routes/read
+import levee_server/routes/write
 import mist
 import wisp
 import wisp/wisp_mist
@@ -53,6 +55,14 @@ pub fn handle_request(req: wisp.Request) -> wisp.Response {
   // ═══════════════════════════════════════════════════════════════════
   case read.handle(req) {
     Ok(response) -> response
-    Error(Nil) -> proxy.handle(req)
+    Error(Nil) ->
+      case write.handle(req) {
+        Ok(response) -> response
+        Error(Nil) ->
+          case auth_api.handle(req) {
+            Ok(response) -> response
+            Error(Nil) -> proxy.handle(req)
+          }
+      }
   }
 }

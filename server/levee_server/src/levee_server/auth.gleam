@@ -167,6 +167,36 @@ pub fn sign_for_test(
   sign_payload(payload, secret)
 }
 
+pub fn sign_document_token(
+  tenant_id: String,
+  document_id: String,
+  user_id: String,
+  scopes: List(String),
+  secret: String,
+  issued_at: Int,
+  expires_in: Int,
+) -> String {
+  let payload =
+    json.object([
+      #("documentId", json.string(document_id)),
+      #("tenantId", json.string(tenant_id)),
+      #("scopes", json.array(scopes, json.string)),
+      #("user", json.object([#("id", json.string(user_id))])),
+      #("ver", json.string("1.0")),
+      #("iat", json.int(issued_at)),
+      #("exp", json.int(issued_at + expires_in)),
+    ])
+  sign_payload(payload, secret)
+}
+
+pub fn tenant_secrets(tenant_id: String) -> Result(Secrets, AuthError) {
+  runtime_secrets(tenant_id)
+}
+
+pub fn now_seconds() -> Int {
+  now_unix()
+}
+
 fn runtime_secrets(tenant_id: String) -> Result(Secrets, AuthError) {
   case ffi_get_tenant_secrets(tenant_id) {
     Ok(#(secret1, secret2)) -> Ok(Secrets(secret1, secret2))
