@@ -1,0 +1,29 @@
+name = "levee_server"
+version = "0.1.0"
+target = "erlang"
+description = "Gleam HTTP server (strangler front door) for Levee"
+
+[dependencies]
+gleam_stdlib = ">= 0.44.0 and < 2.0.0"
+gleam_erlang = ">= 0.34.0 and < 2.0.0"
+gleam_otp = ">= 0.14.0 and < 2.0.0"
+gleam_json = ">= 3.0.0 and < 4.0.0"
+gleam_crypto = ">= 1.3.0 and < 2.0.0"
+mist = ">= 6.0.0 and < 8.0.0"
+wisp = ">= 1.0.0 and < 3.0.0"
+envoy = ">= 1.1.0 and < 2.0.0"
+gleam_httpc = ">= 1.0.0 and < 6.0.0"
+gleam_http = ">= 4.0.0 and < 5.0.0"
+
+# Path dependencies to sibling Gleam packages
+levee_protocol = { path = "../levee_protocol" }
+levee_auth = { path = "../levee_auth" }
+levee_storage = { path = "../levee_storage" }
+levee_oauth = { path = "../levee_oauth" }
+
+# TODO(Phase 3/5): Add beryl, roost, phoenix_channel_fixtures, vestibule_wisp,
+# and gwt after confirming exact hex versions resolve together. Phase 0 only
+# needs the HTTP front door and proxy, so these are intentionally omitted.
+
+[dev-dependencies]
+gleeunit = ">= 1.0.0 and < 2.0.0"
