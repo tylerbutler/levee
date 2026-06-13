@@ -3,15 +3,18 @@ import beryl/transport/mist as mist_transport
 import beryl/wire
 import envoy
 import gleam/erlang/process
+import gleam/http
 import gleam/http/request
 import gleam/int
 import gleam/result
 import gleam/string
 import levee_server/channels/document_channel
 import levee_server/proxy
+import levee_server/routes/admin_api
 import levee_server/routes/auth_api
 import levee_server/routes/oauth
 import levee_server/routes/read
+import levee_server/routes/static
 import levee_server/routes/write
 import levee_server/storage
 import mist
@@ -83,20 +86,13 @@ fn is_websocket_request(req) -> Bool {
 }
 
 pub fn handle_request(req: wisp.Request) -> wisp.Response {
-  // ═══════════════════════════════════════════════════════════════════
-  // EXTENSION POINT — Phase 1+: add native Wisp routes here so that
-  // routes handled natively take precedence over the proxy fallthrough.
-  //
-  // Example (Phase 1):
-  //
-  //   case wisp.path_segments(req) {
-  //     ["health"] -> health.handle(req)
-  //     ["api", "v2", ..] -> native_api.handle(req)
-  //     _ -> proxy.handle(req)
-  //   }
-  //
-  // For Phase 0 every request is reverse-proxied to the Phoenix server.
-  // ═══════════════════════════════════════════════════════════════════
+  case req.method {
+    http.Options -> wisp.no_content() |> with_cors
+    _ -> route_request(req) |> with_cors
+  }
+}
+
+fn route_request(req: wisp.Request) -> wisp.Response {
   case read.handle(req) {
     Ok(response) -> response
     Error(Nil) ->
@@ -108,11 +104,36 @@ pub fn handle_request(req: wisp.Request) -> wisp.Response {
             Error(Nil) ->
               case oauth.handle(req) {
                 Ok(response) -> response
-                Error(Nil) -> proxy.handle(req)
+                Error(Nil) ->
+                  case admin_api.handle(req) {
+                    Ok(response) -> response
+                    Error(Nil) ->
+                      case static.handle(req) {
+                        Ok(response) -> response
+                        Error(Nil) ->
+                          case wisp.path_segments(req) {
+                            ["api", ..] -> static.not_found_json()
+                            _ -> proxy.handle(req)
+                          }
+                      }
+                  }
               }
           }
       }
   }
+}
+
+fn with_cors(response: wisp.Response) -> wisp.Response {
+  response
+  |> wisp.set_header("access-control-allow-origin", "*")
+  |> wisp.set_header(
+    "access-control-allow-methods",
+    "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  )
+  |> wisp.set_header(
+    "access-control-allow-headers",
+    "authorization, content-type",
+  )
 }
 
 /// Exposes the OAuth state store for route tests.

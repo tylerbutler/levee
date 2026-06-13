@@ -7,6 +7,12 @@
     get_tenant_secrets/1,
     clear_tenant_secret/1,
     list_tenants/0,
+    list_tenants_with_names/0,
+    create_tenant/1,
+    get_tenant/1,
+    regenerate_tenant_secret/2,
+    delete_tenant/1,
+    tenant_exists/1,
     dynamic_to_json/1,
     dynamic_to_base64/1,
     now_seconds/0,
@@ -16,6 +22,8 @@
     set_github_allowed_users/1,
     unset_github_allowed_users/0,
     ensure_dir/1,
+    static_dir/1,
+    read_file/1,
     session_alive/2,
     get_auth_store/0,
     put_auth_store/1,
@@ -47,6 +55,16 @@ get_tenant_secrets(Tenant) ->
 
 get_test_tenant_secrets(Tenant) ->
     try
+        #{secret1 := Secret1, secret2 := Secret2} = persistent_term:get({levee_server_tenant, Tenant}),
+        {ok, {Secret1, Secret2}}
+    catch error:{badmatch, _} ->
+        get_legacy_test_tenant_secrets(Tenant);
+    error:badarg ->
+        get_legacy_test_tenant_secrets(Tenant)
+    end.
+
+get_legacy_test_tenant_secrets(Tenant) ->
+    try
         Secret = persistent_term:get({levee_server_tenant_secret, Tenant}),
         {ok, {Secret, Secret}}
     catch error:badarg -> {error, nil}
@@ -66,8 +84,8 @@ clear_tenant_secret(Tenant) ->
     nil.
 
 list_tenants() ->
-    TestTenants =
-        [Tenant || {{levee_server_tenant_secret, Tenant}, _Secret} <- persistent_term:get()],
+    TestTenants = [Tenant || {{levee_server_tenant, Tenant}, _Data} <- persistent_term:get()]
+        ++ [Tenant || {{levee_server_tenant_secret, Tenant}, _Secret} <- persistent_term:get()],
     ElixirTenants =
         try 'Elixir.Levee.Auth.TenantSecrets':list_tenants() of
             Tenants when is_list(Tenants) -> Tenants;
@@ -76,6 +94,133 @@ list_tenants() ->
             _:_ -> []
         end,
     lists:usort(TestTenants ++ ElixirTenants).
+
+list_tenants_with_names() ->
+    TestTenants = test_tenants_with_names(),
+    ElixirTenants =
+        try 'Elixir.Levee.Auth.TenantSecrets':list_tenants_with_names() of
+            Tenants when is_list(Tenants) -> [tenant_info_to_tuple(T) || T <- Tenants];
+            _ -> []
+        catch
+            _:_ -> []
+        end,
+    dedupe_tenant_infos(TestTenants ++ ElixirTenants).
+
+test_tenants_with_names() ->
+    New = [begin
+        Name = maps:get(name, Data, Tenant),
+        {Tenant, Name}
+    end || {{levee_server_tenant, Tenant}, Data} <- persistent_term:get()],
+    Legacy = [{Tenant, Tenant} || {{levee_server_tenant_secret, Tenant}, _Secret} <- persistent_term:get()],
+    New ++ Legacy.
+
+tenant_info_to_tuple(#{id := Id, name := Name}) -> {Id, Name};
+tenant_info_to_tuple(#{<<"id">> := Id, <<"name">> := Name}) -> {Id, Name};
+tenant_info_to_tuple(Other) when is_map(Other) ->
+    Id = maps:get(id, Other, maps:get(<<"id">>, Other, <<>>)),
+    Name = maps:get(name, Other, maps:get(<<"name">>, Other, Id)),
+    {Id, Name};
+tenant_info_to_tuple({Id, Name}) -> {Id, Name};
+tenant_info_to_tuple(Id) when is_binary(Id) -> {Id, Id}.
+
+dedupe_tenant_infos(Infos) ->
+    maps:values(lists:foldl(fun({Id, Name}, Acc) -> maps:put(Id, {Id, Name}, Acc) end, #{}, Infos)).
+
+create_tenant(Name) ->
+    try 'Elixir.Levee.Auth.TenantSecrets':create_tenant(Name) of
+        {ok, Tenant} -> {ok, tenant_with_secrets_to_tuple(Tenant)};
+        _ -> create_test_tenant(Name)
+    catch
+        _:_ -> create_test_tenant(Name)
+    end.
+
+create_test_tenant(Name) ->
+    Id = <<"tenant-", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Secret1 = random_secret(),
+    Secret2 = random_secret(),
+    persistent_term:put({levee_server_tenant, Id}, #{name => Name, secret1 => Secret1, secret2 => Secret2}),
+    {ok, {Id, Name, Secret1, Secret2}}.
+
+tenant_with_secrets_to_tuple(#{id := Id, name := Name, secret1 := Secret1, secret2 := Secret2}) ->
+    {Id, Name, Secret1, Secret2};
+tenant_with_secrets_to_tuple(#{<<"id">> := Id, <<"name">> := Name, <<"secret1">> := Secret1, <<"secret2">> := Secret2}) ->
+    {Id, Name, Secret1, Secret2};
+tenant_with_secrets_to_tuple(Tenant) when is_map(Tenant) ->
+    Id = maps:get(id, Tenant, maps:get(<<"id">>, Tenant, <<>>)),
+    Name = maps:get(name, Tenant, maps:get(<<"name">>, Tenant, Id)),
+    Secret1 = maps:get(secret1, Tenant, maps:get(<<"secret1">>, Tenant, <<>>)),
+    Secret2 = maps:get(secret2, Tenant, maps:get(<<"secret2">>, Tenant, <<>>)),
+    {Id, Name, Secret1, Secret2}.
+
+get_tenant(Id) ->
+    case get_test_tenant(Id) of
+        {ok, Tenant} -> {ok, Tenant};
+        {error, nil} ->
+            try 'Elixir.Levee.Auth.TenantSecrets':get_tenant(Id) of
+                {ok, TenantInfo} -> {ok, tenant_info_to_tuple(TenantInfo)};
+                _ -> {error, nil}
+            catch
+                _:_ -> {error, nil}
+            end
+    end.
+
+get_test_tenant(Id) ->
+    try
+        Data = persistent_term:get({levee_server_tenant, Id}),
+        {ok, {Id, maps:get(name, Data, Id)}}
+    catch error:badarg ->
+        try persistent_term:get({levee_server_tenant_secret, Id}), {ok, {Id, Id}}
+        catch error:badarg -> {error, nil}
+        end
+    end.
+
+regenerate_tenant_secret(Id, Slot) ->
+    case regenerate_test_tenant_secret(Id, Slot) of
+        {ok, Secret} -> {ok, Secret};
+        {error, nil} ->
+            try 'Elixir.Levee.Auth.TenantSecrets':regenerate_secret(Id, Slot) of
+                {ok, Secret} -> {ok, Secret};
+                _ -> {error, nil}
+            catch
+                _:_ -> {error, nil}
+            end
+    end.
+
+regenerate_test_tenant_secret(Id, Slot) ->
+    try
+        Data = persistent_term:get({levee_server_tenant, Id}),
+        Secret = random_secret(),
+        Key = case Slot of 1 -> secret1; 2 -> secret2 end,
+        persistent_term:put({levee_server_tenant, Id}, maps:put(Key, Secret, Data)),
+        {ok, Secret}
+    catch
+        _:_ -> {error, nil}
+    end.
+
+delete_tenant(Id) ->
+    Existed = tenant_exists(Id),
+    persistent_term:erase({levee_server_tenant, Id}),
+    persistent_term:erase({levee_server_tenant_secret, Id}),
+    try 'Elixir.Levee.Auth.TenantSecrets':unregister_tenant(Id) of
+        _ -> Existed
+    catch
+        _:_ -> Existed
+    end.
+
+tenant_exists(Id) ->
+    case get_test_tenant(Id) of
+        {ok, _} -> true;
+        {error, nil} ->
+            try 'Elixir.Levee.Auth.TenantSecrets':tenant_exists(Id) of
+                true -> true;
+                _ -> false
+            catch
+                _:_ -> false
+            end
+    end.
+
+random_secret() ->
+    string:lowercase(binary:encode_hex(crypto:strong_rand_bytes(32))).
 
 dynamic_to_json(Value) ->
     iolist_to_binary(json:encode(Value)).
@@ -115,6 +260,30 @@ set_env(Name, Value) ->
 ensure_dir(Path) ->
     ok = filelib:ensure_dir(filename:join(Path, <<"dummy">>)),
     nil.
+
+static_dir(Name) ->
+    Candidates = [
+        filename:join([<<"..">>, <<"priv">>, <<"static">>, Name]),
+        filename:join([<<"priv">>, <<"static">>, Name]),
+        case code:priv_dir(levee) of
+            {error, _} -> <<"">>;
+            Dir -> filename:join([Dir, <<"static">>, Name])
+        end,
+        case code:priv_dir(levee_server) of
+            {error, _} -> <<"">>;
+            Dir2 -> filename:join([Dir2, <<"static">>, Name])
+        end
+    ],
+    case [Path || Path <- Candidates, Path =/= <<"">>, filelib:is_dir(Path)] of
+        [First | _] -> First;
+        [] -> filename:join([<<"..">>, <<"priv">>, <<"static">>, Name])
+    end.
+
+read_file(Path) ->
+    case file:read_file(Path) of
+        {ok, Data} -> {ok, unicode:characters_to_binary(Data)};
+        _ -> {error, nil}
+    end.
 
 session_alive(Tenant, Document) ->
     case gleam_session_alive(Tenant, Document) of
