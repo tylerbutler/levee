@@ -675,13 +675,13 @@ fn int_compare(a: Int, b: Int) -> order.Order {
 @external(erlang, "erlang", "byte_size")
 fn byte_size(binary: a) -> Int
 
-@external(erlang, "Elixir.DateTime", "utc_now")
+@external(erlang, "storage_ffi_helpers", "utc_now")
 fn utc_now() -> Dynamic
 
 /// Identity coercion — trusts runtime type is correct.
 @external(erlang, "storage_ffi_helpers", "identity")
 fn coerce(val: a) -> b
 
-/// Wrap a Dynamic map as a gleam/json.Json value by JSON-encoding it via Jason.
+/// Wrap a Dynamic map as a gleam/json.Json value by JSON-encoding it.
 @external(erlang, "storage_ffi_helpers", "json_from_map")
 fn json_from_dynamic(val: Dynamic) -> json.Json

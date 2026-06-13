@@ -1,25 +1,33 @@
-# Levee server build recipes (used by Dockerfile)
+# Levee server build recipes (Gleam-only)
 
-# Build all Gleam packages for Erlang target
 build-gleam:
-    cd levee_protocol && gleam build --target erlang
-    cd levee_auth && gleam build --target erlang
-    cd levee_storage && gleam build --target erlang
-    cd levee_oauth && gleam build --target erlang
-    cd levee_server && gleam build --target erlang
+    cd levee_protocol && gleam build
+    cd levee_auth && gleam build
+    cd levee_storage && gleam build
+    cd levee_oauth && gleam build
+    cd levee_documents && gleam build
+    cd levee_server && gleam build
 
-# Build admin UI (JavaScript target)
-build-admin: build-gleam
+setup-gleam:
+    cd levee_protocol && gleam deps download
+    cd levee_auth && gleam deps download
+    cd levee_storage && gleam deps download
+    cd levee_oauth && gleam deps download
+    cd levee_documents && gleam deps download
+    cd levee_server && gleam deps download
+    cd levee_admin && gleam deps download
+
+build-admin:
     cd levee_admin && gleam build --target javascript
     rm -rf priv/static/admin
     mkdir -p priv/static/admin
     cp -r levee_admin/build/dev/javascript/* priv/static/admin/
     cp levee_admin/index.html priv/static/admin/
 
-# Compile Elixir application
-compile: build-gleam
-    mix compile
+compile: build-gleam build-admin
 
-# Build full release
-release: build-admin compile
-    mix release
+run: compile
+    cd levee_server && PORT=${PORT:-4000} gleam run
+
+release: build-admin
+    cd levee_server && gleam export erlang-shipment

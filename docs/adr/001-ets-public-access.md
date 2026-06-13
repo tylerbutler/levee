@@ -6,13 +6,13 @@
 
 ## Context
 
-Levee uses [shelf](https://github.com/tylerbutler/shelf) for persistent ETS/DETS storage. The `levee_storage` module opens shelf tables in a GenServer's `init/1` and stores the handles in `persistent_term` so that any process (Phoenix controllers, WebSocket channels, the Session GenServer) can read and write directly without routing through the owning GenServer.
+Levee uses [shelf](https://github.com/tylerbutler/shelf) for persistent ETS/DETS storage. The `levee_storage` module opens shelf tables in a GenServer's `init/1` and stores the handles in `persistent_term` so that any server process (HTTP handlers, WebSocket channels, document session actors) can read and write directly without routing through the owning GenServer.
 
 Shelf changed its ETS table creation from `public` to `protected` access mode. In Erlang, `protected` means only the process that created the table can write; any process can read. This broke levee's cross-process write pattern — all writes returned `NotOwner` errors.
 
 ### levee_auth (not affected by this decision)
 
-The `session_store` already follows shelf's intended pattern: a Gleam actor owns the tables and serializes all reads and writes through its message handler. The fix was to move `init_tables` into the actor's initializer so the actor process (not the Elixir supervisor) is the ETS owner. No access mode workaround needed.
+The `session_store` already follows shelf's intended pattern: a Gleam actor owns the tables and serializes all reads and writes through its message handler. The fix was to move `init_tables` into the actor's initializer so the actor process (not the Gleam supervisor) is the ETS owner. No access mode workaround needed.
 
 ### levee_storage (this decision)
 

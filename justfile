@@ -1,49 +1,44 @@
-# Levee - Collaborative document service (server + client)
+# Levee - Collaborative document service (Gleam server + TypeScript client)
 
-# === ALIASES ===
 alias b := build
 alias t := test
 alias f := format
 alias l := lint
 alias c := clean
 
-# Default recipe
+server_packages := "levee_protocol levee_auth levee_storage levee_oauth levee_documents levee_server"
+
 default:
     @just --list
 
 # === BUILD ===
 
-# Build everything (server + client)
 build: build-server build-client build-sandbag
 
-# Build server (Gleam + admin + Elixir)
-build-server: build-gleam build-admin build-elixir
+# Build the Gleam server packages and the JavaScript admin UI.
+build-server: build-gleam build-admin
 
-# Build Gleam packages
 build-gleam:
-    cd server/levee_protocol && gleam build --target erlang
-    cd server/levee_auth && gleam build --target erlang
-    cd server/levee_storage && gleam build --target erlang
-    cd server/levee_oauth && gleam build --target erlang
-    cd server/levee_documents && gleam build --target erlang
-    cd server/levee_server && gleam build --target erlang
-    cd server/levee_admin && gleam build --target javascript
+    cd server/levee_protocol && gleam build
+    cd server/levee_auth && gleam build
+    cd server/levee_storage && gleam build
+    cd server/levee_oauth && gleam build
+    cd server/levee_documents && gleam build
+    cd server/levee_server && gleam build
 
-# Build admin UI and copy to priv/static/admin
-build-admin: build-gleam
+build-admin:
+    cd server/levee_admin && gleam build --target javascript
     mkdir -p server/priv/static/admin
     cp -r server/levee_admin/build/dev/javascript/* server/priv/static/admin/
     cp server/levee_admin/index.html server/priv/static/admin/
 
-# Build Elixir application
+# Backward-compatible aliases; Elixir has been removed.
 build-elixir: build-gleam
-    cd server && mix compile
+compile: build-server
 
-# Build client (TypeScript)
 build-client:
     cd client && pnpm install && pnpm build
 
-# Build Sandbag testing hub and copy to priv/static/sandbag
 build-sandbag:
     cd client/packages/sandbag && pnpm build
     mkdir -p server/priv/static/sandbag
@@ -51,258 +46,199 @@ build-sandbag:
 
 # === TESTING ===
 
-# Run all tests (server + client)
 test: test-server test-client
 
-# Run all tests including PostgreSQL backend
 test-all: test-server test-client test-pg
 
-# Run all server tests
-test-server: test-gleam test-elixir
+test-server: test-gleam
 
-# Run Gleam tests
 test-gleam:
     cd server/levee_protocol && gleam test
     cd server/levee_auth && gleam test
+    cd server/levee_storage && gleam test
     cd server/levee_oauth && gleam test
-    cd server/levee_admin && gleam test
+    cd server/levee_documents && gleam test
     cd server/levee_server && gleam test
 
-# Run Elixir tests
-test-elixir:
-    cd server && mix test
+test-elixir: test-gleam
 
-# Run client tests
 test-client:
     cd client && pnpm install && pnpm test
 
-# Run client integration tests (starts Docker server, runs tests, stops server)
 test-integration:
     cd client && pnpm test:integration
 
-# Start integration test server
 test-integration-up:
     cd client && pnpm test:integration:up
 
-# Stop integration test server
 test-integration-down:
     cd client && pnpm test:integration:down
 
-# Run integration tests (assumes server already running)
 test-integration-run:
     cd client && pnpm test:integration:run
 
-# Run admin e2e tests (starts Docker server, runs Playwright, stops server)
 test-e2e:
     cd client && pnpm test:integration:up
     cd client/packages/e2e && pnpm exec playwright test; result=$?; cd ../.. && pnpm test:integration:down; exit $result
 
-# Run admin e2e tests (assumes server already running)
 test-e2e-run:
     cd client/packages/e2e && pnpm exec playwright test
 
+# PostgreSQL backend coverage now lives in Gleam storage tests.
+test-pg: db-start
+    cd server/levee_storage && DATABASE_URL="$DATABASE_URL" gleam test
+
 # === QUALITY ===
 
-# Format all code (server + client)
 format: format-server format-client
 
-# Format server code
-format-server: format-gleam format-elixir
+format-server: format-gleam
 
-# Format Gleam code
 format-gleam:
     cd server/levee_protocol && gleam format
     cd server/levee_auth && gleam format
     cd server/levee_storage && gleam format
     cd server/levee_oauth && gleam format
-    cd server/levee_admin && gleam format
+    cd server/levee_documents && gleam format
     cd server/levee_server && gleam format
+    cd server/levee_admin && gleam format
 
-# Format Elixir code
-format-elixir:
-    cd server && mix format
+format-elixir: format-gleam
 
-# Format client code
 format-client:
     cd client && pnpm format
 
-# Lint all code (server + client)
 lint: lint-server lint-client
 
-# Lint server code
-lint-server: lint-gleam lint-elixir
+lint-server: lint-gleam
 
-# Lint Gleam code (format check)
 lint-gleam:
     cd server/levee_protocol && gleam format --check
     cd server/levee_auth && gleam format --check
     cd server/levee_storage && gleam format --check
     cd server/levee_oauth && gleam format --check
-    cd server/levee_admin && gleam format --check
+    cd server/levee_documents && gleam format --check
     cd server/levee_server && gleam format --check
+    cd server/levee_admin && gleam format --check
 
-# Lint Elixir code
-lint-elixir:
-    cd server && mix format --check-formatted
-    cd server && mix compile --warnings-as-errors
+lint-elixir: lint-gleam
 
-# Lint client code
 lint-client:
     cd client && pnpm lint
 
-# Check formatting (alias for lint)
 check-format: lint
 
 # === CLEANUP ===
 
-# Remove all build artifacts (server + client)
 clean: clean-server clean-client
 
-# Clean server build artifacts
-clean-server: clean-gleam clean-elixir
+clean-server: clean-gleam
 
 clean-gleam:
     cd server/levee_protocol && rm -rf build
     cd server/levee_auth && rm -rf build
     cd server/levee_storage && rm -rf build
     cd server/levee_oauth && rm -rf build
-    cd server/levee_admin && rm -rf build
+    cd server/levee_documents && rm -rf build
     cd server/levee_server && rm -rf build
-    rm -rf server/priv/static/admin
+    cd server/levee_admin && rm -rf build
+    rm -rf server/priv/static/admin server/priv/static/sandbag
 
-clean-elixir:
-    cd server && mix clean
-    rm -rf server/_build server/deps
+clean-elixir: clean-gleam
 
-# Clean client build artifacts
 clean-client:
     cd client && pnpm clean
 
 # === DATABASE ===
 
-# Default DATABASE_URL for local Docker PostgreSQL
 export DATABASE_URL := env("DATABASE_URL", "postgres://levee:levee@localhost:5432/levee_test")
 
-# Start PostgreSQL in Docker
 db-start:
     docker compose up -d postgres
     @echo "Waiting for PostgreSQL..."
     @docker compose exec postgres sh -c 'until pg_isready -U levee -d levee_test; do sleep 0.5; done' 2>/dev/null
     @echo "PostgreSQL is ready at $DATABASE_URL"
 
-# Stop PostgreSQL
 db-stop:
     docker compose down
 
-# Reset the test database (drop all tables, re-run migrations)
 db-reset:
     docker compose exec postgres psql -U levee -d levee_test -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
     @echo "Database reset."
 
-# Run Elixir tests including PostgreSQL backend tests
-test-pg: db-start
-    cd server && DATABASE_URL="$DATABASE_URL" mix test --include postgres
-
 # === CI ===
 
-# Full validation workflow (server + client)
 ci: format lint test build
 
 alias pr := ci
 
 # === SETUP ===
 
-# Install all dependencies (server + client)
 setup: setup-server setup-client
 
-# Install server dependencies
-setup-server: setup-gleam setup-elixir
+setup-server: setup-gleam
 
-# Install Gleam dependencies
 setup-gleam:
     cd server/levee_protocol && gleam deps download
     cd server/levee_auth && gleam deps download
     cd server/levee_storage && gleam deps download
     cd server/levee_oauth && gleam deps download
-    cd server/levee_admin && gleam deps download
+    cd server/levee_documents && gleam deps download
     cd server/levee_server && gleam deps download
+    cd server/levee_admin && gleam deps download
 
-# Install Elixir dependencies
-setup-elixir:
-    cd server && mix deps.get
+setup-elixir: setup-gleam
 
-# Install client dependencies
 setup-client:
     cd client && pnpm install
 
 # === DEVELOPMENT ===
 
-# Start dev server (alias for server)
 start: server
 
-# Start Phoenix server (builds Gleam + admin first)
-server: build-gleam build-admin
-    cd server && LEVEE_TENANT_ID=fluid LEVEE_TENANT_KEY=dev-tenant-secret-key mix phx.server
+server: build-server
+    cd server/levee_server && PORT=${PORT:-4000} LEVEE_TENANT_ID=${LEVEE_TENANT_ID:-fluid} LEVEE_TENANT_KEY=${LEVEE_TENANT_KEY:-dev-tenant-secret-key} gleam run
 
-# Start Phoenix server with IEx
-iex: build-gleam build-admin
-    cd server && LEVEE_TENANT_ID=fluid LEVEE_TENANT_KEY=dev-tenant-secret-key iex -S mix phx.server
+# Elixir shell is gone; keep this alias as a useful BEAM shell for the Gleam server.
+iex: server
 
-# Start Sandbag dev server (SvelteKit dev mode, proxies API to Phoenix)
 dev-sandbag:
     cd client/packages/sandbag && pnpm dev
 
 # === DOCKER ===
 
-# Docker image name
 docker_image := "levee-server"
 
-# Build Docker image locally (uses root Dockerfile with client + server)
 docker-build tag=docker_image:
     docker build -t {{tag}} .
 
-# Verify Docker image starts and passes health check
 docker-verify tag=docker_image:
     #!/usr/bin/env bash
     set -euo pipefail
     container_name="levee-verify-$$"
     cleanup() { docker rm -f "$container_name" >/dev/null 2>&1 || true; }
     trap cleanup EXIT
-
-    echo "Starting container from {{tag}}..."
-    docker run -d --name "$container_name" \
-        -p 0:4000 \
-        "{{tag}}"
-
-    # Get the randomly assigned host port
+    docker run -d --name "$container_name" -p 0:4000 "{{tag}}"
     host_port=$(docker port "$container_name" 4000/tcp | head -1 | cut -d: -f2)
-    echo "Container running on port $host_port"
-
-    echo "Waiting for health check..."
     for i in $(seq 1 30); do
         if curl -sf "http://localhost:$host_port/health" >/dev/null 2>&1; then
-            echo "Health check passed!"
-            docker logs "$container_name" 2>&1 | tail -5
+            echo "Health check passed"
             exit 0
         fi
-        echo "  attempt $i/30..."
         sleep 2
     done
-
-    echo "Health check failed after 60s. Container logs:"
     docker logs "$container_name" 2>&1
     exit 1
 
-# Build and verify Docker image
 docker-test tag=docker_image: (docker-build tag) (docker-verify tag)
 
 # === CODE GENERATION ===
 
-# Generate JSON schema from Gleam protocol types
+# Generate JSON schema from Gleam protocol types.
 generate-schema:
-    cd server && mix generate_schema
+    mkdir -p server/priv
+    cd server/levee_protocol && gleam run -m schema_cli | python3 -m json.tool > ../priv/protocol-schema.json
 
-# Generate schema and copy to client driver package
 generate-schema-ts: generate-schema
     mkdir -p client/packages/levee-driver/schemas
     cp server/priv/protocol-schema.json client/packages/levee-driver/schemas/

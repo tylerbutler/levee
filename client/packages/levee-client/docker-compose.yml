@@ -15,10 +15,7 @@ services:
     ports:
       - "4000:4000"
     environment:
-      - PHX_SERVER=true
-      - PHX_HOST=localhost
       - PORT=4000
-      - SECRET_KEY_BASE=dev-only-secret-key-base-at-least-64-characters-long-for-phoenix-framework
       # Tenant configuration for testing
       - LEVEE_TENANT_ID=fluid
       - LEVEE_TENANT_KEY=dev-tenant-secret-key

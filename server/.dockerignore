@@ -3,10 +3,6 @@
 .gitignore
 
 # Build artifacts
-_build
-deps
-.elixir_ls
-
 # Gleam build artifacts (will be rebuilt)
 levee_protocol/build
 levee_auth/build
@@ -28,15 +24,10 @@ levee_admin/build
 *.md
 !README.md
 
-# Test
-test
-.formatter.exs
-
-# Local config
-*.local.exs
-
 # Misc
 .DS_Store
 Thumbs.db
 hk.pkl
 mise.toml
+server/levee_server/priv/storage
+levee_server/priv/storage

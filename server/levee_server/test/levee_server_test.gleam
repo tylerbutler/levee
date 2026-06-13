@@ -14,7 +14,7 @@ pub fn default_port_is_4000_test() {
   |> should.equal(4000)
 }
 
-pub fn default_upstream_port_is_4001_test() {
-  levee_server.default_upstream_port
-  |> should.equal(4001)
+pub fn default_port_is_positive_test() {
+  { levee_server.default_port > 0 }
+  |> should.be_true
 }

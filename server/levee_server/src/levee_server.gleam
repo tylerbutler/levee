@@ -11,10 +11,7 @@ import gleam/string
 import levee_documents/supervisor as documents_supervisor
 import levee_documents/tenant_secrets
 import levee_oauth/state_store as oauth_state_store
-import levee_storage.{type Tables}
-import session_store
 import levee_server/channels/document_channel
-import levee_server/proxy
 import levee_server/routes/admin_api
 import levee_server/routes/auth_api
 import levee_server/routes/oauth
@@ -22,15 +19,14 @@ import levee_server/routes/read
 import levee_server/routes/static
 import levee_server/routes/write
 import levee_server/storage
+import levee_storage.{type Tables}
 import mist
+import session_store
 import wisp
 import wisp/wisp_mist
 
 /// Default HTTP listening port if PORT env var is not set.
 pub const default_port: Int = 4000
-
-/// Default upstream Phoenix port if PHOENIX_UPSTREAM_PORT env var is not set.
-pub const default_upstream_port: Int = 4001
 
 const default_dev_secret = "levee-dev-secret-change-in-production"
 
@@ -47,7 +43,10 @@ pub type RuntimeTree {
 }
 
 @external(erlang, "levee_server_ffi", "get_tenant_secrets_actor")
-fn ffi_get_tenant_secrets_actor() -> Result(Subject(tenant_secrets.Message), Nil)
+fn ffi_get_tenant_secrets_actor() -> Result(
+  Subject(tenant_secrets.Message),
+  Nil,
+)
 
 @external(erlang, "levee_server_ffi", "put_tenant_secrets_actor")
 fn ffi_put_tenant_secrets_actor(actor: Subject(tenant_secrets.Message)) -> Nil
@@ -56,7 +55,9 @@ fn ffi_put_tenant_secrets_actor(actor: Subject(tenant_secrets.Message)) -> Nil
 fn ffi_get_document_supervisor() -> Result(documents_supervisor.Supervisor, Nil)
 
 @external(erlang, "levee_server_ffi", "put_document_supervisor")
-fn ffi_put_document_supervisor(supervisor: documents_supervisor.Supervisor) -> Nil
+fn ffi_put_document_supervisor(
+  supervisor: documents_supervisor.Supervisor,
+) -> Nil
 
 @external(erlang, "levee_server_ffi", "get_auth_store")
 fn ffi_get_auth_store() -> Result(Subject(session_store.Message), Nil)
@@ -143,14 +144,13 @@ fn start_otp_tree_with_data_dir(data_dir: String) -> Result(RuntimeTree, Nil) {
   ))
 }
 
-fn get_or_start_tenant_secrets() -> Result(
-  Subject(tenant_secrets.Message),
-  Nil,
-) {
+fn get_or_start_tenant_secrets() -> Result(Subject(tenant_secrets.Message), Nil) {
   case ffi_get_tenant_secrets_actor() {
     Ok(actor) -> Ok(actor)
     Error(Nil) -> {
-      use actor <- result.try(tenant_secrets.start() |> result.replace_error(Nil))
+      use actor <- result.try(
+        tenant_secrets.start() |> result.replace_error(Nil),
+      )
       ffi_put_tenant_secrets_actor(actor)
       Ok(actor)
     }
@@ -160,7 +160,8 @@ fn get_or_start_tenant_secrets() -> Result(
 fn register_startup_tenants(actor: Subject(tenant_secrets.Message)) -> Nil {
   case running_in_prod() {
     True -> Nil
-    False -> tenant_secrets.register_tenant(actor, "dev-tenant", default_dev_secret)
+    False ->
+      tenant_secrets.register_tenant(actor, "dev-tenant", default_dev_secret)
   }
 
   tenant_secrets.register_tenant(actor, "sandbag", sandbag_secret)
@@ -195,25 +196,23 @@ fn get_or_start_document_supervisor(
   }
 }
 
-fn get_or_start_auth_store(data_dir: String) -> Result(
-  Subject(session_store.Message),
-  Nil,
-) {
+fn get_or_start_auth_store(
+  data_dir: String,
+) -> Result(Subject(session_store.Message), Nil) {
   case ffi_get_auth_store() {
     Ok(store) -> Ok(store)
     Error(Nil) -> {
       storage.ensure_dir_for_test(data_dir)
-      use store <- result.try(session_store.start(data_dir) |> result.replace_error(Nil))
+      use store <- result.try(
+        session_store.start(data_dir) |> result.replace_error(Nil),
+      )
       ffi_put_auth_store(store)
       Ok(store)
     }
   }
 }
 
-fn get_or_start_oauth_store() -> Result(
-  Subject(oauth_state_store.Message),
-  Nil,
-) {
+fn get_or_start_oauth_store() -> Result(Subject(oauth_state_store.Message), Nil) {
   case ffi_get_oauth_store() {
     Ok(store) -> Ok(store)
     Error(Nil) -> {
@@ -270,7 +269,7 @@ fn route_request(req: wisp.Request) -> wisp.Response {
                         Error(Nil) ->
                           case wisp.path_segments(req) {
                             ["api", ..] -> static.not_found_json()
-                            _ -> proxy.handle(req)
+                            _ -> static.not_found_json()
                           }
                       }
                   }

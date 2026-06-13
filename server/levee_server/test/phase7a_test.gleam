@@ -1,6 +1,6 @@
-import gleam/result
 import gleam/http
 import gleam/http/request
+import gleam/result
 import gleeunit/should
 import levee_documents/supervisor as documents_supervisor
 import levee_documents/tenant_secrets

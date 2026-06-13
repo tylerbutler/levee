@@ -31,25 +31,6 @@ jobs:
             levee_auth/gleam.toml:version
             levee_admin/gleam.toml:version
 
-      - name: Bump mix.exs version
-        if: steps.release.outputs.skipped != 'true'
-        env:
-          VERSION: ${{ steps.release.outputs.version }}
-          PR_BRANCH: ${{ steps.release.outputs.pr-branch }}
-        shell: bash
-        run: |
-          SEMVER="${VERSION#v}"
-          sed -i "s/version: \".*\"/version: \"${SEMVER}\"/" server/mix.exs
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout "$PR_BRANCH"
-          git add server/mix.exs
-          if ! git diff --cached --quiet; then
-            git commit -m "chore(server): bump mix.exs version to ${SEMVER}"
-            git push origin "$PR_BRANCH"
-          fi
-
       - name: Summary
         if: steps.release.outputs.skipped != 'true'
         env:

@@ -4,11 +4,11 @@ Package-specific guidance for the Levee Fluid Framework service client.
 
 ## Package Overview
 
-High-level client library for interacting with Levee Fluid Framework servers. This package wraps `@tylerbu/levee-driver` to provide a simplified `fluid-static`-style API for working with Phoenix Channels-based Fluid servers.
+High-level client library for interacting with Levee Fluid Framework servers. This package wraps `@tylerbu/levee-driver` to provide a simplified `fluid-static`-style API for working with Phoenix Channels-compatible Fluid servers.
 
 **Status:** Private package (not published to npm)
 **Framework:** Fluid Framework v2.33.x
-**Purpose:** Personal projects using Fluid Framework with Levee (Phoenix/Elixir) servers
+**Purpose:** Personal projects using Fluid Framework with Levee (Gleam) servers
 
 ## Essential Commands
 
@@ -164,14 +164,14 @@ pnpm test:vitest
 pnpm test:coverage
 ```
 
-Integration tests require a running Levee server (Phoenix/Elixir).
+Integration tests require a running Levee server (Gleam).
 
 ## Important Constraints
 
 1. **Private Package** - Not published to npm
 2. **Fluid Framework Version** - Locked to v2.33.x
 3. **TypeScript** - Strict mode enabled
-4. **Levee Server** - Requires running Phoenix/Elixir Levee server
+4. **Levee Server** - Requires running Gleam Levee server
 5. **Biome Formatting** - Code must pass Biome checks
 
 ## Fluid Framework Resources

@@ -1,6 +1,6 @@
-# === Server (Elixir/Gleam) ===
+# === Server (Gleam) ===
 
-# Mix build artifacts
+# Legacy Mix build artifacts
 server/_build/
 server/cover/
 server/deps/
@@ -54,3 +54,4 @@ server/**/admin/
 # === Claude Code ===
 
 **/.claude/settings.local.json
+server/levee_server/priv/storage

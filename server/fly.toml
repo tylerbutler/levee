@@ -7,8 +7,6 @@ primary_region = "sjc"
   # image = "ghcr.io/tylerbutler/levee:latest"
 
 [env]
-  PHX_HOST = "levee.fly.dev"
-  PHX_SERVER = "true"
   PORT = "4000"
 
 [http_service]

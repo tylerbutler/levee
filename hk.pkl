@@ -1,7 +1,6 @@
 amends "package://github.com/jdx/hk/releases/download/v1.32.0/hk@1.32.0#/Config.pkl"
 import "package://github.com/jdx/hk/releases/download/v1.32.0/hk@1.32.0#/Builtins.pkl"
 
-// Gleam formatting
 local gleam_linters = new Mapping<String, Step> {
     ["gleam_fmt"] {
         glob = "server/**/*.gleam"
@@ -11,23 +10,6 @@ local gleam_linters = new Mapping<String, Step> {
     }
 }
 
-// Elixir linters
-local elixir_linters = new Mapping<String, Step> {
-    ["mix_fmt"] {
-        glob = "server/**/*.ex"
-        batch = true
-        fix = "cd server && mix format"
-        check = "cd server && mix format --check-formatted"
-    }
-
-    ["mix_compile"] {
-        glob = "server/**/*.ex"
-        batch = true
-        check = "cd server && mix compile --warnings-as-errors"
-    }
-}
-
-// Client formatting
 local client_linters = new Mapping<String, Step> {
     ["biome_fmt"] {
         glob = "client/**/*.{ts,tsx,js,json}"
@@ -37,17 +19,6 @@ local client_linters = new Mapping<String, Step> {
     }
 }
 
-// Full test suite (slower, for pre-push or manual checks)
-// Note: mix test runs the full suite (no {{files}} template), so batch must be
-// false to avoid launching parallel instances that fight over DETS table files.
-local test_linters = new Mapping<String, Step> {
-    ["mix_test"] {
-        glob = "server/**/*.ex"
-        check = "cd server && mix test"
-    }
-}
-
-// PKL config validation
 local config_linters = new Mapping<String, Step> {
     ["pkl"] {
         glob = "*.pkl"
@@ -56,49 +27,44 @@ local config_linters = new Mapping<String, Step> {
 }
 
 hooks {
-    // Pre-commit: format all code and stage fixes
     ["pre-commit"] {
         fix = true
         stage = true
         stash = "git"
         steps {
             ...gleam_linters
-            ...elixir_linters
             ...client_linters
             ...config_linters
         }
     }
 
-    // Pre-push: run full test suite
     ["pre-push"] {
         steps {
             ...gleam_linters
-            ...elixir_linters
-            ...test_linters
+            ["gleam_test"] {
+                glob = "server/**/*.gleam"
+                check = "just test-server"
+            }
         }
     }
 
-    // Manual fix command: hk fix
     ["fix"] {
         fix = true
         steps {
             ...gleam_linters
-            ...elixir_linters
             ...client_linters
             ...config_linters
         }
     }
 
-    // Manual check command: hk check (add --slow for tests)
     ["check"] {
         steps {
             ...gleam_linters
-            ...elixir_linters
             ...client_linters
             ...config_linters
-            ["mix_test"] {
-                glob = "server/**/*.ex"
-                check = "cd server && mix test"
+            ["gleam_test"] {
+                glob = "server/**/*.gleam"
+                check = "just test-server"
                 profiles = List("slow")
             }
         }

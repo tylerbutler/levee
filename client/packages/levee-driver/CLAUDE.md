@@ -4,11 +4,11 @@ Package-specific guidance for the Levee Fluid Framework driver.
 
 ## Package Overview
 
-Low-level Fluid Framework driver for connecting to Levee servers. This driver provides a drop-in replacement for Socket.IO-based drivers, using Phoenix Channels (Elixir/Phoenix) for real-time WebSocket communication.
+Low-level Fluid Framework driver for connecting to Levee servers. This driver provides a drop-in replacement for Socket.IO-based drivers, using Phoenix Channels-compatible WebSockets (Gleam/Beryl) for real-time WebSocket communication.
 
 **Status:** Private package (not published to npm)
 **Framework:** Fluid Framework v2.33.x
-**Purpose:** Personal projects using Fluid Framework with Phoenix/Elixir servers
+**Purpose:** Personal projects using Fluid Framework with Gleam Levee servers
 
 See [DEV.md](DEV.md) for development workflows (e.g., updating protocol schema).
 
@@ -165,7 +165,7 @@ Test files are in the `test/` directory.
 1. **Private Package** - Not published to npm
 2. **Fluid Framework Version** - Locked to v2.33.x
 3. **TypeScript** - Strict mode enabled
-4. **Phoenix Channels** - Requires Phoenix 1.7+ compatible server
+4. **Phoenix Channels** - Requires the Gleam Levee server with Phoenix Channels-compatible WebSockets
 5. **Biome Formatting** - Code must pass Biome checks
 
 ## Fluid Framework Resources

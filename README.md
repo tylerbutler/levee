@@ -1,16 +1,16 @@
 # Levee
 
-Fluid Framework-compatible collaborative document service with an Elixir/Gleam server and TypeScript client packages.
+Fluid Framework-compatible collaborative document service with a pure Gleam server and TypeScript client packages.
 
 ## Prerequisites
 
 Install tools using [mise](https://mise.jdx.dev/):
 
 ```bash
-mise install    # Installs Elixir, Erlang, Gleam, Node.js, pnpm, just
+mise install    # Installs Erlang, Gleam, Node.js, pnpm, just
 ```
 
-Or install manually: Elixir 1.18+, Erlang/OTP 28+, Gleam 1.14+, Node.js 22+, pnpm 10.24+, [just](https://github.com/casey/just).
+Or install manually: Erlang/OTP 28+, Gleam 1.14+, Node.js 22+, pnpm 10.24+, [just](https://github.com/casey/just).
 
 ## Quick Start
 
@@ -25,7 +25,7 @@ just server   # Start dev server at localhost:4000
 
 ```
 levee/
-├── server/           # Elixir/Gleam server (Phoenix)
+├── server/           # Pure Gleam server packages
 ├── client/           # TypeScript client packages (pnpm workspace)
 │   └── packages/
 │       ├── levee-driver/            # Low-level Phoenix Channels Fluid driver
@@ -43,10 +43,9 @@ See [CLAUDE.md](CLAUDE.md) for detailed architecture documentation.
 ### Server
 
 ```bash
-just server           # Start Phoenix dev server (localhost:4000)
-just iex              # Start with interactive Elixir shell
-just test-server      # Run Gleam + Elixir tests
-just build-server     # Build Gleam packages + Elixir
+just server           # Start Gleam server (localhost:4000)
+just test-server      # Run Gleam server tests
+just build-server     # Build Gleam packages + admin UI
 ```
 
 The server auto-registers a default dev tenant on startup. See [server/DEV.md](server/DEV.md) for server development details.
@@ -66,7 +65,7 @@ just lint-client      # Lint with Biome
 
 ```bash
 just test-client    # Runs vitest — tests pure logic (URL resolution, tokens, etc.)
-just test-server    # Runs mix test + gleam test
+just test-server    # Runs Gleam tests for server packages
 ```
 
 ### Integration Tests (require running server)
@@ -154,7 +153,6 @@ The Dockerfile at `server/Dockerfile` builds a production image of the Levee ser
 cd server
 docker build -t levee:local .
 docker run -p 4000:4000 \
-  -e SECRET_KEY_BASE=$(openssl rand -base64 64) \
   -e LEVEE_TENANT_ID=fluid \
   -e LEVEE_TENANT_KEY=dev-tenant-secret-key \
   levee:local
