@@ -10,6 +10,7 @@ import gleam/string
 import levee_server/channels/document_channel
 import levee_server/proxy
 import levee_server/routes/auth_api
+import levee_server/routes/oauth
 import levee_server/routes/read
 import levee_server/routes/write
 import levee_server/storage
@@ -104,8 +105,17 @@ pub fn handle_request(req: wisp.Request) -> wisp.Response {
         Error(Nil) ->
           case auth_api.handle(req) {
             Ok(response) -> response
-            Error(Nil) -> proxy.handle(req)
+            Error(Nil) ->
+              case oauth.handle(req) {
+                Ok(response) -> response
+                Error(Nil) -> proxy.handle(req)
+              }
           }
       }
   }
+}
+
+/// Exposes the OAuth state store for route tests.
+pub fn oauth_store_for_test() {
+  oauth.oauth_store_for_test()
 }

@@ -64,4 +64,5 @@ levee_protocol = { path = "../levee_protocol" }
 levee_storage = { path = "../levee_storage" }
 mist = { version = ">= 6.0.0 and < 8.0.0" }
 phoenix_channel_fixtures = { git = "https://github.com/tylerbutler/phoenix_channel_fixtures.git", ref = "7daccb856d17db6278980277237c201b2acdcdf1" }
+vestibule = { git = "https://github.com/tylerbutler/vestibule.git", ref = "99755424808a59f72dee51e5bc3297b9d0abb547" }
 wisp = { version = ">= 1.0.0 and < 3.0.0" }

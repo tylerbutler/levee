@@ -11,10 +11,16 @@
     dynamic_to_base64/1,
     now_seconds/0,
     now_iso8601/0,
+    set_env/2,
+    get_github_allowed_users/0,
+    set_github_allowed_users/1,
+    unset_github_allowed_users/0,
     ensure_dir/1,
     session_alive/2,
     get_auth_store/0,
     put_auth_store/1,
+    get_oauth_store/0,
+    put_oauth_store/1,
     get_document_supervisor/0,
     put_document_supervisor/1,
     clear_document_supervisor/0
@@ -88,6 +94,24 @@ now_iso8601() ->
             erlang:system_time(second),
             [{unit, second}, {offset, "Z"}])).
 
+get_github_allowed_users() ->
+    case application:get_env(levee, github_allowed_users) of
+        {ok, Users} when is_list(Users) -> {some, Users};
+        _ -> none
+    end.
+
+set_github_allowed_users(Users) ->
+    application:set_env(levee, github_allowed_users, Users),
+    nil.
+
+unset_github_allowed_users() ->
+    application:unset_env(levee, github_allowed_users),
+    nil.
+
+set_env(Name, Value) ->
+    os:putenv(binary_to_list(Name), binary_to_list(Value)),
+    nil.
+
 ensure_dir(Path) ->
     ok = filelib:ensure_dir(filename:join(Path, <<"dummy">>)),
     nil.
@@ -137,6 +161,28 @@ get_elixir_auth_store() ->
 
 put_auth_store(Store) ->
     persistent_term:put(levee_server_auth_store, Store),
+    nil.
+
+get_oauth_store() ->
+    case get_test_oauth_store() of
+        {ok, Store} -> {ok, Store};
+        {error, nil} -> get_elixir_oauth_store()
+    end.
+
+get_test_oauth_store() ->
+    try {ok, persistent_term:get(levee_server_oauth_store)}
+    catch error:badarg -> {error, nil}
+    end.
+
+get_elixir_oauth_store() ->
+    try 'Elixir.Levee.OAuth.StateStoreSupervisor':get_actor() of
+        Actor -> {ok, Actor}
+    catch
+        _:_ -> {error, nil}
+    end.
+
+put_oauth_store(Store) ->
+    persistent_term:put(levee_server_oauth_store, Store),
     nil.
 
 get_document_supervisor() ->

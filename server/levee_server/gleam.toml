@@ -15,6 +15,7 @@ envoy = ">= 1.1.0 and < 2.0.0"
 gleam_httpc = ">= 1.0.0 and < 6.0.0"
 gleam_http = ">= 4.0.0 and < 5.0.0"
 beryl = { git = "https://github.com/tylerbutler/beryl.git", ref = "9ee235a444052e1516e4a4b74db67c4fe9a3e9e3" }
+vestibule = { git = "https://github.com/tylerbutler/vestibule.git", ref = "99755424808a59f72dee51e5bc3297b9d0abb547" }
 
 # Path dependencies to sibling Gleam packages
 levee_protocol = { path = "../levee_protocol" }
