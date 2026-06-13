@@ -21,7 +21,15 @@ pub type Secrets {
 }
 
 pub type Claims {
-  Claims(tenant_id: String, document_id: String, scopes: List(String), exp: Int)
+  Claims(
+    tenant_id: String,
+    document_id: String,
+    scopes: List(String),
+    exp: Int,
+    user_id: String,
+    iat: Int,
+    ver: String,
+  )
 }
 
 pub type AuthError {
@@ -48,6 +56,9 @@ type JwtPayload {
     document_id: String,
     scopes: List(String),
     exp: Int,
+    user_id: String,
+    iat: Int,
+    ver: String,
   )
 }
 
@@ -289,6 +300,9 @@ fn verify_signature_and_payload(
             document_id: payload.document_id,
             scopes: payload.scopes,
             exp: payload.exp,
+            user_id: payload.user_id,
+            iat: payload.iat,
+            ver: payload.ver,
           ))
       }
     }
@@ -305,7 +319,21 @@ fn payload_decoder() -> decode.Decoder(JwtPayload) {
   use document_id <- decode.field("documentId", decode.string)
   use scopes <- decode.field("scopes", decode.list(decode.string))
   use exp <- decode.field("exp", decode.int)
-  decode.success(JwtPayload(tenant_id:, document_id:, scopes:, exp:))
+  use user_id <- decode.optional_field("user", "", {
+    use id <- decode.field("id", decode.string)
+    decode.success(id)
+  })
+  use iat <- decode.optional_field("iat", 0, decode.int)
+  use ver <- decode.optional_field("ver", "1.0", decode.string)
+  decode.success(JwtPayload(
+    tenant_id:,
+    document_id:,
+    scopes:,
+    exp:,
+    user_id:,
+    iat:,
+    ver:,
+  ))
 }
 
 fn sign_payload(payload: json.Json, secret: String) -> String {

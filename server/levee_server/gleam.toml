@@ -14,12 +14,14 @@ wisp = ">= 1.0.0 and < 3.0.0"
 envoy = ">= 1.1.0 and < 2.0.0"
 gleam_httpc = ">= 1.0.0 and < 6.0.0"
 gleam_http = ">= 4.0.0 and < 5.0.0"
+beryl = { git = "https://github.com/tylerbutler/beryl.git", ref = "9ee235a444052e1516e4a4b74db67c4fe9a3e9e3" }
 
 # Path dependencies to sibling Gleam packages
 levee_protocol = { path = "../levee_protocol" }
 levee_auth = { path = "../levee_auth" }
 levee_storage = { path = "../levee_storage" }
 levee_oauth = { path = "../levee_oauth" }
+levee_documents = { path = "../levee_documents" }
 
 # TODO(Phase 3/5): Add beryl, roost, phoenix_channel_fixtures, vestibule_wisp,
 # and gwt after confirming exact hex versions resolve together. Phase 0 only
@@ -27,3 +29,4 @@ levee_oauth = { path = "../levee_oauth" }
 
 [dev-dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"
+phoenix_channel_fixtures = { git = "https://github.com/tylerbutler/phoenix_channel_fixtures.git", ref = "7daccb856d17db6278980277237c201b2acdcdf1" }

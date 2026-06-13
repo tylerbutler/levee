@@ -14,7 +14,10 @@
     ensure_dir/1,
     session_alive/2,
     get_auth_store/0,
-    put_auth_store/1
+    put_auth_store/1,
+    get_document_supervisor/0,
+    put_document_supervisor/1,
+    clear_document_supervisor/0
 ]).
 
 get_tables() ->
@@ -90,6 +93,23 @@ ensure_dir(Path) ->
     nil.
 
 session_alive(Tenant, Document) ->
+    case gleam_session_alive(Tenant, Document) of
+        true -> true;
+        false -> phoenix_session_alive(Tenant, Document)
+    end.
+
+gleam_session_alive(Tenant, Document) ->
+    try persistent_term:get(levee_server_document_supervisor) of
+        Supervisor ->
+            case 'levee_documents@supervisor':get_session(Supervisor, Tenant, Document) of
+                {ok, _Actor} -> true;
+                _ -> false
+            end
+    catch
+        _:_ -> false
+    end.
+
+phoenix_session_alive(Tenant, Document) ->
     try 'Elixir.Levee.Documents.Registry':get_session(Tenant, Document) of
         {ok, _Pid} -> true;
         _ -> false
@@ -117,4 +137,17 @@ get_elixir_auth_store() ->
 
 put_auth_store(Store) ->
     persistent_term:put(levee_server_auth_store, Store),
+    nil.
+
+get_document_supervisor() ->
+    try {ok, persistent_term:get(levee_server_document_supervisor)}
+    catch error:badarg -> {error, nil}
+    end.
+
+put_document_supervisor(Supervisor) ->
+    persistent_term:put(levee_server_document_supervisor, Supervisor),
+    nil.
+
+clear_document_supervisor() ->
+    persistent_term:erase(levee_server_document_supervisor),
     nil.
