@@ -91,7 +91,6 @@ fn native_write_route(
     True ->
       case auth.verify_request(req, tenant_id, document_id, scopes) {
         Ok(_) -> Ok(next())
-        Error(auth.UnknownTenant) -> Error(Nil)
         Error(error) -> Ok(auth.error_response(error))
       }
   }

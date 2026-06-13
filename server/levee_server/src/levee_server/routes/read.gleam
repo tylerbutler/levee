@@ -82,7 +82,6 @@ fn native_read_route(
         auth.verify_request(req, tenant_id, document_id, [auth.scope_doc_read])
       {
         Ok(_) -> Ok(next())
-        Error(auth.UnknownTenant) -> Error(Nil)
         Error(error) -> Ok(auth.error_response(error))
       }
   }

@@ -38,12 +38,16 @@ pub fn get_tables() -> Result(Tables, Nil) {
 }
 
 pub fn get_or_init_tables() -> Tables {
+  let data_dir =
+    envoy.get("LEVEE_STORAGE_DATA_DIR")
+    |> result.unwrap(default_storage_data_dir)
+  get_or_init_tables_at(data_dir)
+}
+
+pub fn get_or_init_tables_at(data_dir: String) -> Tables {
   case get_tables() {
     Ok(tables) -> tables
     Error(Nil) -> {
-      let data_dir =
-        envoy.get("LEVEE_STORAGE_DATA_DIR")
-        |> result.unwrap(default_storage_data_dir)
       ensure_dir_for_test(data_dir)
       let tables = levee_storage.ets_init(data_dir)
       ffi_put_tables(tables)

@@ -3,6 +3,8 @@
 -export([
     get_tables/0,
     put_tables/1,
+    get_tenant_secrets_actor/0,
+    put_tenant_secrets_actor/1,
     put_tenant_secret/2,
     get_tenant_secrets/1,
     clear_tenant_secret/1,
@@ -43,6 +45,15 @@ put_tables(Tables) ->
     persistent_term:put(levee_storage_tables, Tables),
     nil.
 
+get_tenant_secrets_actor() ->
+    try {ok, persistent_term:get(levee_server_tenant_secrets)}
+    catch error:badarg -> {error, nil}
+    end.
+
+put_tenant_secrets_actor(Actor) ->
+    persistent_term:put(levee_server_tenant_secrets, Actor),
+    nil.
+
 put_tenant_secret(Tenant, Secret) ->
     persistent_term:put({levee_server_tenant_secret, Tenant}, Secret),
     nil.
@@ -50,7 +61,7 @@ put_tenant_secret(Tenant, Secret) ->
 get_tenant_secrets(Tenant) ->
     case get_test_tenant_secrets(Tenant) of
         {ok, Secrets} -> {ok, Secrets};
-        {error, nil} -> get_elixir_tenant_secrets(Tenant)
+        {error, nil} -> get_actor_tenant_secrets(Tenant)
     end.
 
 get_test_tenant_secrets(Tenant) ->
@@ -70,11 +81,13 @@ get_legacy_test_tenant_secrets(Tenant) ->
     catch error:badarg -> {error, nil}
     end.
 
-get_elixir_tenant_secrets(Tenant) ->
-    try 'Elixir.Levee.Auth.TenantSecrets':get_secrets(Tenant) of
-        {ok, #{secret1 := Secret1, secret2 := Secret2}} -> {ok, {Secret1, Secret2}};
-        {error, _} -> {error, nil};
-        _ -> {error, nil}
+get_actor_tenant_secrets(Tenant) ->
+    try persistent_term:get(levee_server_tenant_secrets) of
+        Actor ->
+            case 'levee_documents@tenant_secrets':get_secrets(Actor, Tenant) of
+                {ok, {Secret1, Secret2}} -> {ok, {Secret1, Secret2}};
+                _ -> {error, nil}
+            end
     catch
         _:_ -> {error, nil}
     end.
@@ -86,25 +99,31 @@ clear_tenant_secret(Tenant) ->
 list_tenants() ->
     TestTenants = [Tenant || {{levee_server_tenant, Tenant}, _Data} <- persistent_term:get()]
         ++ [Tenant || {{levee_server_tenant_secret, Tenant}, _Secret} <- persistent_term:get()],
-    ElixirTenants =
-        try 'Elixir.Levee.Auth.TenantSecrets':list_tenants() of
-            Tenants when is_list(Tenants) -> Tenants;
-            _ -> []
+    ActorTenants =
+        try persistent_term:get(levee_server_tenant_secrets) of
+            Actor ->
+                case 'levee_documents@tenant_secrets':list_tenants(Actor) of
+                    Tenants when is_list(Tenants) -> Tenants;
+                    _ -> []
+                end
         catch
             _:_ -> []
         end,
-    lists:usort(TestTenants ++ ElixirTenants).
+    lists:usort(TestTenants ++ ActorTenants).
 
 list_tenants_with_names() ->
     TestTenants = test_tenants_with_names(),
-    ElixirTenants =
-        try 'Elixir.Levee.Auth.TenantSecrets':list_tenants_with_names() of
-            Tenants when is_list(Tenants) -> [tenant_info_to_tuple(T) || T <- Tenants];
-            _ -> []
+    ActorTenants =
+        try persistent_term:get(levee_server_tenant_secrets) of
+            Actor ->
+                case 'levee_documents@tenant_secrets':list_tenants_with_names(Actor) of
+                    Tenants when is_list(Tenants) -> [tenant_info_to_tuple(T) || T <- Tenants];
+                    _ -> []
+                end
         catch
             _:_ -> []
         end,
-    dedupe_tenant_infos(TestTenants ++ ElixirTenants).
+    dedupe_tenant_infos(TestTenants ++ ActorTenants).
 
 test_tenants_with_names() ->
     New = [begin
@@ -114,6 +133,7 @@ test_tenants_with_names() ->
     Legacy = [{Tenant, Tenant} || {{levee_server_tenant_secret, Tenant}, _Secret} <- persistent_term:get()],
     New ++ Legacy.
 
+tenant_info_to_tuple({tenant_info, Id, Name}) -> {Id, Name};
 tenant_info_to_tuple(#{id := Id, name := Name}) -> {Id, Name};
 tenant_info_to_tuple(#{<<"id">> := Id, <<"name">> := Name}) -> {Id, Name};
 tenant_info_to_tuple(Other) when is_map(Other) ->
@@ -127,9 +147,12 @@ dedupe_tenant_infos(Infos) ->
     maps:values(lists:foldl(fun({Id, Name}, Acc) -> maps:put(Id, {Id, Name}, Acc) end, #{}, Infos)).
 
 create_tenant(Name) ->
-    try 'Elixir.Levee.Auth.TenantSecrets':create_tenant(Name) of
-        {ok, Tenant} -> {ok, tenant_with_secrets_to_tuple(Tenant)};
-        _ -> create_test_tenant(Name)
+    try persistent_term:get(levee_server_tenant_secrets) of
+        Actor ->
+            case 'levee_documents@tenant_secrets':create_tenant(Actor, Name) of
+                {ok, Tenant} -> {ok, tenant_with_secrets_to_tuple(Tenant)};
+                _ -> create_test_tenant(Name)
+            end
     catch
         _:_ -> create_test_tenant(Name)
     end.
@@ -141,6 +164,8 @@ create_test_tenant(Name) ->
     persistent_term:put({levee_server_tenant, Id}, #{name => Name, secret1 => Secret1, secret2 => Secret2}),
     {ok, {Id, Name, Secret1, Secret2}}.
 
+tenant_with_secrets_to_tuple({tenant_with_secrets, Id, Name, Secret1, Secret2}) ->
+    {Id, Name, Secret1, Secret2};
 tenant_with_secrets_to_tuple(#{id := Id, name := Name, secret1 := Secret1, secret2 := Secret2}) ->
     {Id, Name, Secret1, Secret2};
 tenant_with_secrets_to_tuple(#{<<"id">> := Id, <<"name">> := Name, <<"secret1">> := Secret1, <<"secret2">> := Secret2}) ->
@@ -156,9 +181,12 @@ get_tenant(Id) ->
     case get_test_tenant(Id) of
         {ok, Tenant} -> {ok, Tenant};
         {error, nil} ->
-            try 'Elixir.Levee.Auth.TenantSecrets':get_tenant(Id) of
-                {ok, TenantInfo} -> {ok, tenant_info_to_tuple(TenantInfo)};
-                _ -> {error, nil}
+            try persistent_term:get(levee_server_tenant_secrets) of
+                Actor ->
+                    case 'levee_documents@tenant_secrets':get_tenant(Actor, Id) of
+                        {ok, TenantInfo} -> {ok, tenant_info_to_tuple(TenantInfo)};
+                        _ -> {error, nil}
+                    end
             catch
                 _:_ -> {error, nil}
             end
@@ -178,9 +206,17 @@ regenerate_tenant_secret(Id, Slot) ->
     case regenerate_test_tenant_secret(Id, Slot) of
         {ok, Secret} -> {ok, Secret};
         {error, nil} ->
-            try 'Elixir.Levee.Auth.TenantSecrets':regenerate_secret(Id, Slot) of
-                {ok, Secret} -> {ok, Secret};
-                _ -> {error, nil}
+            try persistent_term:get(levee_server_tenant_secrets) of
+                Actor ->
+                    GleamSlot = case Slot of 1 -> slot1; 2 -> slot2; _ -> invalid end,
+                    case GleamSlot of
+                        invalid -> {error, nil};
+                        _ ->
+                            case 'levee_documents@tenant_secrets':regenerate_secret(Actor, Id, GleamSlot) of
+                                {ok, Secret} -> {ok, Secret};
+                                _ -> {error, nil}
+                            end
+                    end
             catch
                 _:_ -> {error, nil}
             end
@@ -201,19 +237,23 @@ delete_tenant(Id) ->
     Existed = tenant_exists(Id),
     persistent_term:erase({levee_server_tenant, Id}),
     persistent_term:erase({levee_server_tenant_secret, Id}),
-    try 'Elixir.Levee.Auth.TenantSecrets':unregister_tenant(Id) of
-        _ -> Existed
+    try persistent_term:get(levee_server_tenant_secrets) of
+        Actor -> 'levee_documents@tenant_secrets':unregister_tenant(Actor, Id)
     catch
-        _:_ -> Existed
-    end.
+        _:_ -> nil
+    end,
+    Existed.
 
 tenant_exists(Id) ->
     case get_test_tenant(Id) of
         {ok, _} -> true;
         {error, nil} ->
-            try 'Elixir.Levee.Auth.TenantSecrets':tenant_exists(Id) of
-                true -> true;
-                _ -> false
+            try persistent_term:get(levee_server_tenant_secrets) of
+                Actor ->
+                    case 'levee_documents@tenant_secrets':tenant_exists(Actor, Id) of
+                        true -> true;
+                        _ -> false
+                    end
             catch
                 _:_ -> false
             end
@@ -286,12 +326,6 @@ read_file(Path) ->
     end.
 
 session_alive(Tenant, Document) ->
-    case gleam_session_alive(Tenant, Document) of
-        true -> true;
-        false -> phoenix_session_alive(Tenant, Document)
-    end.
-
-gleam_session_alive(Tenant, Document) ->
     try persistent_term:get(levee_server_document_supervisor) of
         Supervisor ->
             case 'levee_documents@supervisor':get_session(Supervisor, Tenant, Document) of
@@ -302,30 +336,9 @@ gleam_session_alive(Tenant, Document) ->
         _:_ -> false
     end.
 
-phoenix_session_alive(Tenant, Document) ->
-    try 'Elixir.Levee.Documents.Registry':get_session(Tenant, Document) of
-        {ok, _Pid} -> true;
-        _ -> false
-    catch
-        _:_ -> false
-    end.
-
 get_auth_store() ->
-    case get_test_auth_store() of
-        {ok, Store} -> {ok, Store};
-        {error, nil} -> get_elixir_auth_store()
-    end.
-
-get_test_auth_store() ->
     try {ok, persistent_term:get(levee_server_auth_store)}
     catch error:badarg -> {error, nil}
-    end.
-
-get_elixir_auth_store() ->
-    try 'Elixir.Levee.Auth.SessionStoreSupervisor':get_actor() of
-        Actor -> {ok, Actor}
-    catch
-        _:_ -> {error, nil}
     end.
 
 put_auth_store(Store) ->
@@ -333,21 +346,8 @@ put_auth_store(Store) ->
     nil.
 
 get_oauth_store() ->
-    case get_test_oauth_store() of
-        {ok, Store} -> {ok, Store};
-        {error, nil} -> get_elixir_oauth_store()
-    end.
-
-get_test_oauth_store() ->
     try {ok, persistent_term:get(levee_server_oauth_store)}
     catch error:badarg -> {error, nil}
-    end.
-
-get_elixir_oauth_store() ->
-    try 'Elixir.Levee.OAuth.StateStoreSupervisor':get_actor() of
-        Actor -> {ok, Actor}
-    catch
-        _:_ -> {error, nil}
     end.
 
 put_oauth_store(Store) ->
@@ -366,3 +366,4 @@ put_document_supervisor(Supervisor) ->
 clear_document_supervisor() ->
     persistent_term:erase(levee_server_document_supervisor),
     nil.
+
