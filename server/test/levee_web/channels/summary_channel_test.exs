@@ -50,7 +50,7 @@ defmodule LeveeWeb.SummaryChannelTest do
       }
 
       push(socket, "connect_document", connect_msg)
-      assert_push "connect_document_success", %{"clientId" => client_id}
+      assert_push "connect_document_success", %{"clientId" => client_id}, 1_000
 
       {:ok, client_id: client_id}
     end

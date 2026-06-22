@@ -240,6 +240,70 @@ jobs:
         if: failure()
         run: docker logs levee-server
 
+  e2e-test:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+
+      - name: Build Levee server image
+        run: docker build -t levee-test ./server
+
+      - name: Start Levee server
+        run: |
+          docker run -d --name levee-server \
+            -p 4000:4000 \
+            -e PHX_SERVER=true \
+            -e PHX_HOST=localhost \
+            -e PORT=4000 \
+            -e SECRET_KEY_BASE=dev-only-secret-key-base-at-least-64-characters-long-for-phoenix-framework \
+            -e LEVEE_TENANT_ID=fluid \
+            -e LEVEE_TENANT_KEY=dev-tenant-secret-key \
+            levee-test
+
+      - name: Wait for server to be healthy
+        run: |
+          for i in $(seq 1 30); do
+            if wget --spider -q http://localhost:4000/health 2>/dev/null; then
+              echo "Server is healthy"
+              exit 0
+            fi
+            echo "Waiting for server... ($i/30)"
+            sleep 2
+          done
+          echo "Server failed to start"
+          docker logs levee-server
+          exit 1
+
+      - name: Setup Node.js
+        uses: tylerbutler/actions/setup-node@4c6b22106fa7156926918c47847e7d9fbc0e8f9f # ratchet:tylerbutler/actions/setup-node@main
+        with:
+          working-directory: client
+          install-just: false
+
+      - name: Install Playwright browsers
+        working-directory: client
+        run: pnpm --filter levee-e2e exec playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        working-directory: client/packages/e2e
+        run: pnpm exec playwright test
+        env:
+          CI: true
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: client/packages/e2e/playwright-report/
+          retention-days: 14
+
+      - name: Server logs
+        if: failure()
+        run: docker logs levee-server
+
   client-lint:
     name: Client Lint
     runs-on: ubuntu-latest
