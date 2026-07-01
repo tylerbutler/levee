@@ -91,9 +91,20 @@ test-integration-down:
 test-integration-run:
     cd client && pnpm test:integration:run
 
-# Run Routerlicious driver compatibility contract against a running Sluice server
+# Run Routerlicious driver compatibility contract against a running Sluice server.
+# This is the north-star conformance suite for the Sluice-first client
+# strategy (see docs/adr/002-client-compatibility-strategy.md): the official
+# Routerlicious driver becomes the primary client once this suite is green.
 test-sluice-routerlicious:
     cd client && pnpm test:sluice-routerlicious
+
+# Check the Sluice cutover readiness gate (ADR-003) without hitting the
+# network — runs the manifest/`it.todo`-count consistency test that gates
+# retiring Phoenix/the Socket.IO shim. See
+# docs/adr/003-sluice-cutover-readiness.md and
+# client/packages/levee-driver/test/integration/cutover-readiness.json.
+check-cutover-readiness:
+    cd client && pnpm exec vitest run packages/levee-driver/test/integration/cutover-readiness.test.ts
 
 # Run admin e2e tests (starts Docker server, runs Playwright, stops server)
 test-e2e:

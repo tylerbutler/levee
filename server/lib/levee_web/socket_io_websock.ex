@@ -12,6 +12,17 @@ defmodule LeveeWeb.SocketIOWebSock do
   `Levee.Documents.*` calls are expected to move behind that same
   `Levee.Sluice` boundary or be replaced outright by a Sluice-owned
   listener.
+
+  ## Temporary migration scaffolding — removal gate
+
+  Do not treat this module as permanent runtime. Per
+  `docs/adr/003-sluice-cutover-readiness.md`, it (along with
+  `LeveeWeb.SocketIOPlug`) may only be removed once
+  `sluice-routerlicious.test.ts` reaches zero outstanding `it.todo`
+  conformance gaps for both the `sluice-direct` and `levee-proxy` targets
+  and `cutover-readiness.json`'s `readyForCutover` flag has been
+  deliberately set to `true`. Run `just check-cutover-readiness` to check
+  current status.
   """
 
   @behaviour WebSock

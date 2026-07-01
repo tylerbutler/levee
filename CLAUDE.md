@@ -144,10 +144,17 @@ cd server && mix phx.server                                    # Dev server
 
 | Package | Description |
 |---------|-------------|
-| `levee-driver` | Low-level Phoenix Channels Fluid Framework driver |
+| `levee-driver` | Low-level Phoenix Channels Fluid driver (supported legacy during Sluice migration; see ADR-002) |
 | `levee-client` | High-level client wrapping the driver |
 | `levee-example` | DiceRoller example using driver directly |
 | `levee-presence-tracker` | Presence tracking example using client |
+
+**Client compatibility strategy:** [ADR-002](docs/adr/002-client-compatibility-strategy.md) is the single source of truth. In summary:
+
+- Official `@fluidframework/routerlicious-driver` against Sluice is the primary long-term path
+- `levee-client` is a thin convenience layer designed to re-point at Routerlicious without breaking API changes
+- `levee-driver`'s Phoenix Channels code is **supported legacy during migration**; it becomes **deprecated after** `sluice-routerlicious.test.ts` conformance passes
+- Bug fixes continue; new protocol features target Sluice/Routerlicious first, not Phoenix-specific APIs
 
 ### Client Commands
 
