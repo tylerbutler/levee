@@ -89,6 +89,10 @@ test-integration-down:
 test-integration-run:
     cd client && pnpm test:integration:run
 
+# Run Routerlicious driver compatibility contract against a running Sluice server
+test-sluice-routerlicious:
+    cd client && pnpm test:sluice-routerlicious
+
 # Run admin e2e tests (starts Docker server, runs Playwright, stops server)
 test-e2e:
     cd client && pnpm test:integration:up

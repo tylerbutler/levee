@@ -23,6 +23,8 @@ defmodule LeveeWeb.Endpoint do
     ],
     longpoll: false
 
+  plug LeveeWeb.SocketIOPlug
+
   # Serve at "/" the static files from "priv/static" directory.
   #
   # When code reloading is disabled (e.g., in production),
