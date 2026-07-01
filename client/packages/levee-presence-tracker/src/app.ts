@@ -106,6 +106,10 @@ async function start(): Promise<void> {
 
 	setStatus(`Connected: ${id}`, false, true);
 
+	window.addEventListener("pagehide", () => container.dispose(), {
+		once: true,
+	});
+
 	// Get the presence API from the container
 	const presence = getPresence(container);
 
