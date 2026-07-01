@@ -124,7 +124,17 @@ defmodule Levee.Application do
     end
 
     # Verify critical Gleam modules loaded successfully
-    required_modules = [:levee_protocol, :password_ffi, :tenant_secrets]
+    required_modules = [
+      :levee_protocol,
+      :password_ffi,
+      :tenant_secrets,
+      :sluice@socketio,
+      :sluice@connect_document,
+      :sluice@session_logic,
+      :sluice@signals,
+      :sluice@nack,
+      :sluice@rest
+    ]
 
     Enum.each(required_modules, fn mod ->
       case :code.ensure_loaded(mod) do

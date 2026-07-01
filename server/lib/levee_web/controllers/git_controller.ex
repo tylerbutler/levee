@@ -7,11 +7,18 @@ defmodule LeveeWeb.GitController do
   - POST/GET /repos/:tenant_id/git/trees - Tree storage
   - POST/GET /repos/:tenant_id/git/commits - Commit storage
   - GET/POST/PATCH /repos/:tenant_id/git/refs - Reference management
+
+  Storage calls and Plug/Conn handling stay here; the response *shape*
+  (object/ref URLs, formatted response bodies) is delegated to Sluice's
+  `sluice/rest` module via `Levee.Sluice`, so the wire format for this
+  Storage/Historian-style surface lives in one Sluice-owned place. See
+  `Levee.Sluice` module docs for the broader migration context.
   """
 
   use LeveeWeb, :controller
 
   alias Levee.Storage
+  alias Levee.Sluice
 
   # Blob operations
 
@@ -53,13 +60,15 @@ defmodule LeveeWeb.GitController do
         conn
         |> put_resp_header("cache-control", "public, max-age=31536000")
         |> put_status(:ok)
-        |> json(%{
-          sha: blob.sha,
-          size: blob.size,
-          content: Base.encode64(blob.content),
-          encoding: "base64",
-          url: blob_url(conn, tenant_id, blob.sha)
-        })
+        |> json(
+          Sluice.format_blob_response(
+            base_url(conn),
+            tenant_id,
+            blob.sha,
+            blob.size,
+            Base.encode64(blob.content)
+          )
+        )
 
       {:error, :not_found} ->
         conn
@@ -186,7 +195,7 @@ defmodule LeveeWeb.GitController do
   Example: GET /repos/tenant1/git/refs/heads/main
   """
   def show_ref(conn, %{"tenant_id" => tenant_id, "ref" => ref_parts}) do
-    ref_path = build_ref_path(ref_parts)
+    ref_path = Sluice.build_ref_path(ref_parts)
 
     case Storage.get_ref(tenant_id, ref_path) do
       {:ok, ref} ->
@@ -238,7 +247,7 @@ defmodule LeveeWeb.GitController do
   - sha: New commit SHA
   """
   def update_ref(conn, %{"tenant_id" => tenant_id, "ref" => ref_parts, "sha" => sha}) do
-    ref_path = build_ref_path(ref_parts)
+    ref_path = Sluice.build_ref_path(ref_parts)
 
     case Storage.update_ref(tenant_id, ref_path, sha) do
       {:ok, ref} ->
@@ -285,102 +294,36 @@ defmodule LeveeWeb.GitController do
   defp decode_blob_content(_), do: {:error, "Missing or invalid content"}
 
   defp blob_url(conn, tenant_id, sha) do
-    "#{base_url(conn)}/repos/#{tenant_id}/git/blobs/#{sha}"
-  end
-
-  defp tree_url(conn, tenant_id, sha) do
-    "#{base_url(conn)}/repos/#{tenant_id}/git/trees/#{sha}"
-  end
-
-  defp commit_url(conn, tenant_id, sha) do
-    "#{base_url(conn)}/repos/#{tenant_id}/git/commits/#{sha}"
-  end
-
-  defp ref_url(conn, tenant_id, ref_path) do
-    # Remove "refs/" prefix for URL
-    path = String.replace_prefix(ref_path, "refs/", "")
-    "#{base_url(conn)}/repos/#{tenant_id}/git/refs/#{path}"
+    Sluice.blob_url(base_url(conn), tenant_id, sha)
   end
 
   defp base_url(conn) do
-    port_suffix =
-      case {conn.scheme, conn.port} do
-        {:http, 80} -> ""
-        {:https, 443} -> ""
-        {_, port} -> ":#{port}"
-      end
-
-    "#{conn.scheme}://#{conn.host}#{port_suffix}"
+    Sluice.base_url(conn.scheme, conn.host, conn.port)
   end
 
   defp format_tree_response(conn, tenant_id, tree) do
-    formatted_entries =
+    entries =
       Enum.map(tree.tree, fn entry ->
-        entry_url =
-          case entry.type do
-            "blob" -> blob_url(conn, tenant_id, entry.sha)
-            "tree" -> tree_url(conn, tenant_id, entry.sha)
-            _ -> nil
-          end
-
-        %{
-          path: entry.path,
-          mode: entry.mode,
-          sha: entry.sha,
-          type: entry.type,
-          url: entry_url
-        }
+        {entry.path, entry.mode, entry.sha, entry.type}
       end)
 
-    %{
-      sha: tree.sha,
-      url: tree_url(conn, tenant_id, tree.sha),
-      tree: formatted_entries
-    }
+    Sluice.format_tree_response(base_url(conn), tenant_id, tree.sha, entries)
   end
 
   defp format_commit_response(conn, tenant_id, commit) do
-    %{
-      sha: commit.sha,
-      tree: %{
-        sha: commit.tree,
-        url: tree_url(conn, tenant_id, commit.tree)
-      },
-      parents:
-        Enum.map(commit.parents, fn parent_sha ->
-          %{
-            sha: parent_sha,
-            url: commit_url(conn, tenant_id, parent_sha)
-          }
-        end),
-      message: commit.message,
-      author: commit.author,
-      committer: commit.committer,
-      url: commit_url(conn, tenant_id, commit.sha)
-    }
+    Sluice.format_commit_response(
+      base_url(conn),
+      tenant_id,
+      commit.sha,
+      commit.tree,
+      commit.parents,
+      commit.message,
+      commit.author,
+      commit.committer
+    )
   end
 
   defp format_ref_response(conn, tenant_id, ref) do
-    %{
-      ref: ref.ref,
-      object: %{
-        sha: ref.sha,
-        type: "commit",
-        url: commit_url(conn, tenant_id, ref.sha)
-      },
-      url: ref_url(conn, tenant_id, ref.ref)
-    }
-  end
-
-  defp build_ref_path(ref_parts) when is_list(ref_parts) do
-    "refs/" <> Enum.join(ref_parts, "/")
-  end
-
-  defp build_ref_path(ref_path) when is_binary(ref_path) do
-    if String.starts_with?(ref_path, "refs/") do
-      ref_path
-    else
-      "refs/" <> ref_path
-    end
+    Sluice.format_ref_response(base_url(conn), tenant_id, ref.ref, ref.sha)
   end
 end

@@ -26,6 +26,7 @@ build-gleam:
     cd server/levee_storage && gleam build --target erlang
     cd server/levee_oauth && gleam build --target erlang
     cd server/levee_admin && gleam build --target javascript
+    cd server/sluice && gleam build --target erlang
 
 # Build admin UI and copy to priv/static/admin
 build-admin: build-gleam
@@ -64,6 +65,7 @@ test-gleam:
     cd server/levee_auth && gleam test
     cd server/levee_oauth && gleam test
     cd server/levee_admin && gleam test
+    cd server/sluice && gleam test
 
 # Run Elixir tests
 test-elixir:
@@ -117,6 +119,7 @@ format-gleam:
     cd server/levee_storage && gleam format
     cd server/levee_oauth && gleam format
     cd server/levee_admin && gleam format
+    cd server/sluice && gleam format
 
 # Format Elixir code
 format-elixir:
@@ -139,6 +142,7 @@ lint-gleam:
     cd server/levee_storage && gleam format --check
     cd server/levee_oauth && gleam format --check
     cd server/levee_admin && gleam format --check
+    cd server/sluice && gleam format --check
 
 # Lint Elixir code
 lint-elixir:

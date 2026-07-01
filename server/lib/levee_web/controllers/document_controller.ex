@@ -6,12 +6,18 @@ defmodule LeveeWeb.DocumentController do
   - POST /documents/:tenant_id - Create document
   - GET /documents/:tenant_id/:id - Get document metadata
   - GET /documents/:tenant_id/session/:id - Get session info
+
+  Storage calls and Plug/Conn handling stay here; the document metadata
+  and session-info response *shape* is delegated to Sluice's `sluice/rest`
+  module via `Levee.Sluice` (see that module's docs for the broader
+  migration context).
   """
 
   use LeveeWeb, :controller
 
   alias Levee.Storage
   alias Levee.Documents.Registry
+  alias Levee.Sluice
 
   @doc """
   Create a new document.
@@ -70,11 +76,13 @@ defmodule LeveeWeb.DocumentController do
       {:ok, document} ->
         conn
         |> put_status(:ok)
-        |> json(%{
-          id: document.id,
-          tenantId: document.tenant_id,
-          sequenceNumber: document.sequence_number
-        })
+        |> json(
+          Sluice.format_document_response(
+            document.id,
+            document.tenant_id,
+            document.sequence_number
+          )
+        )
 
       {:error, :not_found} ->
         conn
@@ -116,13 +124,7 @@ defmodule LeveeWeb.DocumentController do
     host = LeveeWeb.Endpoint.url()
     is_alive = match?({:ok, _pid}, Registry.get_session(tenant_id, document_id))
 
-    %{
-      ordererUrl: "#{host}/socket",
-      historianUrl: "#{host}/repos/#{tenant_id}",
-      deltaStreamUrl: "#{host}/deltas/#{tenant_id}/#{document_id}",
-      isSessionAlive: is_alive,
-      isSessionActive: is_alive
-    }
+    Sluice.session_info(host, tenant_id, document_id, is_alive)
   end
 
   # Process the initial summary from container attach by building a full
