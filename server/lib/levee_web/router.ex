@@ -94,6 +94,14 @@ defmodule LeveeWeb.Router do
     get "/:tenant_id/:id", DeltaController, :index
   end
 
+  # Summary Version Operations (Storage Service) - read access
+  scope "/versions", LeveeWeb do
+    pipe_through :read_access
+
+    # GET /versions/:tenant_id/:id - List summary versions, newest first
+    get "/:tenant_id/:id", VersionController, :index
+  end
+
   # Git Storage Operations (Historian Service) - read operations
   scope "/repos/:tenant_id/git", LeveeWeb do
     pipe_through :read_access
