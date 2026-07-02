@@ -1,5 +1,8 @@
 /* This file is auto-generated from Gleam protocol types. Do not edit manually. */
 
+export type ConnectionMode = "write" | "read";
+export type Scope = "doc:read" | "doc:write" | "summary:write";
+
 export interface ProtocolSchema {
 	Client?: Client;
 	ClientCapabilities?: ClientCapabilities;
@@ -18,9 +21,7 @@ export interface ProtocolSchema {
 }
 export interface Client {
 	details: ClientDetails;
-	mode: {
-		enum: "write" | "read";
-	};
+	mode: "write" | "read";
 	permission: string[];
 	scopes: string[];
 	timestamp?: number;
@@ -38,28 +39,17 @@ export interface ClientCapabilities {
 export interface User {
 	id: string;
 	properties: {
-		[k: string]: {
-			[k: string]: unknown;
-		};
+		[k: string]: unknown;
 	};
-}
-export interface ConnectionMode {
-	enum: "write" | "read";
 }
 export interface DocumentMessage {
 	client_sequence_number: number;
 	compression?: string;
-	contents: {
-		[k: string]: unknown;
-	};
+	contents: unknown;
 	message_type: string;
-	metadata?: {
-		[k: string]: unknown;
-	};
+	metadata?: unknown;
 	reference_sequence_number: number;
-	server_metadata?: {
-		[k: string]: unknown;
-	};
+	server_metadata?: unknown;
 	traces?: Trace[];
 }
 export interface Trace {
@@ -72,9 +62,6 @@ export interface MessageOrigin {
 	minimum_sequence_number: number;
 	sequence_number: number;
 }
-export interface Scope {
-	enum: "doc:read" | "doc:write" | "summary:write";
-}
 export interface SequencedClient {
 	client: Client;
 	sequence_number: number;
@@ -82,21 +69,15 @@ export interface SequencedClient {
 export interface SequencedDocumentMessage {
 	client_id?: string | null;
 	client_sequence_number: number;
-	contents: {
-		[k: string]: unknown;
-	};
+	contents: unknown;
 	data?: string;
 	message_type: string;
-	metadata?: {
-		[k: string]: unknown;
-	};
+	metadata?: unknown;
 	minimum_sequence_number: number;
 	origin?: MessageOrigin;
 	reference_sequence_number: number;
 	sequence_number: number;
-	server_metadata?: {
-		[k: string]: unknown;
-	};
+	server_metadata?: unknown;
 	timestamp: number;
 	traces?: Trace[];
 }

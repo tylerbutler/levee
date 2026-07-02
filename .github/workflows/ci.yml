@@ -86,13 +86,13 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
         with:
           path: |
-            server/levee_protocol/build
+            server/levee_protocol_deps/build
             server/levee_auth/build
             server/levee_oauth/build
             server/levee_admin/build
             server/levee_storage/build
             ~/.cache/gleam
-          key: gleam-${{ runner.os }}-${{ hashFiles('server/levee_protocol/gleam.toml', 'server/levee_protocol/manifest.toml', 'server/levee_auth/gleam.toml', 'server/levee_auth/manifest.toml', 'server/levee_oauth/gleam.toml', 'server/levee_oauth/manifest.toml', 'server/levee_admin/gleam.toml', 'server/levee_admin/manifest.toml', 'server/levee_storage/gleam.toml', 'server/levee_storage/manifest.toml') }}
+          key: gleam-${{ runner.os }}-${{ hashFiles('server/levee_protocol_deps/gleam.toml', 'server/levee_protocol_deps/manifest.toml', 'server/levee_auth/gleam.toml', 'server/levee_auth/manifest.toml', 'server/levee_oauth/gleam.toml', 'server/levee_oauth/manifest.toml', 'server/levee_admin/gleam.toml', 'server/levee_admin/manifest.toml', 'server/levee_storage/gleam.toml', 'server/levee_storage/manifest.toml') }}
           restore-keys: |
             gleam-${{ runner.os }}-
 
@@ -135,13 +135,13 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
         with:
           path: |
-            server/levee_protocol/build
+            server/levee_protocol_deps/build
             server/levee_auth/build
             server/levee_oauth/build
             server/levee_admin/build
             server/levee_storage/build
             ~/.cache/gleam
-          key: gleam-${{ runner.os }}-${{ hashFiles('server/levee_protocol/gleam.toml', 'server/levee_protocol/manifest.toml', 'server/levee_auth/gleam.toml', 'server/levee_auth/manifest.toml', 'server/levee_oauth/gleam.toml', 'server/levee_oauth/manifest.toml', 'server/levee_admin/gleam.toml', 'server/levee_admin/manifest.toml', 'server/levee_storage/gleam.toml', 'server/levee_storage/manifest.toml') }}
+          key: gleam-${{ runner.os }}-${{ hashFiles('server/levee_protocol_deps/gleam.toml', 'server/levee_protocol_deps/manifest.toml', 'server/levee_auth/gleam.toml', 'server/levee_auth/manifest.toml', 'server/levee_oauth/gleam.toml', 'server/levee_oauth/manifest.toml', 'server/levee_admin/gleam.toml', 'server/levee_admin/manifest.toml', 'server/levee_storage/gleam.toml', 'server/levee_storage/manifest.toml') }}
           restore-keys: |
             gleam-${{ runner.os }}-
 

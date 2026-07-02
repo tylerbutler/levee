@@ -10,19 +10,19 @@ defmodule Levee.Protocol.Bridge do
   """
 
   # Gleam modules compile to :module_name atoms
-  # Note: Gleam submodules use @ separator (e.g., :levee_protocol@sequencing)
-  @gleam_module :levee_protocol
-  @gleam_sequencing :levee_protocol@sequencing
+  # Note: Gleam submodules use @ separator (e.g., :spillway@sequencing)
+  @gleam_module :spillway
+  @gleam_sequencing :spillway@sequencing
 
   # Gleam modules are built separately and not visible to the Elixir compiler.
   # This directive tells the compiler these modules will exist at runtime.
   @compile {:no_warn_undefined,
             [
-              :levee_protocol,
-              :levee_protocol@sequencing,
-              :levee_protocol@nack,
-              :levee_protocol@session_logic,
-              :levee_protocol@signals
+              :spillway,
+              :spillway@sequencing,
+              :spillway@nack,
+              :spillway@session_logic,
+              :spillway@signals
             ]}
 
   @doc """
@@ -141,7 +141,7 @@ defmodule Levee.Protocol.Bridge do
   # Nack generation helpers
   # ─────────────────────────────────────────────────────────────────────────────
 
-  @gleam_nack :levee_protocol@nack
+  @gleam_nack :spillway@nack
 
   @doc """
   Build a nack for an unknown client error.
@@ -252,7 +252,7 @@ defmodule Levee.Protocol.Bridge do
   # Session logic helpers
   # ─────────────────────────────────────────────────────────────────────────────
 
-  @gleam_session_logic :levee_protocol@session_logic
+  @gleam_session_logic :spillway@session_logic
 
   @doc """
   Negotiate features between server and client capabilities.
@@ -335,7 +335,7 @@ defmodule Levee.Protocol.Bridge do
   # Signal normalization helpers
   # ─────────────────────────────────────────────────────────────────────────────
 
-  @gleam_signals :levee_protocol@signals
+  @gleam_signals :spillway@signals
 
   @doc """
   Normalize a signal map (v1 or v2) to a consistent internal format.

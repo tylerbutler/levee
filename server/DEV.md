@@ -60,9 +60,9 @@ mix test test/levee/documents/session_test.exs      # Single file
 mix test test/levee/documents/session_test.exs:42   # Specific line
 ```
 
-## Gleam Protocol
+## Gleam Packages
 
-The `levee_protocol/`, `levee_auth/`, and `levee_admin/` directories contain Gleam packages that compile to BEAM.
+The `levee_protocol_deps/`, `levee_auth/`, `levee_storage/`, `levee_oauth/`, and `levee_admin/` directories contain Gleam packages that compile to BEAM. Protocol logic comes from external `spillway` and Fluid event names from `dewdrop/events`, both hosted by `levee_protocol_deps/`.
 
 After modifying Gleam files:
 
@@ -72,7 +72,7 @@ just build-gleam
 cd server && mix compile --force    # Reload BEAM modules
 
 # Or directly
-cd server/levee_protocol && gleam build
+cd server/levee_protocol_deps && gleam build
 cd server && mix compile --force
 ```
 
