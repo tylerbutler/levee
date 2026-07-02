@@ -16,7 +16,8 @@ defmodule Mix.Tasks.GenerateSchema do
     Mix.shell().info("Generating JSON schema from Gleam protocol types...")
 
     # Ensure Gleam is built (stderr goes to console)
-    {_, 0} = System.cmd("gleam", ["build"], cd: "levee_protocol", into: IO.stream(:stdio, :line))
+    {_, 0} =
+      System.cmd("gleam", ["build"], cd: "levee_protocol_deps", into: IO.stream(:stdio, :line))
 
     # Run the schema CLI - use a port to separate stdout and stderr
     port =
@@ -27,7 +28,7 @@ defmodule Mix.Tasks.GenerateSchema do
           :exit_status,
           :stderr_to_stdout,
           args: ["run", "-m", "schema_cli"],
-          cd: ~c"levee_protocol"
+          cd: ~c"levee_protocol_deps"
         ]
       )
 

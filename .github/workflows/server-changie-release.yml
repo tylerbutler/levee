@@ -27,7 +27,6 @@ jobs:
           branch-template: 'release/server-{version}'
           commit-message-template: 'chore(server): release {version}'
           version-files: |
-            levee_protocol/gleam.toml:version
             levee_auth/gleam.toml:version
             levee_admin/gleam.toml:version
 

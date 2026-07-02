@@ -24,6 +24,7 @@ defmodule LeveeWeb.DocumentChannel do
   alias Levee.Auth.JWT
   alias Levee.Documents.Session
   alias Levee.Protocol.Bridge
+  alias Levee.Protocol.Events
 
   require Logger
 
@@ -78,7 +79,7 @@ defmodule LeveeWeb.DocumentChannel do
       # Monitor the session process
       Process.monitor(session_pid)
 
-      push(socket, "connect_document_success", connected_response)
+      push(socket, Events.connect_document_success(), connected_response)
 
       # If reconnecting, send delta catch-up
       if last_seen_sn && is_integer(last_seen_sn) do
@@ -95,7 +96,7 @@ defmodule LeveeWeb.DocumentChannel do
           "message" => message
         }
 
-        push(socket, "connect_document_error", error_response)
+        push(socket, Events.connect_document_error(), error_response)
         {:noreply, socket}
     end
   end
@@ -145,7 +146,7 @@ defmodule LeveeWeb.DocumentChannel do
               {:noreply, socket}
 
             {:error, nacks} ->
-              push(socket, "nack", %{"clientId" => "", "nacks" => nacks})
+              push(socket, Events.nack(), %{"clientId" => "", "nacks" => nacks})
               {:noreply, socket}
           end
         end
@@ -227,7 +228,7 @@ defmodule LeveeWeb.DocumentChannel do
 
       case Session.get_ops_since(session_pid, from_sn) do
         {:ok, ops} when ops != [] ->
-          push(socket, "op", %{
+          push(socket, Events.op(), %{
             "documentId" => socket.assigns.document_id,
             "op" => ops
           })
@@ -268,14 +269,14 @@ defmodule LeveeWeb.DocumentChannel do
 
     # Push regular ops (including sequenced summarize ops)
     if regular_ops != [] do
-      push(socket, "op", %{op_message | "op" => regular_ops})
+      push(socket, Events.op(), %{op_message | "op" => regular_ops})
     end
 
     {:noreply, socket}
   end
 
   def handle_info({:signal, signal_message}, socket) do
-    push(socket, "signal", signal_message)
+    push(socket, Events.signal(), signal_message)
     {:noreply, socket}
   end
 
@@ -297,7 +298,7 @@ defmodule LeveeWeb.DocumentChannel do
         {:ok, ops} when ops != [] ->
           Logger.info("Sending #{length(ops)} ops for delta catch-up since SN #{since_sn}")
 
-          push(socket, "op", %{
+          push(socket, Events.op(), %{
             "documentId" => socket.assigns.document_id,
             "op" => ops
           })
@@ -415,7 +416,7 @@ defmodule LeveeWeb.DocumentChannel do
   defp has_write_scope?(_socket), do: false
 
   defp push_nack(socket, code, type, message) do
-    push(socket, "nack", %{
+    push(socket, Events.nack(), %{
       "clientId" => "",
       "nacks" => [
         %{

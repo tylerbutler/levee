@@ -21,7 +21,7 @@ build-server: build-gleam build-admin build-elixir
 
 # Build Gleam packages
 build-gleam:
-    cd server/levee_protocol && gleam build --target erlang
+    cd server/levee_protocol_deps && gleam build --target erlang
     cd server/levee_auth && gleam build --target erlang
     cd server/levee_storage && gleam build --target erlang
     cd server/levee_oauth && gleam build --target erlang
@@ -60,7 +60,7 @@ test-server: test-gleam test-elixir
 
 # Run Gleam tests
 test-gleam:
-    cd server/levee_protocol && gleam test
+    cd server/levee_protocol_deps && gleam test
     cd server/levee_auth && gleam test
     cd server/levee_oauth && gleam test
     cd server/levee_admin && gleam test
@@ -108,7 +108,7 @@ format-server: format-gleam format-elixir
 
 # Format Gleam code
 format-gleam:
-    cd server/levee_protocol && gleam format
+    cd server/levee_protocol_deps && gleam format
     cd server/levee_auth && gleam format
     cd server/levee_storage && gleam format
     cd server/levee_oauth && gleam format
@@ -130,7 +130,7 @@ lint-server: lint-gleam lint-elixir
 
 # Lint Gleam code (format check)
 lint-gleam:
-    cd server/levee_protocol && gleam format --check
+    cd server/levee_protocol_deps && gleam format --check
     cd server/levee_auth && gleam format --check
     cd server/levee_storage && gleam format --check
     cd server/levee_oauth && gleam format --check
@@ -157,7 +157,7 @@ clean: clean-server clean-client
 clean-server: clean-gleam clean-elixir
 
 clean-gleam:
-    cd server/levee_protocol && rm -rf build
+    cd server/levee_protocol_deps && rm -rf build
     cd server/levee_auth && rm -rf build
     cd server/levee_storage && rm -rf build
     cd server/levee_oauth && rm -rf build
@@ -214,7 +214,7 @@ setup-server: setup-gleam setup-elixir
 
 # Install Gleam dependencies
 setup-gleam:
-    cd server/levee_protocol && gleam deps download
+    cd server/levee_protocol_deps && gleam deps download
     cd server/levee_auth && gleam deps download
     cd server/levee_storage && gleam deps download
     cd server/levee_oauth && gleam deps download

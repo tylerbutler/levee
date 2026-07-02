@@ -35,7 +35,7 @@ levee/
 │   │   └── levee_web/          # Web layer (routes, channels)
 │   ├── test/                   # Elixir tests
 │   ├── priv/                   # Static assets, migrations
-│   ├── levee_protocol/         # Gleam protocol types
+│   ├── levee_protocol_deps/    # External protocol deps (spillway + dewdrop)
 │   ├── levee_auth/             # Gleam auth library
 │   └── levee_admin/            # Lustre admin UI
 ├── client/                     # TypeScript client packages
@@ -114,14 +114,14 @@ levee-example → levee-driver
 
 ### Gleam Packages
 
-- **levee_protocol/** - Protocol message types, sequencing, validation, schema generation
+- **levee_protocol_deps/** - Builds external protocol dependencies: spillway (protocol logic) and dewdrop (Fluid event names)
 - **levee_auth/** - JWT, password hashing, tenant/user management
 - **levee_storage/** - Storage types and ETS backend (bravo for typed ETS access)
 - **levee_admin/** - Lustre SPA for admin UI
 
 ### Gleam Testing (startest)
 
-levee_protocol uses **startest** (not gleeunit) for tests.
+spillway uses **startest** (not gleeunit) for protocol tests.
 - `should.*` → `expect.*` (e.g., `expect.to_equal`, `expect.to_be_ok`)
 - **Gotcha:** `let assert Pattern = expr` inside startest tests wraps values in `Ok()` due to startest's rescue mechanism. Use `case` expressions for error variant destructuring instead of `let assert`.
 
@@ -180,8 +180,8 @@ just generate-schema-ts
 4. Run `just test-elixir` to verify
 
 ### Modifying Gleam Protocol
-1. Edit files in `server/levee_protocol/src/`
-2. Run `just build-gleam` to compile
+1. Edit spillway or dewdrop upstream
+2. Run `just build-gleam` to compile Levee's dependency host
 3. Update `server/lib/levee/protocol/bridge.ex` if Elixir interop changes
 4. Run `just test` to verify both Gleam and Elixir tests
 5. If schema types changed, run `just generate-schema-ts`
@@ -230,9 +230,9 @@ GET    /admin/*path                       SPA catch-all
 
 | Gleam File | Erlang/Elixir Module |
 |------------|---------------------|
-| `levee_protocol.gleam` | `:levee_protocol` |
-| `sequencing.gleam` | `:levee_protocol@sequencing` |
-| `message.gleam` | `:levee_protocol@message` |
+| `spillway.gleam` | `:spillway` |
+| `sequencing.gleam` | `:spillway@sequencing` |
+| `message.gleam` | `:spillway@message` |
 
 ### Type Conversions
 

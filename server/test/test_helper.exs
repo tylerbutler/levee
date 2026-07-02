@@ -2,9 +2,20 @@
 app_root = Path.expand("../", __DIR__)
 
 gleam_paths = [
-  # levee_protocol paths
-  Path.join([app_root, "levee_protocol", "build", "dev", "erlang", "levee_protocol", "ebin"]),
-  Path.join([app_root, "levee_protocol", "build", "dev", "erlang", "gleam_stdlib", "ebin"]),
+  # external protocol dependency paths
+  Path.join([
+    app_root,
+    "levee_protocol_deps",
+    "build",
+    "dev",
+    "erlang",
+    "levee_protocol_deps",
+    "ebin"
+  ]),
+  Path.join([app_root, "levee_protocol_deps", "build", "dev", "erlang", "spillway", "ebin"]),
+  Path.join([app_root, "levee_protocol_deps", "build", "dev", "erlang", "dewdrop", "ebin"]),
+  Path.join([app_root, "levee_protocol_deps", "build", "dev", "erlang", "gleam_stdlib", "ebin"]),
+  Path.join([app_root, "levee_protocol_deps", "build", "dev", "erlang", "gleam_json", "ebin"]),
   # levee_auth paths
   Path.join([app_root, "levee_auth", "build", "dev", "erlang", "levee_auth", "ebin"]),
   Path.join([app_root, "levee_auth", "build", "dev", "erlang", "gleam_stdlib", "ebin"]),
