@@ -89,6 +89,16 @@ defmodule Levee.Protocol.Bridge do
   end
 
   @doc """
+  Reserve a sequence number for a server-minted system message (e.g. summaryAck).
+
+  Returns `{new_state, reserved_sn}` so the next client op is assigned a fresh,
+  non-colliding sequence number.
+  """
+  def reserve_sequence_number(state) do
+    @gleam_module.reserve_sequence_number(state)
+  end
+
+  @doc """
   Get the current minimum sequence number.
   """
   def current_msn(state) do

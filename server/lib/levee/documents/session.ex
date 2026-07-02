@@ -592,6 +592,11 @@ defmodule Levee.Documents.Session do
         summary_ack = Bridge.build_summary_ack(summary_handle, assigned_sn, msn)
         sequenced_summarize = Bridge.build_sequenced_op(op, client_id, assigned_sn, msn)
 
+        # The summaryAck is minted by the server at assigned_sn + 1. Advance the
+        # sequencer so this slot is reserved and the next client op does not
+        # collide with the ack's sequence number.
+        {new_seq_state, _reserved_sn} = Bridge.reserve_sequence_number(new_seq_state)
+
         updated_history =
           Bridge.add_to_history(
             summary_ack,
