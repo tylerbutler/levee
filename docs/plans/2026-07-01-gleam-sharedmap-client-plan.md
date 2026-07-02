@@ -1,7 +1,9 @@
 # Plan: Gleam-only SharedMap client for Levee
 
 **Date:** 2026-07-01
-**Status:** Proposed
+**Status:** Proposed — reviewed 2026-07-01 against `document_channel.ex`,
+`session.ex`, `leveeDeltaConnection.ts`, and spillway/dewdrop sources; wire
+contract and runtime sections updated with confirmed payload shapes.
 
 ## Goal
 
@@ -15,9 +17,12 @@ convergence guaranteed by server sequencing, and reconnect safety.
   runtime and carry double-enveloped ops, batch metadata, and container-runtime
   snapshot formats). The inner map op format is kept byte-identical to the TS
   `@fluidframework/map` ops so an interop layer later only has to add the outer
-  datastore envelope.
-- Summaries/snapshots — v1 documents bootstrap by full op replay
-  (`requestOps` from 0); levee's session keeps the op log.
+  datastore envelope. (Footnote for that future layer: the Fluid runtime
+  JSON-*stringifies* op contents in places, so interop may also need a
+  stringify step on top of the structural match.)
+- Summaries/snapshots — v1 documents bootstrap from the `initialMessages`
+  field of `connect_document_success` (full op replay from the session's
+  history). See the retention caveat under open questions.
 - Offline op stashing and the rollback API.
 - msgpack serialization (JSON only).
 - Signals/presence (cheap follow-on via `submitSignal`).
@@ -61,14 +66,29 @@ match spillway/beryl conventions.
 
 | Direction | Event                      | Payload                                                                                       |
 | --------- | -------------------------- | --------------------------------------------------------------------------------------------- |
-| join      | Phoenix topic `document:{tenant}/{doc}` | —                                                                                 |
-| →         | `connect_document`         | `ConnectMessage` (mode: write)                                                                 |
-| ←         | `connect_document_success` | `ConnectedMessage`: `client_id`, `checkpoint_sequence_number`, `initial_clients`, service config |
-| →         | `submitOp`                 | `{clientId, messageBatches: [[DocumentMessage]]}`                                              |
-| ←         | `op`                       | `{clientId, op: [SequencedDocumentMessage]}`                                                   |
-| →         | `requestOps`               | `{from: sn}` — in-band delta catch-up                                                          |
+| join      | Phoenix topic `document:{tenant}:{doc}` (colon separator; `/` fails join with `invalid_topic`) | — |
+| →         | `connect_document`         | required: `tenantId`, `id` (not `documentId`), `client`, `mode`, `token`; also send `versions` (server negotiates against `["^0.1.0", "^1.0.0"]`); optional `lastSeenSequenceNumber` triggers automatic delta catch-up push |
+| ←         | `connect_document_success` | `ConnectedMessage`: `clientId`, `checkpointSequenceNumber`, `initialClients`, `initialMessages` (full in-memory op history, chronological), service config |
+| ←         | `connect_document_error`   | `{code, message}` — HTTP-style codes (401 auth, 403 scope, 400 malformed)                      |
+| →         | `submitOp`                 | `{clientId, messageBatches: [[DocumentMessage]]}` — max 100 ops per submission (server nacks above that) |
+| ←         | `op`                       | `{documentId, op: [SequencedDocumentMessage]}` (keyed by `documentId`, not `clientId`)         |
+| →         | `requestOps`               | `{from: sn}` — in-band delta catch-up; response arrives as a normal `op` event                 |
 | →         | `noop`                     | `{clientId, referenceSequenceNumber}` — MSN heartbeat                                          |
-| ←         | `nack`                     | `{clientId, nacks}`                                                                            |
+| ←         | `nack`                     | `{clientId: "", nacks: [{operation, sequenceNumber, content: {code, type, message}}]}`         |
+
+Notes confirmed against the server:
+
+- The Phoenix socket itself is unauthenticated (`user_socket.ex` accepts all
+  connections); the JWT rides in the `connect_document` payload. spillway's
+  `ConnectMessage.document_id` maps to wire key `id` — the codec needs that
+  rename.
+- Sequenced ops echo `clientSequenceNumber` back
+  (`session_logic.build_sequenced_op`), so acks can be matched exactly by
+  `(client_id, csn)`.
+- The op stream also carries system types beyond `join`/`leave`/`noop`:
+  `summarize`, `summaryAck`, `summaryNack` (and spillway defines
+  `propose`/`accept`/etc.). Only `type == "op"` reaches the kernel; everything
+  else just advances `last_seen_sn`.
 
 **Document format (the Gleam-only simplification):**
 `DocumentMessage.contents = {address: channel_id, contents: map_op}` — one
@@ -114,12 +134,15 @@ Decisions baked in:
 
 - **Values are `gleam/json.Json`** for v1 (serializable, structurally
   comparable in tests). A typed generic wrapper can layer on later.
-- **Ack matching by FIFO, not identity.** The TS kernel matches acks to pending
-  entries by JS reference identity (`pendingEntry === localOpMetadata`) because
-  the Fluid runtime round-trips an object reference. An inbound sequenced
-  message is "ours" iff its `client_id` matches our connection's; then pop the
-  corresponding head pending entry (per-key FIFO for sets within a lifetime,
-  matching the TS `shift()` + identity-assert behavior). Assert-fail loudly on
+- **Ack matching by CSN at the runtime, FIFO in the kernel.** The TS kernel
+  matches acks to pending entries by JS reference identity
+  (`pendingEntry === localOpMetadata`) because the Fluid runtime round-trips an
+  object reference. An inbound sequenced message is "ours" iff its `client_id`
+  matches our connection's — and the server echoes `clientSequenceNumber` back
+  on sequenced ops, so the runtime matches acks exactly by `(client_id, csn)`
+  against the in-flight queue. Inside the kernel, pop the corresponding head
+  pending entry (per-key FIFO for sets within a lifetime, matching the TS
+  `shift()` + identity-assert behavior). Assert-fail loudly on CSN or FIFO
   mismatch, same as the TS asserts.
 - **Event suppression rules** ported exactly: remote changes masked by local
   pending ops emit nothing; local clear emits `Cleared` plus per-key
@@ -136,26 +159,48 @@ Messages in: public API calls, aquamarine inbound frames, subscriber
 
 1. **Handshake** — join topic, send `connect_document`, hold ops until
    `connect_document_success`, record `client_id` and
-   `checkpoint_sequence_number`, then `requestOps(from: 0)` (v1 bootstraps by
-   full replay).
+   `checkpointSequenceNumber`, then bootstrap from the response's
+   `initialMessages` (full history, chronological — no `requestOps(from: 0)`
+   round-trip needed). One subtlety, pinned by a test:
+   `checkpointSequenceNumber` equals the SN of our *own join message*, which
+   arrives as a separate `op` push right after the success event and is *not*
+   in `initialMessages` — treat the checkpoint as "already seen" so the join
+   push dedupes cleanly.
 2. **Outbound** — stamp each op with the next CSN and current last-seen SN as
-   RSN (the client half of `spillway/sequencing`'s discipline), send via
-   `submitOp`, keep `#(csn, DocumentMessage)` in an in-flight queue.
-3. **Inbound ordering** — track `last_seen_sn`; buffer out-of-order ops; on a
-   gap, `requestOps(from: last_seen_sn)` and drop buffered duplicates by SN.
-   Route each contiguous op to the kernel (`ack_local` for ours,
-   `apply_remote` otherwise); ignore system message types (`join`/`leave`/
-   `noop`) except for updating `last_seen_sn`.
-4. **Reconnect** — on channel close: rejoin, re-handshake (new `client_id`),
-   catch up via `requestOps`, then resubmit the in-flight queue in order with
-   **fresh CSNs under the new client_id**, remapping the in-flight queue so
-   ack-matching still works. This is the trickiest state machine in the
-   project; it gets its own test suite.
+   RSN (the client half of `spillway/sequencing`'s discipline: CSN strictly
+   increasing per connection, RSN ≤ last seen SN), send via `submitOp`, keep
+   `#(csn, DocumentMessage)` in an in-flight queue. Cap submissions at the
+   server's 100-ops-per-batch limit.
+3. **Inbound ordering** — track `last_seen_sn`; **dedupe by SN is a general
+   invariant** (drop any op with SN ≤ last_seen_sn), because `initialMessages`
+   and catch-up pushes overlap by design. Buffer out-of-order ops; on a gap,
+   `requestOps(from: last_seen_sn)`. Route each contiguous op to the kernel
+   (`ack_local` for ours, `apply_remote` otherwise); system message types
+   (`join`/`leave`/`noop`/`summarize`/`summaryAck`/`summaryNack`) only advance
+   `last_seen_sn`.
+4. **Reconnect** — on channel close: rejoin and re-handshake (new `client_id`)
+   passing `lastSeenSequenceNumber` in `connect_document`, which makes the
+   server push delta catch-up automatically (no explicit `requestOps` needed;
+   the SN-dedupe invariant absorbs the overlap with `initialMessages`). Then
+   resubmit the in-flight queue in order with **fresh CSNs under the new
+   client_id** — this is not just safe but required: the server resets
+   `last_csn` to 0 on every `client_join`. Remap the in-flight queue so
+   ack-matching still works. Before resubmitting, reconcile against the
+   catch-up stream: ops from the *old* client_id that already got sequenced
+   must be acked, not resubmitted (see nack hazard below). This is the
+   trickiest state machine in the project; it gets its own test suite.
 5. **Heartbeat** — periodic `noop` with current RSN when idle, so the server's
    MSN advances.
-6. **Nacks** — v1 policy: resubmit on retryable nacks (e.g. rate limit); crash
-   the actor with a descriptive error on non-retryable (bad scope, size) —
-   supervisor restarts and re-syncs. BEAM idiom, avoids silent divergence.
+6. **Nacks** — v1 policy: on *any* nack, reconnect and reconcile rather than
+   blind-resubmit. The server sequences ops in a batch until the first failure
+   and **persists the sequenced prefix to history/storage without broadcasting
+   it** (`session.ex` `process_ops`), so those ops reappear via catch-up and a
+   naive resubmit (which gets a fresh, higher CSN the server will accept)
+   would duplicate them. Reconciliation: catch up, identify which in-flight
+   ops landed under the old client_id (match by `clientId` + `csn`), ack
+   those, resubmit only the rest. On non-retryable nacks (bad scope, size),
+   crash the actor with a descriptive error — supervisor restarts and
+   re-syncs. BEAM idiom, avoids silent divergence.
 7. **Events** — fan out kernel events to subscriber `Subject(MapEvent)`s.
 
 ## Public API sketch
@@ -199,9 +244,11 @@ remote-apply against a live levee dev server (`just server`). Exit: two Gleam
 clients converge on concurrent edits; integration test in CI.
 
 **M4 — Resilience (4–6 days).** Gap detection + `requestOps` catch-up,
-reconnect/resubmit state machine with client_id remap, nack policy, noop
-heartbeat. Test by killing the channel mid-burst and asserting convergence +
-no lost/duplicated ops.
+reconnect/resubmit state machine with client_id remap and old-client-id
+reconciliation (see nack hazard in the runtime section), nack policy, noop
+heartbeat. Test by killing the channel mid-burst — including mid-*batch*, to
+exercise the sequenced-but-not-broadcast prefix case — and asserting
+convergence + no lost/duplicated ops.
 
 **M5 — Polish + example (3–4 days).** Public API, docs, and a Gleam
 dice-roller mirroring `levee-example` — ideally Lustre so the demo is Gleam
@@ -212,16 +259,35 @@ before any networking exists.
 
 ## Open questions / risks
 
-- **Exact join-topic and `connect_document` payload shape** — mirror what
-  `leveeDeltaConnection.ts` sends (it's the reference client). Worth extracting
-  into a fixture set the way `phoenix_channel_fixtures` does for beryl, so the
-  Gleam client and levee test against identical frames.
-- **aquamarine reply-matching caveat** — dewdrop's docs mention an open
-  upstream issue around reply refs; levee is Phoenix-channels so we're on the
-  roost codec path, but M3 should validate reply handling early.
-- **`requestOps` bounds** — full replay from 0 is fine for v1 docs, but check
-  levee's op-log retention (`session.ex` keeps ops in memory); if it truncates
-  below the checkpoint, v1 needs docs created fresh or a "load from summary"
-  escape hatch earlier than planned.
+Resolved by the 2026-07-01 server-code review (details now baked into the
+wire-contract and runtime sections above):
+
+- ~~Exact join-topic and `connect_document` payload shape~~ — confirmed from
+  `document_channel.ex` and `leveeDeltaConnection.ts`; see the wire table.
+  Still worth extracting into a fixture set the way
+  `phoenix_channel_fixtures` does for beryl, so the Gleam client and levee
+  test against identical frames.
+- ~~`requestOps` bounds~~ — **confirmed and silent**: `get_ops_since` reads
+  only the in-memory `op_history`, capped at 1000 ops
+  (`@max_history_size`), and truncation is undetectable in-band — old ops are
+  filtered out with no error (the only signal is the earliest returned SN
+  being > `from + 1`). On session restart, history reloads only post-summary
+  deltas. All deltas *do* persist to storage, so the v1 escape hatch for docs
+  past 1000 ops is the REST endpoint `GET /deltas/:tenant_id/:id`, not
+  "create docs fresh". v1 can ship without it but should assert the
+  no-gap-after-bootstrap invariant and fail loudly.
+- **Nacked batches partially sequence** — confirmed server behavior, now
+  drives the nack policy in the runtime section (reconnect + reconcile, never
+  blind-resubmit).
+
+Still open:
+
+- **aquamarine reply-matching caveat** — confirmed real: dewdrop's source
+  carries an explicit workaround for an open upstream aquamarine issue around
+  reply refs. Levee is Phoenix-channels so we're on the roost codec path, but
+  M3 should validate reply handling early.
+- **M2 harness branch** — `feat/map-corpus-harness` is assumed to exist on
+  the FluidFramework workspace checkout but wasn't verifiable from this repo;
+  if it doesn't exist yet, creating it is part of M2's budget.
 - **Multiple maps per document** work naturally via `address`, but v1 ships
   with just the root map to keep the API small.
