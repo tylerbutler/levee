@@ -203,11 +203,11 @@ server/levee_oauth/build/packages/vestibule/**/.worktrees
 server/levee_oauth/build/packages/vestibule/example/**/build
 server/levee_oauth/build/packages/vestibule/example/**/.env
 
-# flyctl launch added from server/levee_protocol/.gitignore
-server/levee_protocol/**/*.beam
-server/levee_protocol/**/*.ez
-server/levee_protocol/build
-server/levee_protocol/**/erl_crash.dump
+# flyctl launch added from server/levee_protocol_deps/.gitignore
+server/levee_protocol_deps/**/*.beam
+server/levee_protocol_deps/**/*.ez
+server/levee_protocol_deps/build
+server/levee_protocol_deps/**/erl_crash.dump
 
 # flyctl launch added from server/levee_session/build/packages/bravo/.gitignore
 server/levee_session/build/packages/bravo/**/*.beam

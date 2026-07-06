@@ -8,7 +8,7 @@ deps
 .elixir_ls
 
 # Gleam build artifacts (will be rebuilt)
-levee_protocol/build
+levee_protocol_deps/build
 levee_auth/build
 levee_storage/build
 levee_oauth/build
