@@ -1,10 +1,10 @@
-//// Sluice-owned Engine.IO / Socket.IO transport framing for Fluid
+//// Floodgate-owned Engine.IO / Socket.IO transport framing for Fluid
 //// compatibility.
 ////
 //// Wraps `windsock`'s Socket.IO event-frame primitives and `dewdrop`'s Fluid
 //// event vocabulary behind a small BEAM-callable surface, so a transitional
 //// WebSock adapter (e.g. `LeveeWeb.SocketIOWebSock`) only classifies/encodes
-//// frames through Sluice instead of re-deriving Engine.IO/Socket.IO framing
+//// frames through Floodgate instead of re-deriving Engine.IO/Socket.IO framing
 //// itself. This module owns no session/runtime state — callers still drive
 //// their own `connect_document` auth and Session/Registry runtime and just
 //// pass the resulting event payloads back through the `encode_*` helpers
@@ -13,7 +13,7 @@
 //// Engine.IO's opening handshake (`0{...}`) and the Socket.IO namespace
 //// connect ack (`40{...}`) aren't part of `windsock`'s scope (it only owns
 //// the Socket.IO *event* frame, `42[...]`), so those couple of transport
-//// bytes are the one piece of framing Sluice hand-rolls here.
+//// bytes are the one piece of framing Floodgate hand-rolls here.
 
 import dewdrop/events
 import gleam/dynamic.{type Dynamic}

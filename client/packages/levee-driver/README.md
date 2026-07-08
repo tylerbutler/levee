@@ -2,7 +2,7 @@
 
 Low-level Fluid Framework driver for connecting to Levee servers via Phoenix Channels.
 
-> **Status:** This package is currently supported but is part of a planned migration to the official `@fluidframework/routerlicious-driver` against the Sluice backend. See the [Client Compatibility Strategy](#client-compatibility-strategy) below.
+> **Status:** This package is currently supported but is part of a planned migration to the official `@fluidframework/routerlicious-driver` against the Floodgate backend. See the [Client Compatibility Strategy](#client-compatibility-strategy) below.
 
 ## Quick Start
 
@@ -165,7 +165,7 @@ Integration tests require a running Levee server. See the test directory for exa
 
 ## Client Compatibility Strategy
 
-**This driver uses Phoenix Channels, which is temporary scaffolding during the Levee server migration to Sluice.**
+**This driver uses Phoenix Channels, which is temporary scaffolding during the Levee server migration to Floodgate.**
 
 ### Current State (2026)
 
@@ -175,19 +175,19 @@ Integration tests require a running Levee server. See the test directory for exa
 
 ### Migration Path
 
-Once the Sluice backend reaches feature parity with the Routerlicious protocol (tracked in `test/integration/sluice-routerlicious.test.ts`), you should migrate to:
+Once the Floodgate backend reaches feature parity with the Routerlicious protocol (tracked in `test/integration/floodgate-routerlicious.test.ts`), you should migrate to:
 
 ```typescript
 // After migration — use official Routerlicious driver
 import { RouterliciousDocumentServiceFactory } from "@fluidframework/routerlicious-driver";
 
 const serviceFactory = new RouterliciousDocumentServiceFactory(tokenProvider);
-// ... point at Sluice backend instead
+// ... point at Floodgate backend instead
 ```
 
 ### When Will This Happen?
 
-- `levee-driver` becomes **deprecated** (marked in `package.json`) after Sluice conformance is complete
+- `levee-driver` becomes **deprecated** (marked in `package.json`) after Floodgate conformance is complete
 - We'll provide a migration guide at that time
 - Phoenix Channels support will transition to **legacy maintenance only** (security fixes, critical bugs)
 - No new protocol features will be added to the Phoenix Channels driver
@@ -199,7 +199,7 @@ const serviceFactory = new RouterliciousDocumentServiceFactory(tokenProvider);
 ### See Also
 
 - [ADR-002: Client compatibility strategy](../../../docs/adr/002-client-compatibility-strategy.md) — Full architectural decision
-- [`sluice-routerlicious.test.ts`](test/integration/sluice-routerlicious.test.ts) — Conformance test suite
+- [`floodgate-routerlicious.test.ts`](test/integration/floodgate-routerlicious.test.ts) — Conformance test suite
 - `levee-client` — High-level convenience wrapper with migration-friendly design
 
 ## Troubleshooting
@@ -241,7 +241,7 @@ See [DEV.md](DEV.md) for:
 
 - **Fluid Framework** — `@fluidframework/*` dependencies pin to `<2.100.0` (currently tested against 2.81.x); no exact version lock
 - **TypeScript 5.0+** (if using TypeScript)
-- Requires a running Levee server with Phoenix 1.7+ or Sluice backend
+- Requires a running Levee server with Phoenix 1.7+ or Floodgate backend
 - No documented Node.js `engines` requirement in `package.json`; use an actively supported Node.js LTS release
 
 ## License

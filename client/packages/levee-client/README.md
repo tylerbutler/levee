@@ -2,7 +2,7 @@
 
 High-level Fluid Framework client for connecting to Levee servers.
 
-> **Status:** This package is currently supported but is part of a planned migration to the official `@fluidframework/routerlicious-driver` against the Sluice backend. See the [Client Compatibility Strategy](#client-compatibility-strategy) below.
+> **Status:** This package is currently supported but is part of a planned migration to the official `@fluidframework/routerlicious-driver` against the Floodgate backend. See the [Client Compatibility Strategy](#client-compatibility-strategy) below.
 
 ## Quick Start
 
@@ -310,7 +310,7 @@ Use `@tylerbu/levee-driver` directly if you need:
 
 ## Client Compatibility Strategy
 
-**This client wraps the Phoenix Channels driver, which is temporary scaffolding during the Levee server migration to Sluice.**
+**This client wraps the Phoenix Channels driver, which is temporary scaffolding during the Levee server migration to Floodgate.**
 
 ### Current State (2026)
 
@@ -320,7 +320,7 @@ Use `@tylerbu/levee-driver` directly if you need:
 
 ### Migration Path
 
-Once the Sluice backend reaches feature parity with the Routerlicious protocol (tracked in `test/integration/sluice-routerlicious.test.ts`), you'll migrate to the official Routerlicious driver:
+Once the Floodgate backend reaches feature parity with the Routerlicious protocol (tracked in `test/integration/floodgate-routerlicious.test.ts`), you'll migrate to the official Routerlicious driver:
 
 ```typescript
 // After migration — use official Routerlicious client
@@ -330,8 +330,8 @@ const client = new AzureClient({
   connection: {
     tenantId: "...",
     tokenProvider: ...,
-    orderer: "https://sluice-orderer.example.com",
-    storage: "https://sluice-storage.example.com",
+    orderer: "https://floodgate-orderer.example.com",
+    storage: "https://floodgate-storage.example.com",
   },
 });
 
@@ -349,7 +349,7 @@ This client is intentionally designed to support that transition:
 
 ### When Will This Happen?
 
-- `levee-client` becomes **deprecated** (marked in `package.json`) after Sluice conformance is complete
+- `levee-client` becomes **deprecated** (marked in `package.json`) after Floodgate conformance is complete
 - We'll provide a migration guide at that time
 - The package will transition to **legacy maintenance only** (security fixes, critical bugs)
 - It will eventually be archived/removed once the official client is stable
@@ -357,7 +357,7 @@ This client is intentionally designed to support that transition:
 ### See Also
 
 - [ADR-002: Client compatibility strategy](../../../docs/adr/002-client-compatibility-strategy.md) — Full architectural decision
-- [`sluice-routerlicious.test.ts`](../levee-driver/test/integration/sluice-routerlicious.test.ts) — Conformance test suite
+- [`floodgate-routerlicious.test.ts`](../levee-driver/test/integration/floodgate-routerlicious.test.ts) — Conformance test suite
 - `@tylerbu/levee-driver` — Lower-level driver documentation
 
 ## Important Constraints

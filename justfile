@@ -26,7 +26,7 @@ build-gleam:
     cd server/levee_storage && gleam build --target erlang
     cd server/levee_oauth && gleam build --target erlang
     cd server/levee_admin && gleam build --target javascript
-    cd server/sluice && gleam build --target erlang
+    cd server/floodgate && gleam build --target erlang
 
 # Build admin UI and copy to priv/static/admin
 build-admin: build-gleam
@@ -65,7 +65,7 @@ test-gleam:
     cd server/levee_auth && gleam test
     cd server/levee_oauth && gleam test
     cd server/levee_admin && gleam test
-    cd server/sluice && gleam test
+    cd server/floodgate && gleam test
 
 # Run Elixir tests
 test-elixir:
@@ -91,17 +91,17 @@ test-integration-down:
 test-integration-run:
     cd client && pnpm test:integration:run
 
-# Run Routerlicious driver compatibility contract against a running Sluice server.
-# This is the north-star conformance suite for the Sluice-first client
+# Run Routerlicious driver compatibility contract against a running Floodgate server.
+# This is the north-star conformance suite for the Floodgate-first client
 # strategy (see docs/adr/002-client-compatibility-strategy.md): the official
 # Routerlicious driver becomes the primary client once this suite is green.
-test-sluice-routerlicious:
-    cd client && pnpm test:sluice-routerlicious
+test-floodgate-routerlicious:
+    cd client && pnpm test:floodgate-routerlicious
 
-# Check the Sluice cutover readiness gate (ADR-003) without hitting the
+# Check the Floodgate cutover readiness gate (ADR-003) without hitting the
 # network — runs the manifest/`it.todo`-count consistency test that gates
 # retiring Phoenix/the Socket.IO shim. See
-# docs/adr/003-sluice-cutover-readiness.md and
+# docs/adr/003-floodgate-cutover-readiness.md and
 # client/packages/levee-driver/test/integration/cutover-readiness.json.
 check-cutover-readiness:
     cd client && pnpm exec vitest run packages/levee-driver/test/integration/cutover-readiness.test.ts
@@ -130,7 +130,7 @@ format-gleam:
     cd server/levee_storage && gleam format
     cd server/levee_oauth && gleam format
     cd server/levee_admin && gleam format
-    cd server/sluice && gleam format
+    cd server/floodgate && gleam format
 
 # Format Elixir code
 format-elixir:
@@ -153,7 +153,7 @@ lint-gleam:
     cd server/levee_storage && gleam format --check
     cd server/levee_oauth && gleam format --check
     cd server/levee_admin && gleam format --check
-    cd server/sluice && gleam format --check
+    cd server/floodgate && gleam format --check
 
 # Lint Elixir code
 lint-elixir:

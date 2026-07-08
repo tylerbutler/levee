@@ -6,7 +6,7 @@ import gleam/dict.{type Dict}
 import gleam/erlang/process.{type Subject}
 import gleam/list
 import gleam/otp/actor
-import sluice/store
+import floodgate/store
 import spillway/sequencing
 
 pub opaque type Session {

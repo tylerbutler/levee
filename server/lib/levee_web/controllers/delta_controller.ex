@@ -8,13 +8,13 @@ defmodule LeveeWeb.DeltaController do
   Storage calls and Plug/Conn handling stay here; the wire *shape* for each
   sequenced message (field names, and whether a JSON-stringified `data`
   sidecar is attached for join/leave system messages) is delegated to
-  Sluice's `sluice/rest` module via `Levee.Sluice`.
+  Floodgate's `floodgate/rest` module via `Levee.Floodgate`.
   """
 
   use LeveeWeb, :controller
 
   alias Levee.Storage
-  alias Levee.Sluice
+  alias Levee.Floodgate
   require Logger
 
   @max_ops_per_request 2000
@@ -74,11 +74,11 @@ defmodule LeveeWeb.DeltaController do
 
   defp format_sequenced_message(delta) do
     data =
-      if Sluice.requires_data_field?(delta.type) do
+      if Floodgate.requires_data_field?(delta.type) do
         Jason.encode!(delta.contents)
       end
 
-    Sluice.format_delta_message(
+    Floodgate.format_delta_message(
       delta.sequence_number,
       delta.client_sequence_number,
       delta.minimum_sequence_number,

@@ -9,16 +9,16 @@ defmodule LeveeWeb.GitController do
   - GET/POST/PATCH /repos/:tenant_id/git/refs - Reference management
 
   Storage calls and Plug/Conn handling stay here; the response *shape*
-  (object/ref URLs, formatted response bodies) is delegated to Sluice's
-  `sluice/rest` module via `Levee.Sluice`, so the wire format for this
-  Storage/Historian-style surface lives in one Sluice-owned place. See
-  `Levee.Sluice` module docs for the broader migration context.
+  (object/ref URLs, formatted response bodies) is delegated to Floodgate's
+  `floodgate/rest` module via `Levee.Floodgate`, so the wire format for this
+  Storage/Historian-style surface lives in one Floodgate-owned place. See
+  `Levee.Floodgate` module docs for the broader migration context.
   """
 
   use LeveeWeb, :controller
 
   alias Levee.Storage
-  alias Levee.Sluice
+  alias Levee.Floodgate
 
   # Blob operations
 
@@ -61,7 +61,7 @@ defmodule LeveeWeb.GitController do
         |> put_resp_header("cache-control", "public, max-age=31536000")
         |> put_status(:ok)
         |> json(
-          Sluice.format_blob_response(
+          Floodgate.format_blob_response(
             base_url(conn),
             tenant_id,
             blob.sha,
@@ -195,7 +195,7 @@ defmodule LeveeWeb.GitController do
   Example: GET /repos/tenant1/git/refs/heads/main
   """
   def show_ref(conn, %{"tenant_id" => tenant_id, "ref" => ref_parts}) do
-    ref_path = Sluice.build_ref_path(ref_parts)
+    ref_path = Floodgate.build_ref_path(ref_parts)
 
     case Storage.get_ref(tenant_id, ref_path) do
       {:ok, ref} ->
@@ -247,7 +247,7 @@ defmodule LeveeWeb.GitController do
   - sha: New commit SHA
   """
   def update_ref(conn, %{"tenant_id" => tenant_id, "ref" => ref_parts, "sha" => sha}) do
-    ref_path = Sluice.build_ref_path(ref_parts)
+    ref_path = Floodgate.build_ref_path(ref_parts)
 
     case Storage.update_ref(tenant_id, ref_path, sha) do
       {:ok, ref} ->
@@ -294,11 +294,11 @@ defmodule LeveeWeb.GitController do
   defp decode_blob_content(_), do: {:error, "Missing or invalid content"}
 
   defp blob_url(conn, tenant_id, sha) do
-    Sluice.blob_url(base_url(conn), tenant_id, sha)
+    Floodgate.blob_url(base_url(conn), tenant_id, sha)
   end
 
   defp base_url(conn) do
-    Sluice.base_url(conn.scheme, conn.host, conn.port)
+    Floodgate.base_url(conn.scheme, conn.host, conn.port)
   end
 
   defp format_tree_response(conn, tenant_id, tree) do
@@ -307,11 +307,11 @@ defmodule LeveeWeb.GitController do
         {entry.path, entry.mode, entry.sha, entry.type}
       end)
 
-    Sluice.format_tree_response(base_url(conn), tenant_id, tree.sha, entries)
+    Floodgate.format_tree_response(base_url(conn), tenant_id, tree.sha, entries)
   end
 
   defp format_commit_response(conn, tenant_id, commit) do
-    Sluice.format_commit_response(
+    Floodgate.format_commit_response(
       base_url(conn),
       tenant_id,
       commit.sha,
@@ -324,6 +324,6 @@ defmodule LeveeWeb.GitController do
   end
 
   defp format_ref_response(conn, tenant_id, ref) do
-    Sluice.format_ref_response(base_url(conn), tenant_id, ref.ref, ref.sha)
+    Floodgate.format_ref_response(base_url(conn), tenant_id, ref.ref, ref.sha)
   end
 end

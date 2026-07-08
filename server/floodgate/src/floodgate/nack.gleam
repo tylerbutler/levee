@@ -1,4 +1,4 @@
-//// Sluice-owned Fluid nack (negative acknowledgment) constructors, built
+//// Floodgate-owned Fluid nack (negative acknowledgment) constructors, built
 //// directly on `spillway/nack`.
 ////
 //// Nacks are sent when operations are rejected by the server (unknown

@@ -1,4 +1,4 @@
-//// Sluice-owned Fluid signal v1/v2 normalization, built directly on
+//// Floodgate-owned Fluid signal v1/v2 normalization, built directly on
 //// `spillway/signals`.
 ////
 //// Signals are ephemeral (unsequenced, unpersisted) messages relayed

@@ -1,15 +1,15 @@
 /**
  * Executable cutover readiness gate (ADR-003).
  *
- * Unlike `sluice-routerlicious.test.ts`, this suite is NOT network-gated —
+ * Unlike `floodgate-routerlicious.test.ts`, this suite is NOT network-gated —
  * it runs on every `pnpm test` invocation and only inspects repo-tracked
  * source/data files. Its job is to prevent the project from silently
- * drifting into (or claiming) a Sluice cutover before conformance and
+ * drifting into (or claiming) a Floodgate cutover before conformance and
  * parity are actually met, per:
  *
  *   - ADR-002 (`docs/adr/002-client-compatibility-strategy.md`) — defines
  *     the create/load/sync/reconnect/summaries/signals acceptance surface.
- *   - ADR-003 (`docs/adr/003-sluice-cutover-readiness.md`) — defines the
+ *   - ADR-003 (`docs/adr/003-floodgate-cutover-readiness.md`) — defines the
  *     cutover gate itself and the Phoenix-owned surfaces that must be
  *     ported or retired before Phoenix/the Socket.IO shim can be removed.
  */
@@ -21,17 +21,17 @@ import {
 	readCutoverManifest,
 } from "./cutover-readiness.js";
 
-describe("Sluice cutover readiness gate", () => {
+describe("Floodgate cutover readiness gate", () => {
 	it("keeps the cutover-readiness.json manifest in sync with the conformance suite", () => {
 		const manifest = readCutoverManifest();
 		const actualTodoCount = countOutstandingConformanceTodos();
 
 		expect(
 			actualTodoCount,
-			"The number of `it.todo(...)` gaps in sluice-routerlicious.test.ts " +
+			"The number of `it.todo(...)` gaps in floodgate-routerlicious.test.ts " +
 				"changed without updating `expectedOutstandingTodoCount` in " +
 				"cutover-readiness.json. Update the manifest (and, if the count " +
-				"reached 0, revisit `readyForCutover` and docs/adr/003-sluice-cutover-readiness.md) " +
+				"reached 0, revisit `readyForCutover` and docs/adr/003-floodgate-cutover-readiness.md) " +
 				"in the same change that touches the conformance suite.",
 		).toBe(manifest.expectedOutstandingTodoCount);
 	});
@@ -45,11 +45,11 @@ describe("Sluice cutover readiness gate", () => {
 		expect(readiness.ready).toBe(false);
 	});
 
-	it("requires both sluice-direct and levee-proxy as gating targets", () => {
+	it("requires both floodgate-direct and levee-proxy as gating targets", () => {
 		const manifest = readCutoverManifest();
 
 		expect(manifest.requiredTargets).toEqual(
-			expect.arrayContaining(["sluice-direct", "levee-proxy"]),
+			expect.arrayContaining(["floodgate-direct", "levee-proxy"]),
 		);
 	});
 

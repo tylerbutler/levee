@@ -1,9 +1,9 @@
-defmodule Levee.Sluice do
+defmodule Levee.Floodgate do
   @moduledoc """
-  Elixir bridge to Sluice's Gleam-owned Engine.IO/Socket.IO framing and
+  Elixir bridge to Floodgate's Gleam-owned Engine.IO/Socket.IO framing and
   `connect_document` protocol decision helpers.
 
-  Sluice (`server/sluice/`) owns the Fluid Socket.IO wire-protocol pieces
+  Floodgate (`server/floodgate/`) owns the Fluid Socket.IO wire-protocol pieces
   that don't need Levee's tenant-secret storage or document Session/Registry
   runtime: Engine.IO/Socket.IO frame classification and encoding (delegating
   to `windsock`/`dewdrop` for the actual protocol vocabulary and framing
@@ -18,7 +18,7 @@ defmodule Levee.Sluice do
   for the protocol decisions so `LeveeWeb.SocketIOWebSock` and
   `Levee.Documents.Session` stay thin over the actual Fluid protocol logic.
 
-  It also owns the REST response-*shape* decisions (`sluice/rest`) for the
+  It also owns the REST response-*shape* decisions (`floodgate/rest`) for the
   Storage/Historian-style HTTP surface: git object/ref URL construction and
   blob/tree/commit/ref response bodies, `GET .../session/:id` session-info
   shape, `GET .../:id` document metadata shape, and the `GET /deltas/...`
@@ -26,9 +26,9 @@ defmodule Levee.Sluice do
   `LeveeWeb.GitController`, `LeveeWeb.DocumentController`, and
   `LeveeWeb.DeltaController` still own the actual storage calls, Plug/Conn
   handling, and JSON encoding — they call through this module to decide the
-  response body shape so the wire format lives in one (Sluice-owned) place.
+  response body shape so the wire format lives in one (Floodgate-owned) place.
 
-  Sluice's compiled Gleam modules are loaded onto the code path by
+  Floodgate's compiled Gleam modules are loaded onto the code path by
   `Levee.Application.load_gleam_modules/0` alongside the other Gleam
   packages, so these are ordinary BEAM calls once compiled — no ports,
   NIFs, or RPC involved. Calls go through `apply/3` (rather than a direct
@@ -36,12 +36,12 @@ defmodule Levee.Sluice do
   `mix compile`; see `AGENTS.md`/the gleam-bridge guide for the build order.
   """
 
-  @socketio :sluice@socketio
-  @connect_document :sluice@connect_document
-  @session_logic :sluice@session_logic
-  @signals :sluice@signals
-  @nack :sluice@nack
-  @rest :sluice@rest
+  @socketio :floodgate@socketio
+  @connect_document :floodgate@connect_document
+  @session_logic :floodgate@session_logic
+  @signals :floodgate@signals
+  @nack :floodgate@nack
+  @rest :floodgate@rest
 
   # ── Engine.IO / Socket.IO framing ──────────────────────────────────────
 
@@ -291,7 +291,7 @@ defmodule Levee.Sluice do
     apply(@nack, :nack_error_type_to_string, [error_type])
   end
 
-  # ── REST response-shape decisions (sluice/rest) ────────────────────────
+  # ── REST response-shape decisions (floodgate/rest) ────────────────────────
 
   @doc """
   Build the `scheme://host[:port]` prefix used by git object/ref URLs,

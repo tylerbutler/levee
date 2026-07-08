@@ -1,16 +1,16 @@
 /**
- * Cutover readiness gate for the Sluice-first migration (ADR-003).
+ * Cutover readiness gate for the Floodgate-first migration (ADR-003).
  *
  * This module computes whether the runtime cutover described in
- * `docs/adr/003-sluice-cutover-readiness.md` is allowed to proceed. It is
+ * `docs/adr/003-floodgate-cutover-readiness.md` is allowed to proceed. It is
  * deliberately conservative: readiness is derived from two independent
  * signals that both have to agree before `ready` is `true`.
  *
  *   1. The *actual* state of the conformance suite — counted by scanning
- *      `sluice-routerlicious.test.ts` for outstanding `it.todo(...)` calls.
+ *      `floodgate-routerlicious.test.ts` for outstanding `it.todo(...)` calls.
  *      Each `it.todo` documents a known gap in the create/load/sync/
  *      reconnect/summaries/signals conformance surface required by
- *      ADR-002 for the `sluice-direct` and `levee-proxy` targets.
+ *      ADR-002 for the `floodgate-direct` and `levee-proxy` targets.
  *   2. The *declared* state in the repo-tracked `cutover-readiness.json`
  *      manifest, which records the expected todo count and an explicit
  *      `readyForCutover` flag that a human must flip deliberately.
@@ -26,7 +26,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const COMPAT_TEST_FILE = fileURLToPath(
-	new URL("./sluice-routerlicious.test.ts", import.meta.url),
+	new URL("./floodgate-routerlicious.test.ts", import.meta.url),
 );
 
 const MANIFEST_FILE = fileURLToPath(
@@ -55,7 +55,7 @@ export interface CutoverReadiness {
 	/**
 	 * True only when the manifest declares cutover-ready AND there are zero
 	 * outstanding conformance gaps. This is the single source of truth
-	 * other tooling (docs, CI gates) should consult before treating Sluice
+	 * other tooling (docs, CI gates) should consult before treating Floodgate
 	 * as the standalone primary runtime.
 	 */
 	ready: boolean;
@@ -69,7 +69,7 @@ export function readCutoverManifest(): CutoverReadinessManifest {
 
 /**
  * Counts outstanding `it.todo(...)` conformance gaps in
- * `sluice-routerlicious.test.ts`. This is a deliberately blunt proxy
+ * `floodgate-routerlicious.test.ts`. This is a deliberately blunt proxy
  * metric — it does not distinguish which conformance category a given gap
  * belongs to — but it is cheap, hard to fake by accident, and directly
  * tied to the acceptance suite named in ADR-002/ADR-003.

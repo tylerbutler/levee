@@ -1,4 +1,4 @@
-name = "sluice"
+name = "floodgate"
 version = "0.1.0"
 description = "Fluid Framework server on beryl: dewdrop/server codec + spillway protocol logic"
 licences = ["MIT"]

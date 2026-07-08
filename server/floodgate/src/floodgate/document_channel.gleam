@@ -12,8 +12,8 @@ import gleam/json
 import gleam/list
 import gleam/option.{Some}
 import gleam/string
-import sluice/auth
-import sluice/session.{type Session}
+import floodgate/auth
+import floodgate/session.{type Session}
 
 pub type DocAssigns {
   DocAssigns(client_id: String, mode: String, topic: String)
@@ -113,7 +113,7 @@ fn authorize(
   }
 }
 
-@external(erlang, "sluice_ffi", "now_seconds")
+@external(erlang, "floodgate_ffi", "now_seconds")
 fn now_seconds() -> Int
 
 fn handle_in(

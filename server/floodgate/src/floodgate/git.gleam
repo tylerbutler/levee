@@ -4,7 +4,7 @@
 
 import gleam/bit_array
 import gleam/crypto
-import sluice/store
+import floodgate/store
 
 /// Store an object's raw body, returning its SHA1 (git-style id).
 pub fn create(tenant: String, body: String) -> String {

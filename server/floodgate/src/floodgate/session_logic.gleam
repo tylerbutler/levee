@@ -1,4 +1,4 @@
-//// Sluice-owned document-session decision helpers — feature/version
+//// Floodgate-owned document-session decision helpers — feature/version
 //// negotiation, summarize-content validation, signal-recipient targeting,
 //// sequenced-op/summary-ack wire builders, and op-history trimming — built
 //// directly on `spillway/session_logic`.

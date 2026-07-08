@@ -1,18 +1,18 @@
 /**
- * Sluice service contract — the acceptance boundary a standalone Sluice
+ * Floodgate service contract — the acceptance boundary a standalone Floodgate
  * server must satisfy for an unmodified `@fluidframework/routerlicious-driver`
  * to work against it.
  *
- * This module is the executable baseline for the Sluice migration: later
- * tasks that port runtime behaviour from Phoenix/Levee to the Gleam Sluice
- * service are expected to keep `sluice-routerlicious.test.ts` (and any new
+ * This module is the executable baseline for the Floodgate migration: later
+ * tasks that port runtime behaviour from Phoenix/Levee to the Gleam Floodgate
+ * service are expected to keep `floodgate-routerlicious.test.ts` (and any new
  * conformance suites) green against this contract rather than growing a new,
- * parallel definition of "what Sluice supports".
+ * parallel definition of "what Floodgate supports".
  *
- * Sluice is the destination service; Phoenix/Levee
+ * Floodgate is the destination service; Phoenix/Levee
  * (`server/lib/levee_web/socket_io_websock.ex`, `server/lib/levee_web/router.ex`)
  * is temporary migration scaffolding and must not be treated as the source of
- * truth once Sluice implements a given endpoint or event.
+ * truth once Floodgate implements a given endpoint or event.
  *
  * Event names below mirror the dewdrop package's Socket.IO event definitions
  * (https://github.com/tylerbutler/dewdrop/blob/main/src/dewdrop/events.gleam)
@@ -22,7 +22,7 @@
  */
 
 /** Socket.IO/Engine.IO event names the Routerlicious driver depends on. */
-export const SLUICE_SOCKET_EVENTS = {
+export const FLOODGATE_SOCKET_EVENTS = {
 	/** Outbound: client pushes `connect_document` to begin collaboration. */
 	connectDocument: "connect_document",
 	/** Inbound: server acknowledges a successful `connect_document`. */
@@ -49,15 +49,15 @@ export const SLUICE_SOCKET_EVENTS = {
 	close: "close",
 } as const;
 
-export type SluiceSocketEvent =
-	(typeof SLUICE_SOCKET_EVENTS)[keyof typeof SLUICE_SOCKET_EVENTS];
+export type FloodgateSocketEvent =
+	(typeof FLOODGATE_SOCKET_EVENTS)[keyof typeof FLOODGATE_SOCKET_EVENTS];
 
 /**
  * Fields the Routerlicious driver requires on a `connect_document_success`
  * payload, per `@fluidframework/protocol-definitions` `IConnected`. Kept as a
  * plain string list (rather than re-declaring the interface) so this stays a
  * thin pointer at the upstream type instead of a duplicate of it — see the
- * `satisfies` check in `sluice-routerlicious.test.ts` for the compile-time
+ * `satisfies` check in `floodgate-routerlicious.test.ts` for the compile-time
  * enforcement against the real `IConnected` type.
  */
 export const CONNECTED_RESPONSE_REQUIRED_FIELDS = [
@@ -80,7 +80,7 @@ export const CONNECTED_RESPONSE_REQUIRED_FIELDS = [
  * existing Levee router surface (`server/lib/levee_web/router.ex`) so the
  * same contract can be checked against either backend during migration.
  */
-export const SLUICE_REST_ENDPOINTS = {
+export const FLOODGATE_REST_ENDPOINTS = {
 	/** Create a document. */
 	createDocument: (tenantId: string) => `/documents/${tenantId}`,
 	/** Session discovery (ordering service location for a document). */
@@ -110,36 +110,40 @@ export const SLUICE_REST_ENDPOINTS = {
 /**
  * JWT scope vocabulary enforced by the Auth plug
  * (`server/lib/levee_web/plugs/auth.ex`) and expected to be enforced
- * identically by Sluice's own JWT validation.
+ * identically by Floodgate's own JWT validation.
  */
-export const SLUICE_AUTH_SCOPES = {
+export const FLOODGATE_AUTH_SCOPES = {
 	docRead: "doc:read",
 	docWrite: "doc:write",
 	summaryWrite: "summary:write",
 } as const;
 
-export type SluiceAuthScope =
-	(typeof SLUICE_AUTH_SCOPES)[keyof typeof SLUICE_AUTH_SCOPES];
+export type FloodgateAuthScope =
+	(typeof FLOODGATE_AUTH_SCOPES)[keyof typeof FLOODGATE_AUTH_SCOPES];
 
 /**
  * Minimum scopes required per REST/operation capability. Mirrors the
  * pipelines in `server/lib/levee_web/router.ex` (`read_access`,
  * `write_access`, `summary_access`).
  */
-export const SLUICE_REQUIRED_SCOPES = {
-	deltas: [SLUICE_AUTH_SCOPES.docRead],
-	createDocument: [SLUICE_AUTH_SCOPES.docRead, SLUICE_AUTH_SCOPES.docWrite],
-	gitRead: [SLUICE_AUTH_SCOPES.docRead],
-	gitWrite: [SLUICE_AUTH_SCOPES.docRead, SLUICE_AUTH_SCOPES.summaryWrite],
-} as const satisfies Record<string, readonly SluiceAuthScope[]>;
+export const FLOODGATE_REQUIRED_SCOPES = {
+	deltas: [FLOODGATE_AUTH_SCOPES.docRead],
+	createDocument: [
+		FLOODGATE_AUTH_SCOPES.docRead,
+		FLOODGATE_AUTH_SCOPES.docWrite,
+	],
+	gitRead: [FLOODGATE_AUTH_SCOPES.docRead],
+	gitWrite: [FLOODGATE_AUTH_SCOPES.docRead, FLOODGATE_AUTH_SCOPES.summaryWrite],
+} as const satisfies Record<string, readonly FloodgateAuthScope[]>;
 
 /**
- * Storage backend acceptance boundary: Sluice must be able to run against an
+ * Storage backend acceptance boundary: Floodgate must be able to run against an
  * in-memory (ETS) backend now and a PostgreSQL-backed one later without
  * changing the wire contract above. This is a documentation-only marker
  * today (no runtime code to type-check); a future task should replace this
  * with a real `Storage` behaviour/protocol type once the Gleam interface
  * lands, per `server/lib/levee/storage/behaviour.ex` (Elixir analogue).
  */
-export const SLUICE_STORAGE_BACKENDS = ["ets", "postgres"] as const;
-export type SluiceStorageBackend = (typeof SLUICE_STORAGE_BACKENDS)[number];
+export const FLOODGATE_STORAGE_BACKENDS = ["ets", "postgres"] as const;
+export type FloodgateStorageBackend =
+	(typeof FLOODGATE_STORAGE_BACKENDS)[number];

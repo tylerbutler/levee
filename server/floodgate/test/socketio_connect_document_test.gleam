@@ -2,8 +2,8 @@ import gleam/dict
 import gleam/dynamic
 import gleam/json
 import gleeunit/should
-import sluice/connect_document
-import sluice/socketio
+import floodgate/connect_document
+import floodgate/socketio
 import windsock
 
 pub fn classify_engine_ping_test() {

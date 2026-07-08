@@ -1,16 +1,16 @@
 import gleeunit
 import gleeunit/should
-import sluice
-import sluice/git
-import sluice/session
+import floodgate
+import floodgate/git
+import floodgate/session
 
 pub fn main() {
   gleeunit.main()
 }
 
 pub fn start_registers_channel_test() {
-  let assert Ok(_) = sluice.start()
-  sluice.topic_prefix |> should.equal("document:")
+  let assert Ok(_) = floodgate.start()
+  floodgate.topic_prefix |> should.equal("document:")
 }
 
 pub fn session_sequences_per_document_test() {

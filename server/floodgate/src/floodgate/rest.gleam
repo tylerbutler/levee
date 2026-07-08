@@ -9,7 +9,7 @@
 //// they do not touch storage, JWTs, or Plug/Conn. Levee's Phoenix
 //// controllers keep doing the actual storage calls and HTTP plumbing, and
 //// delegate the response-shape decision to these functions through
-//// `Levee.Sluice`, the same pattern used for Socket.IO framing and
+//// `Levee.Floodgate`, the same pattern used for Socket.IO framing and
 //// document-session decisions.
 
 import gleam/dynamic.{type Dynamic}

@@ -1,6 +1,6 @@
 import gleam/dynamic
 import gleeunit/should
-import sluice/rest
+import floodgate/rest
 
 // ─────────────────────────────────────────────────────────────────────────────
 // base_url / object URL construction

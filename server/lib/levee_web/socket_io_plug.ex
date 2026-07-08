@@ -8,12 +8,12 @@ defmodule LeveeWeb.SocketIOPlug do
   ## Temporary migration scaffolding — removal gate
 
   This plug (and `LeveeWeb.SocketIOWebSock`) exist only until the standalone
-  `sluice/` Gleam service can terminate this connection directly. Per
-  `docs/adr/003-sluice-cutover-readiness.md`, it may only be removed once:
+  `floodgate/` Gleam service can terminate this connection directly. Per
+  `docs/adr/003-floodgate-cutover-readiness.md`, it may only be removed once:
 
-    * `client/packages/levee-driver/test/integration/sluice-routerlicious.test.ts`
+    * `client/packages/levee-driver/test/integration/floodgate-routerlicious.test.ts`
       has zero outstanding `it.todo` conformance gaps for both the
-      `sluice-direct` and `levee-proxy` targets (tracked in
+      `floodgate-direct` and `levee-proxy` targets (tracked in
       `client/packages/levee-driver/test/integration/cutover-readiness.json`,
       `expectedOutstandingTodoCount`), and
     * `readyForCutover` in that same manifest has been deliberately flipped

@@ -1,29 +1,29 @@
-# ADR-003: Sluice runtime cutover readiness gate
+# ADR-003: Floodgate runtime cutover readiness gate
 
 - **Status:** Accepted
 - **Date:** 2026-06-30
-- **Context:** Closing out the Sluice-first migration plan without
+- **Context:** Closing out the Floodgate-first migration plan without
   prematurely retiring Phoenix
 
 ## Context
 
-ADR-002 established the destination architecture: Sluice (the standalone
-`server/sluice/` Gleam service) becomes the primary runtime once it passes
-the Routerlicious compatibility suite (`sluice-routerlicious.test.ts`) for
-both the `sluice-direct` and `levee-proxy` targets across create, load,
+ADR-002 established the destination architecture: Floodgate (the standalone
+`server/floodgate/` Gleam service) becomes the primary runtime once it passes
+the Routerlicious compatibility suite (`floodgate-routerlicious.test.ts`) for
+both the `floodgate-direct` and `levee-proxy` targets across create, load,
 sync, reconnect, summaries, and signals. Recent work has progressively
 thinned Phoenix's Socket.IO shim (`socket_io_plug.ex`,
 `socket_io_websock.ex`) down to a transport/session shell that delegates
 framing, `connect_document` decisions, and session/signal/nack protocol
-logic to Sluice-owned modules (`Levee.Sluice`, `sluice/socketio`,
-`sluice/connect_document`, etc.).
+logic to Floodgate-owned modules (`Levee.Floodgate`, `floodgate/socketio`,
+`floodgate/connect_document`, etc.).
 
 That is real, incremental progress toward the cutover — but it is not the
 cutover itself. As of this ADR:
 
-- `sluice-routerlicious.test.ts` has 28 outstanding `it.todo(...)` gaps
+- `floodgate-routerlicious.test.ts` has 28 outstanding `it.todo(...)` gaps
   (see the file's header comment and `cutover-readiness.json`), covering
-  connect/create parity gaps for `sluice-direct`, op sequencing/fan-out/nack
+  connect/create parity gaps for `floodgate-direct`, op sequencing/fan-out/nack
   behavior, signal fan-out, cross-client sync convergence, summary
   ack/nack, reconnection/delta-catch-up, REST route parity (session
   discovery, git refs, deltas catch-up shape), and auth/storage-backend
@@ -31,7 +31,7 @@ cutover itself. As of this ADR:
 - Phoenix/Levee still owns controllers, the JWT auth plug, the
   Session/Registry storage runtime, the admin UI, and legacy Phoenix
   Channels support (`/socket`) alongside the Socket.IO shim.
-- No production traffic has been re-pointed at standalone Sluice; Levee's
+- No production traffic has been re-pointed at standalone Floodgate; Levee's
   proxy target is still the only integration-tested path with full REST
   coverage.
 
@@ -46,19 +46,19 @@ rather than prose alone.
 1. **`client/packages/levee-driver/test/integration/cutover-readiness.json`**
    is the single source of truth for cutover readiness. It records:
    - the required conformance categories (create/load/sync/reconnect/
-     summaries/signals) and required targets (`sluice-direct`,
+     summaries/signals) and required targets (`floodgate-direct`,
      `levee-proxy`) from ADR-002,
    - the Phoenix-owned surfaces that must be ported, replaced, or
      explicitly re-scoped before removal (admin UI, controllers, auth
      plug, Session/Registry runtime, the Socket.IO shim itself),
    - the expected outstanding `it.todo` count in
-     `sluice-routerlicious.test.ts`, and
+     `floodgate-routerlicious.test.ts`, and
    - an explicit `readyForCutover` boolean that a human must flip.
 
 2. **`cutover-readiness.ts`/`cutover-readiness.test.ts`** make the gate
    executable and run in the default (non-network-gated) test suite:
    - `countOutstandingConformanceTodos()` scans
-     `sluice-routerlicious.test.ts` for `it.todo(...)` calls and returns a
+     `floodgate-routerlicious.test.ts` for `it.todo(...)` calls and returns a
      live count.
    - The test suite fails if that live count drifts from
      `expectedOutstandingTodoCount` in the manifest, forcing anyone who
@@ -75,7 +75,7 @@ rather than prose alone.
    - `expectedOutstandingTodoCount` reaches `0` (all conformance gaps
      closed for both targets), AND
    - every entry in `phoenixOwnedSurfacesPendingRetirement` has been
-     ported to Sluice, replaced, or removed from the list with a
+     ported to Floodgate, replaced, or removed from the list with a
      documented reason, AND
    - `readyForCutover` is deliberately flipped to `true` in the same
      change that begins the removal work, with this ADR (or a successor)
@@ -90,7 +90,7 @@ rather than prose alone.
 
 - The project has a durable, hard-to-fake mechanism (a failing test, not
   just a stale doc) that prevents claiming migration completion before
-  `sluice-routerlicious.test.ts` conformance and Phoenix surface parity are
+  `floodgate-routerlicious.test.ts` conformance and Phoenix surface parity are
   both actually met.
 - Any PR that closes conformance gaps must update
   `cutover-readiness.json`'s `expectedOutstandingTodoCount` (and, for the

@@ -1,4 +1,4 @@
-//// Sluice-owned `connect_document` protocol decision helpers.
+//// Floodgate-owned `connect_document` protocol decision helpers.
 ////
 //// Tenant secret storage and the document Session/Registry runtime stay in
 //// Levee for this migration step, so this module only owns the pure

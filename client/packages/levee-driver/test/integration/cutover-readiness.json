@@ -1,8 +1,8 @@
 {
-	"$comment": "Repo-tracked cutover readiness gate. See docs/adr/003-sluice-cutover-readiness.md. This file is read by cutover-readiness.ts/.test.ts, which fail the build if it drifts from reality without a deliberate update. Do not hand-edit `readyForCutover` to true without also closing every remaining `it.todo` in sluice-routerlicious.test.ts and updating the ADR.",
-	"adr": "docs/adr/003-sluice-cutover-readiness.md",
-	"conformanceSuite": "client/packages/levee-driver/test/integration/sluice-routerlicious.test.ts",
-	"requiredTargets": ["sluice-direct", "levee-proxy"],
+	"$comment": "Repo-tracked cutover readiness gate. See docs/adr/003-floodgate-cutover-readiness.md. This file is read by cutover-readiness.ts/.test.ts, which fail the build if it drifts from reality without a deliberate update. Do not hand-edit `readyForCutover` to true without also closing every remaining `it.todo` in floodgate-routerlicious.test.ts and updating the ADR.",
+	"adr": "docs/adr/003-floodgate-cutover-readiness.md",
+	"conformanceSuite": "client/packages/levee-driver/test/integration/floodgate-routerlicious.test.ts",
+	"requiredTargets": ["floodgate-direct", "levee-proxy"],
 	"requiredConformanceCategories": [
 		"create",
 		"load",

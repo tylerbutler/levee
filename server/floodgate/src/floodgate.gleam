@@ -1,4 +1,4 @@
-//// Sluice — Fluid Framework server on beryl: dewdrop/server codec, spillway
+//// Floodgate — Fluid Framework server on beryl: dewdrop/server codec, spillway
 //// sequencing, beryl channels + pubsub fan-out + Mist. Official Fluid drivers
 //// can connect. Gleam analogue of levee's DocumentChannel + Session + endpoint.
 
@@ -18,9 +18,9 @@ import gleam/list
 import gleam/option
 import gleam/uri
 import mist
-import sluice/document_channel
-import sluice/git
-import sluice/session
+import floodgate/document_channel
+import floodgate/git
+import floodgate/session
 
 pub fn start() -> Result(#(beryl.Channels, session.Session), beryl.StartError) {
   let ps = pubsub.start(pubsub.default_config())
@@ -28,7 +28,7 @@ pub fn start() -> Result(#(beryl.Channels, session.Session), beryl.StartError) {
   case beryl.start(config) {
     Ok(channels) -> {
       let sess = session.start()
-      let secret = getenv("SLUICE_JWT_SECRET", "")
+      let secret = getenv("FLOODGATE_JWT_SECRET", "")
       let _ =
         beryl.register(
           channels,
@@ -41,7 +41,7 @@ pub fn start() -> Result(#(beryl.Channels, session.Session), beryl.StartError) {
   }
 }
 
-@external(erlang, "sluice_ffi", "getenv")
+@external(erlang, "floodgate_ffi", "getenv")
 fn getenv(name: String, default: String) -> String
 
 pub fn serve(port: Int) -> Result(Nil, Nil) {

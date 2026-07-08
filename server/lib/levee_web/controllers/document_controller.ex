@@ -8,8 +8,8 @@ defmodule LeveeWeb.DocumentController do
   - GET /documents/:tenant_id/session/:id - Get session info
 
   Storage calls and Plug/Conn handling stay here; the document metadata
-  and session-info response *shape* is delegated to Sluice's `sluice/rest`
-  module via `Levee.Sluice` (see that module's docs for the broader
+  and session-info response *shape* is delegated to Floodgate's `floodgate/rest`
+  module via `Levee.Floodgate` (see that module's docs for the broader
   migration context).
   """
 
@@ -17,7 +17,7 @@ defmodule LeveeWeb.DocumentController do
 
   alias Levee.Storage
   alias Levee.Documents.Registry
-  alias Levee.Sluice
+  alias Levee.Floodgate
 
   @doc """
   Create a new document.
@@ -77,7 +77,7 @@ defmodule LeveeWeb.DocumentController do
         conn
         |> put_status(:ok)
         |> json(
-          Sluice.format_document_response(
+          Floodgate.format_document_response(
             document.id,
             document.tenant_id,
             document.sequence_number
@@ -124,7 +124,7 @@ defmodule LeveeWeb.DocumentController do
     host = LeveeWeb.Endpoint.url()
     is_alive = match?({:ok, _pid}, Registry.get_session(tenant_id, document_id))
 
-    Sluice.session_info(host, tenant_id, document_id, is_alive)
+    Floodgate.session_info(host, tenant_id, document_id, is_alive)
   end
 
   # Process the initial summary from container attach by building a full

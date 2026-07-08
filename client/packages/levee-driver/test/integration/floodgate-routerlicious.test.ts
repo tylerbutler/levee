@@ -1,26 +1,26 @@
 /**
- * Routerlicious driver compatibility checks for Sluice.
+ * Routerlicious driver compatibility checks for Floodgate.
  *
  * These tests define the compatibility baseline: an unmodified official
- * Routerlicious driver should be able to use Sluice's Socket.IO/dewdrop
+ * Routerlicious driver should be able to use Floodgate's Socket.IO/dewdrop
  * realtime endpoint plus its REST document/storage surface. All networked
- * tests are opt-in (`SLUICE_ROUTERLICIOUS_COMPAT=1`) because neither Sluice
+ * tests are opt-in (`FLOODGATE_ROUTERLICIOUS_COMPAT=1`) because neither Floodgate
  * nor Levee's proxy of it is part of the default test run.
  *
  * Live-target matrix — point the same suite at either backend by env, run
- * twice (see `sluice-target.ts` for the full var list and run instructions):
+ * twice (see `floodgate-target.ts` for the full var list and run instructions):
  *
- *   Sluice direct:  SLUICE_HTTP_URL=http://localhost:3000 SLUICE_SOCKET_URL=http://localhost:3000 (defaults)
- *   Levee proxy:    SLUICE_HTTP_URL=http://localhost:4000 SLUICE_SOCKET_URL=http://localhost:4000
+ *   Floodgate direct:  FLOODGATE_HTTP_URL=http://localhost:3000 FLOODGATE_SOCKET_URL=http://localhost:3000 (defaults)
+ *   Levee proxy:    FLOODGATE_HTTP_URL=http://localhost:4000 FLOODGATE_SOCKET_URL=http://localhost:4000
  *
  * Both targets expose their own HTTP/WS listener today: Levee via
  * `server/lib/levee_web/socket_io_websock.ex` plus the REST controllers in
- * `server/lib/levee_web/controllers/`, and the standalone `sluice/` Gleam
- * service via Mist, started by `serve/1`/`main()` in `server/sluice/src/sluice.gleam`.
- * Standalone Sluice's REST surface is a smaller subset than Levee's proxy,
+ * `server/lib/levee_web/controllers/`, and the standalone `floodgate/` Gleam
+ * service via Mist, started by `serve/1`/`main()` in `server/floodgate/src/floodgate.gleam`.
+ * Standalone Floodgate's REST surface is a smaller subset than Levee's proxy,
  * though — it implements document create, deltas catch-up, and git
  * blob/tree/commit object storage, but not session discovery or git refs
- * (see `server/sluice/src/sluice.gleam`'s `rest/2` route match). Tests that
+ * (see `server/floodgate/src/floodgate.gleam`'s `rest/2` route match). Tests that
  * need those routes gate on `isLeveeProxyTarget` and pair with an
  * `it.todo` explaining the standalone-only gap, rather than skipping
  * silently or assuming the route is universally unimplemented.
@@ -28,60 +28,62 @@
 
 import type { IConnected } from "@fluidframework/protocol-definitions";
 import { describe, expect, it } from "vitest";
-import { uniqueDocId } from "./helpers.js";
 import {
 	CONNECTED_RESPONSE_REQUIRED_FIELDS,
-	SLUICE_AUTH_SCOPES,
-	SLUICE_REQUIRED_SCOPES,
-	SLUICE_REST_ENDPOINTS,
-	SLUICE_SOCKET_EVENTS,
-} from "./sluice-contract.js";
+	FLOODGATE_AUTH_SCOPES,
+	FLOODGATE_REQUIRED_SCOPES,
+	FLOODGATE_REST_ENDPOINTS,
+	FLOODGATE_SOCKET_EVENTS,
+} from "./floodgate-contract.js";
 import {
 	createBlobTreeCommit,
-	createSluiceResolvedUrl,
-	createSluiceServiceFactory,
-	createSluiceTestClient,
+	createFloodgateResolvedUrl,
+	createFloodgateServiceFactory,
+	createFloodgateTestClient,
+	FLOODGATE_HTTP_URL,
+	FLOODGATE_SOCKET_URL,
+	FLOODGATE_TARGET_LABEL,
+	FLOODGATE_TENANT_ID,
+	floodgateFetch,
+	isFloodgateRunning,
 	isLeveeProxyTarget,
-	isSluiceRunning,
-	SLUICE_HTTP_URL,
-	SLUICE_SOCKET_URL,
-	SLUICE_TARGET_LABEL,
-	SLUICE_TENANT_ID,
-	sluiceFetch,
-} from "./sluice-target.js";
+} from "./floodgate-target.js";
+import { uniqueDocId } from "./helpers.js";
 
-const sluiceAvailable = await isSluiceRunning();
+const floodgateAvailable = await isFloodgateRunning();
 
-const testClient = createSluiceTestClient("routerlicious-compat-user");
+const testClient = createFloodgateTestClient("routerlicious-compat-user");
 
-describe("Sluice Routerlicious compatibility contract", () => {
-	it("builds a Routerlicious resolved URL targeting Sluice endpoints", () => {
+describe("Floodgate Routerlicious compatibility contract", () => {
+	it("builds a Routerlicious resolved URL targeting Floodgate endpoints", () => {
 		const documentId = "compat-doc";
-		const resolvedUrl = createSluiceResolvedUrl(documentId);
+		const resolvedUrl = createFloodgateResolvedUrl(documentId);
 
 		expect(resolvedUrl.type).toBe("fluid");
 		expect(resolvedUrl.id).toBe(documentId);
-		expect(resolvedUrl.endpoints["ordererUrl"]).toBe(SLUICE_HTTP_URL);
-		expect(resolvedUrl.endpoints["deltaStreamUrl"]).toBe(SLUICE_SOCKET_URL);
+		expect(resolvedUrl.endpoints["ordererUrl"]).toBe(FLOODGATE_HTTP_URL);
+		expect(resolvedUrl.endpoints["deltaStreamUrl"]).toBe(FLOODGATE_SOCKET_URL);
 		expect(resolvedUrl.endpoints["deltaStorageUrl"]).toBe(
-			`${SLUICE_HTTP_URL}/documents/${SLUICE_TENANT_ID}/${documentId}/deltas`,
+			`${FLOODGATE_HTTP_URL}/documents/${FLOODGATE_TENANT_ID}/${documentId}/deltas`,
 		);
 		expect(resolvedUrl.endpoints["storageUrl"]).toBe(
-			`${SLUICE_HTTP_URL}/repos/${SLUICE_TENANT_ID}`,
+			`${FLOODGATE_HTTP_URL}/repos/${FLOODGATE_TENANT_ID}`,
 		);
 	});
 
-	it("reports which live target (Sluice direct or Levee proxy) this run is configured for", () => {
-		expect(["sluice-direct", "levee-proxy"]).toContain(SLUICE_TARGET_LABEL);
+	it("reports which live target (Floodgate direct or Levee proxy) this run is configured for", () => {
+		expect(["floodgate-direct", "levee-proxy"]).toContain(
+			FLOODGATE_TARGET_LABEL,
+		);
 	});
 
-	it.runIf(sluiceAvailable && isLeveeProxyTarget)(
-		"connects an unmodified Routerlicious delta stream to Sluice",
+	it.runIf(floodgateAvailable && isLeveeProxyTarget)(
+		"connects an unmodified Routerlicious delta stream to Floodgate",
 		{ timeout: 30_000 },
 		async () => {
-			const documentId = uniqueDocId("sluice-routerlicious");
-			const factory = createSluiceServiceFactory();
-			const resolvedUrl = createSluiceResolvedUrl(documentId);
+			const documentId = uniqueDocId("floodgate-routerlicious");
+			const factory = createFloodgateServiceFactory();
+			const resolvedUrl = createFloodgateResolvedUrl(documentId);
 			const service = await factory.createDocumentService(resolvedUrl);
 
 			const connection = await service.connectToDeltaStream(testClient);
@@ -94,12 +96,12 @@ describe("Sluice Routerlicious compatibility contract", () => {
 	);
 
 	it.todo(
-		"[sluice-direct target] delta-stream connect — the official driver's " +
+		"[floodgate-direct target] delta-stream connect — the official driver's " +
 			"socket.io-client performs its handshake against the default " +
 			"Engine.IO/Socket.IO path (`/socket.io/...`), but standalone " +
-			"Sluice's `beryl/transport/mist` upgrades only exact-path raw " +
+			"Floodgate's `beryl/transport/mist` upgrades only exact-path raw " +
 			'WebSocket requests at `/socket` (`mist_transport.default_config("/socket")` ' +
-			"in `server/sluice.gleam`), with no Socket.IO handshake/framing " +
+			"in `server/floodgate.gleam`), with no Socket.IO handshake/framing " +
 			"layer. Confirmed failing live against `gleam run` on port 3000 " +
 			"with `websocket error: TransportError`. Covered above for the " +
 			"levee-proxy target, which speaks Socket.IO via " +
@@ -119,41 +121,41 @@ describe("Sluice Routerlicious compatibility contract", () => {
 			"Confirmed live against the running Levee proxy on port 4000 (with " +
 			"`enableRestLess: false` set to rule out the separate RestLess-body " +
 			"encoding issue also discovered while building this test — see " +
-			"`createSluiceServiceFactory` in `sluice-target.ts`). Fixing this " +
+			"`createFloodgateServiceFactory` in `floodgate-target.ts`). Fixing this " +
 			"needs a runtime change (either Levee accepting `Basic` for this " +
 			"route, or a documented reason official Routerlicious clients " +
 			"can't create documents against Levee), which is out of scope for " +
 			"a conformance-test-only change. `createMinimalCombinedSummary()` " +
-			"in `sluice-target.ts` is ready to drive this once unblocked.",
+			"in `floodgate-target.ts` is ready to drive this once unblocked.",
 	);
 
 	it.todo(
-		"[sluice-direct target] official createContainer() — the driver's " +
+		"[floodgate-direct target] official createContainer() — the driver's " +
 			"create path POSTs to `/documents/:tenantId` (two path segments, " +
 			"documentId assigned by the server; see " +
 			"`RouterliciousDocumentServiceFactory.createContainer` in " +
-			"`@fluidframework/routerlicious-driver`), but standalone Sluice's " +
+			"`@fluidframework/routerlicious-driver`), but standalone Floodgate's " +
 			"only document-create route is the three-segment " +
-			"`POST /documents/:tenant/:doc` in `server/sluice/src/sluice.gleam`'s " +
+			"`POST /documents/:tenant/:doc` in `server/floodgate/src/floodgate.gleam`'s " +
 			"`rest/2`, which requires the client to choose the id up front. " +
 			"Also blocked by the same `Basic` vs `Bearer` Authorization-scheme " +
 			"mismatch noted in the levee-proxy todo above.",
 	);
 });
 
-describe("Sluice contract — connect handshake shape", () => {
+describe("Floodgate contract — connect handshake shape", () => {
 	it("connect_document_success payload satisfies IConnected's required fields", () => {
 		// Minimal-but-real IConnected literal. The `satisfies` check below is a
-		// compile-time enforcement that Sluice's join-response builder
-		// (`sluice/document_channel.gleam`'s `JoinOk` reply) must eventually
+		// compile-time enforcement that Floodgate's join-response builder
+		// (`floodgate/document_channel.gleam`'s `JoinOk` reply) must eventually
 		// produce every field the official driver requires — this fails to
 		// typecheck if `@fluidframework/protocol-definitions` adds a new
-		// required field that Sluice hasn't accounted for.
+		// required field that Floodgate hasn't accounted for.
 		const minimalConnected = {
 			claims: {
 				documentId: "doc",
 				tenantId: "fluid",
-				scopes: [SLUICE_AUTH_SCOPES.docRead, SLUICE_AUTH_SCOPES.docWrite],
+				scopes: [FLOODGATE_AUTH_SCOPES.docRead, FLOODGATE_AUTH_SCOPES.docWrite],
 				user: { id: "u" },
 				ver: "1.0",
 			},
@@ -178,36 +180,36 @@ describe("Sluice contract — connect handshake shape", () => {
 	});
 
 	it.todo(
-		"Sluice's connect_document response includes claims decoded from the presented JWT",
+		"Floodgate's connect_document response includes claims decoded from the presented JWT",
 	);
 
 	it.todo(
-		"Sluice's connect_document response reports existing:false for a brand-new document",
+		"Floodgate's connect_document response reports existing:false for a brand-new document",
 	);
 });
 
-describe("Sluice contract — socket event vocabulary", () => {
-	// NOTE: this only pins the *event name strings* Sluice's dewdrop/events.gleam
+describe("Floodgate contract — socket event vocabulary", () => {
+	// NOTE: this only pins the *event name strings* Floodgate's dewdrop/events.gleam
 	// exposes. It is not behavior coverage — actual signal fan-out semantics
 	// (ordering, no-sequencing guarantee, delivery to all connected clients)
 	// are exercised (as a todo, pending live harness support) below in
-	// "Sluice contract — operation submission, sequencing & fan-out".
+	// "Floodgate contract — operation submission, sequencing & fan-out".
 	it("uses the dewdrop/events.gleam event names for op/signal/summary flows", () => {
-		expect(SLUICE_SOCKET_EVENTS.connectDocument).toBe("connect_document");
-		expect(SLUICE_SOCKET_EVENTS.connectDocumentSuccess).toBe(
+		expect(FLOODGATE_SOCKET_EVENTS.connectDocument).toBe("connect_document");
+		expect(FLOODGATE_SOCKET_EVENTS.connectDocumentSuccess).toBe(
 			"connect_document_success",
 		);
-		expect(SLUICE_SOCKET_EVENTS.submitOp).toBe("submitOp");
-		expect(SLUICE_SOCKET_EVENTS.op).toBe("op");
-		expect(SLUICE_SOCKET_EVENTS.submitSignal).toBe("submitSignal");
-		expect(SLUICE_SOCKET_EVENTS.signal).toBe("signal");
-		expect(SLUICE_SOCKET_EVENTS.nack).toBe("nack");
-		expect(SLUICE_SOCKET_EVENTS.submitSummary).toBe("submitSummary");
-		expect(SLUICE_SOCKET_EVENTS.summaryAck).toBe("summaryAck");
+		expect(FLOODGATE_SOCKET_EVENTS.submitOp).toBe("submitOp");
+		expect(FLOODGATE_SOCKET_EVENTS.op).toBe("op");
+		expect(FLOODGATE_SOCKET_EVENTS.submitSignal).toBe("submitSignal");
+		expect(FLOODGATE_SOCKET_EVENTS.signal).toBe("signal");
+		expect(FLOODGATE_SOCKET_EVENTS.nack).toBe("nack");
+		expect(FLOODGATE_SOCKET_EVENTS.submitSummary).toBe("submitSummary");
+		expect(FLOODGATE_SOCKET_EVENTS.summaryAck).toBe("summaryAck");
 	});
 });
 
-describe.todo("Sluice contract — operation submission, sequencing & fan-out", () => {
+describe.todo("Floodgate contract — operation submission, sequencing & fan-out", () => {
 	it.todo(
 		"assigns monotonically increasing sequenceNumber across clients on a document",
 	);
@@ -220,11 +222,11 @@ describe.todo("Sluice contract — operation submission, sequencing & fan-out", 
 	it.todo(
 		"fans out submitSignal payloads to every connected client without sequencing " +
 			"(behavior coverage, not just the event-name vocabulary asserted in " +
-			"'Sluice contract — socket event vocabulary' above)",
+			"'Floodgate contract — socket event vocabulary' above)",
 	);
 });
 
-describe.todo("Sluice contract — SharedMap/DDS sync via Loader/fluid-static", () => {
+describe.todo("Floodgate contract — SharedMap/DDS sync via Loader/fluid-static", () => {
 	// Not yet added: exercising this requires either a Fluid `Loader` +
 	// `codeLoader`/container-runtime-factory setup (the driver package has
 	// no dependency on `@fluidframework/container-loader` today — see
@@ -244,7 +246,7 @@ describe.todo("Sluice contract — SharedMap/DDS sync via Loader/fluid-static", 
 	);
 });
 
-describe.todo("Sluice contract — summaries", () => {
+describe.todo("Floodgate contract — summaries", () => {
 	it.todo(
 		"accepts a submitSummary and broadcasts summaryAck with handle + sequence number",
 	);
@@ -254,22 +256,22 @@ describe.todo("Sluice contract — summaries", () => {
 	);
 });
 
-describe.runIf(sluiceAvailable && isLeveeProxyTarget)(
-	"Sluice contract — reconnect & audience/presence roster",
+describe.runIf(floodgateAvailable && isLeveeProxyTarget)(
+	"Floodgate contract — reconnect & audience/presence roster",
 	{ timeout: 30_000 },
 	() => {
 		it("a second client's initialClients includes a still-connected first client (presence roster)", async () => {
-			const documentId = uniqueDocId("sluice-audience");
-			const factory = createSluiceServiceFactory();
-			const resolvedUrl = createSluiceResolvedUrl(documentId);
+			const documentId = uniqueDocId("floodgate-audience");
+			const factory = createFloodgateServiceFactory();
+			const resolvedUrl = createFloodgateResolvedUrl(documentId);
 			const service = await factory.createDocumentService(resolvedUrl);
 
 			const first = await service.connectToDeltaStream(
-				createSluiceTestClient("audience-client-1"),
+				createFloodgateTestClient("audience-client-1"),
 			);
 			try {
 				const second = await service.connectToDeltaStream(
-					createSluiceTestClient("audience-client-2"),
+					createFloodgateTestClient("audience-client-2"),
 				);
 				try {
 					const rosterClientIds = second.initialClients.map(
@@ -285,9 +287,9 @@ describe.runIf(sluiceAvailable && isLeveeProxyTarget)(
 		});
 
 		it("a client that disconnects and reconnects establishes a new delta-stream connection to the same document", async () => {
-			const documentId = uniqueDocId("sluice-reconnect");
-			const factory = createSluiceServiceFactory();
-			const resolvedUrl = createSluiceResolvedUrl(documentId);
+			const documentId = uniqueDocId("floodgate-reconnect");
+			const factory = createFloodgateServiceFactory();
+			const resolvedUrl = createFloodgateResolvedUrl(documentId);
 			const service = await factory.createDocumentService(resolvedUrl);
 
 			const initial = await service.connectToDeltaStream(testClient);
@@ -316,47 +318,47 @@ describe.runIf(sluiceAvailable && isLeveeProxyTarget)(
 				"API shape the driver expects) but the only implemented REST route " +
 				"is `GET /deltas/:tenant_id/:id` (server/lib/levee_web/router.ex); " +
 				"the REST-level equivalent is covered directly in " +
-				"'Sluice conformance — document REST lifecycle' below",
+				"'Floodgate conformance — document REST lifecycle' below",
 		);
 		it.todo(
 			"reconnecting with a stale client-sequence-number resumes without duplicate/missing ops",
 		);
 		it.todo(
-			"[sluice-direct target] presence roster / reconnect — blocked on the " +
-				"same delta-stream connect gap noted above under 'Sluice " +
-				"Routerlicious compatibility contract' (standalone Sluice's " +
+			"[floodgate-direct target] presence roster / reconnect — blocked on the " +
+				"same delta-stream connect gap noted above under 'Floodgate " +
+				"Routerlicious compatibility contract' (standalone Floodgate's " +
 				"WebSocket transport doesn't speak Socket.IO yet).",
 		);
 	},
 );
 
-describe("Sluice contract — REST endpoints required by the driver", () => {
+describe("Floodgate contract — REST endpoints required by the driver", () => {
 	it("defines the create-document, session-discovery, and deltas endpoints", () => {
-		expect(SLUICE_REST_ENDPOINTS.createDocument("fluid")).toBe(
+		expect(FLOODGATE_REST_ENDPOINTS.createDocument("fluid")).toBe(
 			"/documents/fluid",
 		);
-		expect(SLUICE_REST_ENDPOINTS.sessionDiscovery("fluid", "doc-1")).toBe(
+		expect(FLOODGATE_REST_ENDPOINTS.sessionDiscovery("fluid", "doc-1")).toBe(
 			"/documents/fluid/session/doc-1",
 		);
-		expect(SLUICE_REST_ENDPOINTS.deltas("fluid", "doc-1")).toBe(
+		expect(FLOODGATE_REST_ENDPOINTS.deltas("fluid", "doc-1")).toBe(
 			"/deltas/fluid/doc-1",
 		);
 	});
 
 	it("defines git blob/tree/commit/ref endpoints", () => {
-		expect(SLUICE_REST_ENDPOINTS.gitBlob("fluid", "abc123")).toBe(
+		expect(FLOODGATE_REST_ENDPOINTS.gitBlob("fluid", "abc123")).toBe(
 			"/repos/fluid/git/blobs/abc123",
 		);
-		expect(SLUICE_REST_ENDPOINTS.gitTree("fluid", "abc123")).toBe(
+		expect(FLOODGATE_REST_ENDPOINTS.gitTree("fluid", "abc123")).toBe(
 			"/repos/fluid/git/trees/abc123",
 		);
-		expect(SLUICE_REST_ENDPOINTS.gitCommit("fluid", "abc123")).toBe(
+		expect(FLOODGATE_REST_ENDPOINTS.gitCommit("fluid", "abc123")).toBe(
 			"/repos/fluid/git/commits/abc123",
 		);
-		expect(SLUICE_REST_ENDPOINTS.gitRefs("fluid")).toBe(
+		expect(FLOODGATE_REST_ENDPOINTS.gitRefs("fluid")).toBe(
 			"/repos/fluid/git/refs",
 		);
-		expect(SLUICE_REST_ENDPOINTS.gitRef("fluid", "heads/main")).toBe(
+		expect(FLOODGATE_REST_ENDPOINTS.gitRef("fluid", "heads/main")).toBe(
 			"/repos/fluid/git/refs/heads/main",
 		);
 	});
@@ -364,16 +366,16 @@ describe("Sluice contract — REST endpoints required by the driver", () => {
 	it.todo("GET deltas paginates and returns ops in sequenceNumber order");
 });
 
-describe.runIf(sluiceAvailable)(
-	"Sluice conformance — document REST lifecycle",
+describe.runIf(floodgateAvailable)(
+	"Floodgate conformance — document REST lifecycle",
 	() => {
 		it.runIf(isLeveeProxyTarget)(
 			"POST /documents/:tenant_id creates a document through the official REST path",
 			async () => {
-				const documentId = uniqueDocId("sluice-doc-create");
+				const documentId = uniqueDocId("floodgate-doc-create");
 
-				const response = await sluiceFetch(
-					SLUICE_REST_ENDPOINTS.createDocument(SLUICE_TENANT_ID),
+				const response = await floodgateFetch(
+					FLOODGATE_REST_ENDPOINTS.createDocument(FLOODGATE_TENANT_ID),
 					{ method: "POST", body: { id: documentId }, documentId },
 				);
 
@@ -382,10 +384,10 @@ describe.runIf(sluiceAvailable)(
 		);
 
 		it.todo(
-			"[sluice-direct target] POST /documents/:tenant_id (Routerlicious's " +
-				"two-segment create-document shape, `SLUICE_REST_ENDPOINTS.createDocument`) " +
-				"— standalone Sluice only accepts the three-segment " +
-				"`POST /documents/:tenant/:doc` in `server/sluice/src/sluice.gleam`'s " +
+			"[floodgate-direct target] POST /documents/:tenant_id (Routerlicious's " +
+				"two-segment create-document shape, `FLOODGATE_REST_ENDPOINTS.createDocument`) " +
+				"— standalone Floodgate only accepts the three-segment " +
+				"`POST /documents/:tenant/:doc` in `server/floodgate/src/floodgate.gleam`'s " +
 				"`rest/2`, so this 404s today; confirmed by running this suite live " +
 				"against `gleam run` on port 3000. Covered above for the " +
 				"levee-proxy target (`document_controller.ex#create`).",
@@ -394,10 +396,10 @@ describe.runIf(sluiceAvailable)(
 		it.runIf(isLeveeProxyTarget)(
 			"GET session discovery returns an ordering-service URL usable by the driver's session discovery",
 			async () => {
-				const documentId = uniqueDocId("sluice-doc-session");
+				const documentId = uniqueDocId("floodgate-doc-session");
 
-				await sluiceFetch(
-					SLUICE_REST_ENDPOINTS.createDocument(SLUICE_TENANT_ID),
+				await floodgateFetch(
+					FLOODGATE_REST_ENDPOINTS.createDocument(FLOODGATE_TENANT_ID),
 					{
 						method: "POST",
 						body: { id: documentId },
@@ -405,8 +407,11 @@ describe.runIf(sluiceAvailable)(
 					},
 				);
 
-				const response = await sluiceFetch(
-					SLUICE_REST_ENDPOINTS.sessionDiscovery(SLUICE_TENANT_ID, documentId),
+				const response = await floodgateFetch(
+					FLOODGATE_REST_ENDPOINTS.sessionDiscovery(
+						FLOODGATE_TENANT_ID,
+						documentId,
+					),
 					{ documentId },
 				);
 
@@ -418,8 +423,8 @@ describe.runIf(sluiceAvailable)(
 		);
 
 		it.todo(
-			"[sluice-direct target] GET session discovery — not yet implemented by " +
-				"the standalone Sluice service; `server/sluice/src/sluice.gleam`'s " +
+			"[floodgate-direct target] GET session discovery — not yet implemented by " +
+				"the standalone Floodgate service; `server/floodgate/src/floodgate.gleam`'s " +
 				"`rest/2` route match has no `session` branch, only " +
 				"documents/deltas/git. Covered above for the levee-proxy target " +
 				"(`server/lib/levee_web/controllers/document_controller.ex`'s " +
@@ -429,10 +434,10 @@ describe.runIf(sluiceAvailable)(
 		it.runIf(isLeveeProxyTarget)(
 			"GET deltas returns an empty ops array for a brand-new document",
 			async () => {
-				const documentId = uniqueDocId("sluice-doc-deltas");
+				const documentId = uniqueDocId("floodgate-doc-deltas");
 
-				await sluiceFetch(
-					SLUICE_REST_ENDPOINTS.createDocument(SLUICE_TENANT_ID),
+				await floodgateFetch(
+					FLOODGATE_REST_ENDPOINTS.createDocument(FLOODGATE_TENANT_ID),
 					{
 						method: "POST",
 						body: { id: documentId },
@@ -440,8 +445,8 @@ describe.runIf(sluiceAvailable)(
 					},
 				);
 
-				const response = await sluiceFetch(
-					SLUICE_REST_ENDPOINTS.deltas(SLUICE_TENANT_ID, documentId),
+				const response = await floodgateFetch(
+					FLOODGATE_REST_ENDPOINTS.deltas(FLOODGATE_TENANT_ID, documentId),
 					{ documentId },
 				);
 
@@ -453,10 +458,10 @@ describe.runIf(sluiceAvailable)(
 		);
 
 		it.todo(
-			"[sluice-direct target] GET /deltas/:tenant/:doc (Routerlicious's " +
-				"top-level deltas-catch-up shape) — standalone Sluice only exposes " +
+			"[floodgate-direct target] GET /deltas/:tenant/:doc (Routerlicious's " +
+				"top-level deltas-catch-up shape) — standalone Floodgate only exposes " +
 				"catch-up nested under the document, `GET /documents/:tenant/:doc/deltas` " +
-				"in `server/sluice/src/sluice.gleam`'s `rest/2`, and its response " +
+				"in `server/floodgate/src/floodgate.gleam`'s `rest/2`, and its response " +
 				"shape is `{sequenceNumber, contents}` per op rather than the " +
 				"Storage Service `{value: [...]}` envelope; confirmed by running " +
 				"this suite live against `gleam run` on port 3000. Covered above " +
@@ -465,18 +470,18 @@ describe.runIf(sluiceAvailable)(
 	},
 );
 
-describe.runIf(sluiceAvailable)(
-	"Sluice conformance — git object storage (summary upload path)",
+describe.runIf(floodgateAvailable)(
+	"Floodgate conformance — git object storage (summary upload path)",
 	() => {
 		it.runIf(isLeveeProxyTarget)(
 			"round-trips a blob through the git-like content-addressed storage endpoints",
 			async () => {
 				const content = Buffer.from(
-					JSON.stringify({ hello: "sluice" }),
+					JSON.stringify({ hello: "floodgate" }),
 				).toString("base64");
 
-				const createResponse = await sluiceFetch(
-					SLUICE_REST_ENDPOINTS.gitCreateBlob(SLUICE_TENANT_ID),
+				const createResponse = await floodgateFetch(
+					FLOODGATE_REST_ENDPOINTS.gitCreateBlob(FLOODGATE_TENANT_ID),
 					{
 						method: "POST",
 						body: { content, encoding: "base64" },
@@ -487,22 +492,22 @@ describe.runIf(sluiceAvailable)(
 				const { sha } = await createResponse.json();
 				expect(typeof sha).toBe("string");
 
-				const readResponse = await sluiceFetch(
-					SLUICE_REST_ENDPOINTS.gitBlob(SLUICE_TENANT_ID, sha),
+				const readResponse = await floodgateFetch(
+					FLOODGATE_REST_ENDPOINTS.gitBlob(FLOODGATE_TENANT_ID, sha),
 				);
 				expect(readResponse.status).toBe(200);
 				const blob = await readResponse.json();
 				expect(blob.sha).toBe(sha);
 				expect(blob.encoding).toBe("base64");
 				expect(Buffer.from(blob.content, "base64").toString()).toBe(
-					JSON.stringify({ hello: "sluice" }),
+					JSON.stringify({ hello: "floodgate" }),
 				);
 			},
 		);
 
 		it.todo(
-			"[sluice-direct target] GET blob response envelope — standalone " +
-				"Sluice's git store (`sluice/git.gleam`'s `fetch/2`) returns the " +
+			"[floodgate-direct target] GET blob response envelope — standalone " +
+				"Floodgate's git store (`floodgate/git.gleam`'s `fetch/2`) returns the " +
 				"raw stored body directly, not the Levee/Historian-style " +
 				"`{sha, encoding, content}` JSON envelope " +
 				"(`git_controller.ex`'s blob-show action) the driver's storage " +
@@ -513,9 +518,9 @@ describe.runIf(sluiceAvailable)(
 
 		it("creates a tree over a blob, then a commit over the tree", async () => {
 			const commitSha = await createBlobTreeCommit(
-				SLUICE_TENANT_ID,
-				"sluice conformance content",
-				"Sluice conformance commit",
+				FLOODGATE_TENANT_ID,
+				"floodgate conformance content",
+				"Floodgate conformance commit",
 			);
 
 			expect(typeof commitSha).toBe("string");
@@ -525,14 +530,14 @@ describe.runIf(sluiceAvailable)(
 			"creates a ref pointing at a commit and reads it back",
 			async () => {
 				const commitSha = await createBlobTreeCommit(
-					SLUICE_TENANT_ID,
-					"sluice conformance ref content",
-					"Sluice conformance ref commit",
+					FLOODGATE_TENANT_ID,
+					"floodgate conformance ref content",
+					"Floodgate conformance ref commit",
 				);
 
-				const refName = `refs/heads/${uniqueDocId("sluice-conformance")}`;
-				const refResponse = await sluiceFetch(
-					SLUICE_REST_ENDPOINTS.gitRefs(SLUICE_TENANT_ID),
+				const refName = `refs/heads/${uniqueDocId("floodgate-conformance")}`;
+				const refResponse = await floodgateFetch(
+					FLOODGATE_REST_ENDPOINTS.gitRefs(FLOODGATE_TENANT_ID),
 					{
 						method: "POST",
 						body: { ref: refName, sha: commitSha },
@@ -542,8 +547,8 @@ describe.runIf(sluiceAvailable)(
 				expect(refResponse.status).toBe(201);
 
 				const shortRef = refName.replace(/^refs\//, "");
-				const readRefResponse = await sluiceFetch(
-					SLUICE_REST_ENDPOINTS.gitRef(SLUICE_TENANT_ID, shortRef),
+				const readRefResponse = await floodgateFetch(
+					FLOODGATE_REST_ENDPOINTS.gitRef(FLOODGATE_TENANT_ID, shortRef),
 				);
 				expect(readRefResponse.status).toBe(200);
 				const ref = await readRefResponse.json();
@@ -552,8 +557,8 @@ describe.runIf(sluiceAvailable)(
 		);
 
 		it.todo(
-			"[sluice-direct target] git ref create/read — not yet implemented by " +
-				"the standalone Sluice service; `server/sluice/src/sluice.gleam`'s " +
+			"[floodgate-direct target] git ref create/read — not yet implemented by " +
+				"the standalone Floodgate service; `server/floodgate/src/floodgate.gleam`'s " +
 				"`rest/2` route match only handles git `blobs`/`trees`/`commits`, " +
 				"no `refs` branch. Covered above for the levee-proxy target " +
 				"(`server/lib/levee_web/controllers/git_controller.ex`'s ref actions).",
@@ -561,18 +566,18 @@ describe.runIf(sluiceAvailable)(
 	},
 );
 
-describe("Sluice contract — auth/token expectations", () => {
+describe("Floodgate contract — auth/token expectations", () => {
 	it("requires doc:read+doc:write scopes to create a document, per router.ex write_access", () => {
-		expect(SLUICE_REQUIRED_SCOPES.createDocument).toEqual([
-			SLUICE_AUTH_SCOPES.docRead,
-			SLUICE_AUTH_SCOPES.docWrite,
+		expect(FLOODGATE_REQUIRED_SCOPES.createDocument).toEqual([
+			FLOODGATE_AUTH_SCOPES.docRead,
+			FLOODGATE_AUTH_SCOPES.docWrite,
 		]);
 	});
 
 	it("requires doc:read+summary:write scopes for git write endpoints, per router.ex summary_access", () => {
-		expect(SLUICE_REQUIRED_SCOPES.gitWrite).toEqual([
-			SLUICE_AUTH_SCOPES.docRead,
-			SLUICE_AUTH_SCOPES.summaryWrite,
+		expect(FLOODGATE_REQUIRED_SCOPES.gitWrite).toEqual([
+			FLOODGATE_AUTH_SCOPES.docRead,
+			FLOODGATE_AUTH_SCOPES.summaryWrite,
 		]);
 	});
 
@@ -587,7 +592,7 @@ describe("Sluice contract — auth/token expectations", () => {
 	);
 });
 
-describe.todo("Sluice contract — storage backend interface", () => {
+describe.todo("Floodgate contract — storage backend interface", () => {
 	it.todo(
 		"the ETS-backed storage implementation satisfies the same behaviour used by the future PostgreSQL backend",
 	);

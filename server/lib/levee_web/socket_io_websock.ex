@@ -5,21 +5,21 @@ defmodule LeveeWeb.SocketIOWebSock do
   This is the transitional Levee-owned transport shim: it terminates the
   WebSocket connection and drives Levee's own JWT verification and document
   Session/Registry runtime, but delegates the Engine.IO/Socket.IO framing and
-  `connect_document` payload/scope decisions to Sluice (`Levee.Sluice`,
-  backed by the Gleam `sluice/socketio` and `sluice/connect_document`
-  modules, which build on `windsock`/`dewdrop`/`spillway`). As Sluice grows
+  `connect_document` payload/scope decisions to Floodgate (`Levee.Floodgate`,
+  backed by the Gleam `floodgate/socketio` and `floodgate/connect_document`
+  modules, which build on `windsock`/`dewdrop`/`spillway`). As Floodgate grows
   its own connection-handling runtime, more of this module's
   `Levee.Documents.*` calls are expected to move behind that same
-  `Levee.Sluice` boundary or be replaced outright by a Sluice-owned
+  `Levee.Floodgate` boundary or be replaced outright by a Floodgate-owned
   listener.
 
   ## Temporary migration scaffolding — removal gate
 
   Do not treat this module as permanent runtime. Per
-  `docs/adr/003-sluice-cutover-readiness.md`, it (along with
+  `docs/adr/003-floodgate-cutover-readiness.md`, it (along with
   `LeveeWeb.SocketIOPlug`) may only be removed once
-  `sluice-routerlicious.test.ts` reaches zero outstanding `it.todo`
-  conformance gaps for both the `sluice-direct` and `levee-proxy` targets
+  `floodgate-routerlicious.test.ts` reaches zero outstanding `it.todo`
+  conformance gaps for both the `floodgate-direct` and `levee-proxy` targets
   and `cutover-readiness.json`'s `readyForCutover` flag has been
   deliberately set to `true`. Run `just check-cutover-readiness` to check
   current status.
@@ -29,7 +29,7 @@ defmodule LeveeWeb.SocketIOWebSock do
 
   alias Levee.Auth.JWT
   alias Levee.Documents.Session
-  alias Levee.Sluice
+  alias Levee.Floodgate
 
   require Logger
 
@@ -37,22 +37,22 @@ defmodule LeveeWeb.SocketIOWebSock do
   def init(_state) do
     sid = Base.url_encode64(:crypto.strong_rand_bytes(16), padding: false)
 
-    open_packet = Sluice.encode_open(sid, 25_000, 20_000, 1_000_000)
+    open_packet = Floodgate.encode_open(sid, 25_000, 20_000, 1_000_000)
 
     {:push, {:text, open_packet}, %{sid: sid, client_id: nil, session_pid: nil}}
   end
 
   @impl true
   def handle_in({frame, [opcode: :text]}, state) do
-    case Sluice.classify_frame(frame) do
+    case Floodgate.classify_frame(frame) do
       :engine_ping ->
-        {:push, {:text, Sluice.encode_pong()}, state}
+        {:push, {:text, Floodgate.encode_pong()}, state}
 
       :engine_pong ->
         {:ok, state}
 
       :socket_connect ->
-        {:push, {:text, Sluice.encode_connect_ack(state.sid)}, state}
+        {:push, {:text, Floodgate.encode_connect_ack(state.sid)}, state}
 
       {:fluid_event, "connect_document", [payload | _]} when is_map(payload) ->
         connect_document(payload, state)
@@ -72,11 +72,11 @@ defmodule LeveeWeb.SocketIOWebSock do
     document_id = op_message["documentId"]
     messages = op_message["op"] || []
 
-    {:push, {:text, Sluice.encode_op(document_id, messages)}, state}
+    {:push, {:text, Floodgate.encode_op(document_id, messages)}, state}
   end
 
   def handle_info({:signal, signal_message}, state) do
-    {:push, {:text, Sluice.encode_signal(signal_message)}, state}
+    {:push, {:text, Floodgate.encode_signal(signal_message)}, state}
   end
 
   def handle_info(_message, state), do: {:ok, state}
@@ -91,7 +91,7 @@ defmodule LeveeWeb.SocketIOWebSock do
   def terminate(_reason, _state), do: :ok
 
   defp connect_document(payload, state) do
-    with {:ok, {tenant_id, document_id, token}} <- Sluice.parse_connect_request(payload),
+    with {:ok, {tenant_id, document_id, token}} <- Floodgate.parse_connect_request(payload),
          {:ok, claims} <- verify_token(token, tenant_id, document_id),
          :ok <- validate_mode(payload, claims),
          {:ok, session_pid} <-
@@ -108,13 +108,13 @@ defmodule LeveeWeb.SocketIOWebSock do
           "ver" => claims.ver
         })
 
-      {:push, {:text, Sluice.encode_connect_document_success(response)},
+      {:push, {:text, Floodgate.encode_connect_document_success(response)},
        %{state | client_id: client_id, session_pid: session_pid}}
     else
       {:error, reason} ->
         {:push,
          {:text,
-          Sluice.encode_connect_document_error(%{"code" => 400, "message" => inspect(reason)})},
+          Floodgate.encode_connect_document_error(%{"code" => 400, "message" => inspect(reason)})},
          state}
     end
   end
@@ -124,7 +124,7 @@ defmodule LeveeWeb.SocketIOWebSock do
          false <- JWT.expired?(claims),
          true <- claims.tenantId == tenant_id,
          true <- claims.documentId == document_id,
-         true <- JWT.has_scope?(claims, Sluice.read_scope()) do
+         true <- JWT.has_scope?(claims, Floodgate.read_scope()) do
       {:ok, claims}
     else
       true -> {:error, :token_expired}
@@ -134,6 +134,6 @@ defmodule LeveeWeb.SocketIOWebSock do
   end
 
   defp validate_mode(payload, claims) do
-    Sluice.validate_mode_scope(payload, claims.scopes)
+    Floodgate.validate_mode_scope(payload, claims.scopes)
   end
 end
