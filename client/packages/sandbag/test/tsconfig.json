@@ -1,0 +1,10 @@
+{
+	"$schema": "https://json.schemastore.org/tsconfig",
+	"extends": "../../../tsconfig.strict.json",
+	"compilerOptions": {
+		"composite": false,
+		"noEmit": true,
+		"moduleResolution": "bundler"
+	},
+	"include": ["**/*.ts"]
+}

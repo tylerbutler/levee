@@ -5,6 +5,11 @@ export interface SandbagRecord {
 	name: string;
 	appType: string;
 	documentId: string;
+	/**
+	 * Per-record token mint credential (e.g. for Floodgate apps).
+	 * When set, forwarded into the iframe URL so the mounted app can use it.
+	 */
+	mintCredential?: string;
 	createdAt: string;
 }
 
@@ -80,6 +85,7 @@ export function buildAppUrl(
 	appType: string,
 	documentId?: string,
 	authToken?: string,
+	mintCredential?: string,
 ): string {
 	const params = new URLSearchParams();
 	if (documentId) {
@@ -88,6 +94,34 @@ export function buildAppUrl(
 	if (authToken) {
 		params.set("authToken", authToken);
 	}
+	if (mintCredential) {
+		params.set("mintCredential", mintCredential);
+	}
 	const query = params.toString();
 	return `${base}/apps/${appType}${query ? `?${query}` : ""}`;
+}
+
+/**
+ * Build the iframe URL for the `sandbag/[id]` caller.
+ *
+ * Forwards `mintCredential` from either the outer page URL (explicit param,
+ * takes precedence) or the per-record stored credential — never from `authToken`.
+ * Falls back to no credential when absent from both sources.
+ *
+ * @param sandbag - The sandbag record being viewed.
+ * @param authToken - Levee session token (for Levee apps only).
+ * @param pageCredential - Credential read from the outer page's URL search params.
+ */
+export function buildIframeSrc(
+	sandbag: SandbagRecord,
+	authToken: string | undefined,
+	pageCredential: string | undefined,
+): string {
+	const mintCredential = pageCredential ?? sandbag.mintCredential;
+	return buildAppUrl(
+		sandbag.appType,
+		sandbag.documentId || undefined,
+		authToken,
+		mintCredential,
+	);
 }

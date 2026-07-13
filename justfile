@@ -265,6 +265,177 @@ iex: build-gleam build-admin
 dev-sandbag:
     cd client/packages/sandbag && pnpm dev
 
+# === FLOODGATE STANDALONE ===
+
+# Start standalone Floodgate server on :3000 with example credentials
+floodgate-server:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export FLOODGATE_JWT_SECRET=floodgate-example-jwt-secret
+    export FLOODGATE_TOKEN_MINT_SECRET=floodgate-example-mint-secret
+    export FLOODGATE_TOKEN_MINT_USER_ID=floodgate-example-user
+    export FLOODGATE_TOKEN_MINT_USER_NAME="Floodgate Example User"
+    export FLOODGATE_STORAGE_BACKEND=memory
+    cd server/floodgate && gleam run
+
+# Start Floodgate DiceRoller Vite dev server on :3001 (server must already be running).
+# Env vars are pinned to match the standalone Floodgate server credentials.
+dev-floodgate-example:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export VITE_FLOODGATE_HTTP_URL=http://localhost:3000
+    export VITE_FLOODGATE_SOCKET_URL=http://localhost:3000
+    export VITE_FLOODGATE_TENANT_ID=fluid
+    export VITE_FLOODGATE_TOKEN_MINT_SECRET=floodgate-example-mint-secret
+    cd client/packages/floodgate-example && pnpm dev --port 3001 --strictPort
+
+# Start standalone Floodgate server (:3000) + DiceRoller example (:3001) together.
+# Waits for the server to respond HTTP 200 before starting Vite. Terminates
+# both children when either exits. Press Ctrl-C to stop.
+# Uses example-only credentials — never use in production.
+floodgate-example:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # Server env vars
+    export FLOODGATE_JWT_SECRET=floodgate-example-jwt-secret
+    export FLOODGATE_TOKEN_MINT_SECRET=floodgate-example-mint-secret
+    export FLOODGATE_TOKEN_MINT_USER_ID=floodgate-example-user
+    export FLOODGATE_TOKEN_MINT_USER_NAME="Floodgate Example User"
+    export FLOODGATE_STORAGE_BACKEND=memory
+
+    # Vite env vars — pinned to match server credentials and port
+    export VITE_FLOODGATE_HTTP_URL=http://localhost:3000
+    export VITE_FLOODGATE_SOCKET_URL=http://localhost:3000
+    export VITE_FLOODGATE_TENANT_ID=fluid
+    export VITE_FLOODGATE_TOKEN_MINT_SECRET=floodgate-example-mint-secret
+
+    floodgate_pid=""
+    vite_pid=""
+
+    cleanup() {
+        # Kill the entire process group for each child (setsid gives each its own PGID).
+        # This terminates BEAM/node descendants that outlive the group-leader bash.
+        [ -n "$floodgate_pid" ] && kill -- "-$floodgate_pid" 2>/dev/null || true
+        [ -n "$vite_pid" ] && kill -- "-$vite_pid" 2>/dev/null || true
+    }
+    trap cleanup EXIT INT TERM
+
+    # setsid creates a new session/process group (PGID = $!) so cleanup can kill
+    # the group leader and all descendants (gleam + BEAM, pnpm + node workers).
+    setsid bash -c 'cd server/floodgate && gleam run' &
+    floodgate_pid=$!
+
+    # Wait for authenticated token-mint to return HTTP 200 (proves server is fully up)
+    echo "Waiting for Floodgate server to be ready..."
+    ready=false
+    for i in $(seq 1 30); do
+        if ! kill -0 "$floodgate_pid" 2>/dev/null; then
+            echo "ERROR: Floodgate server process exited unexpectedly." >&2
+            exit 1
+        fi
+        code=$(curl --max-time 1 -s -o /dev/null -w "%{http_code}" \
+            -X POST http://localhost:3000/api/tenants/fluid/token-mint \
+            -H "Authorization: Bearer $FLOODGATE_TOKEN_MINT_SECRET" \
+            -H "Content-Type: application/json" \
+            -d '{"documentId":""}' \
+            2>/dev/null) || code="000"
+        if [ "$code" = "200" ]; then
+            echo "  Floodgate server ready (HTTP 200)."
+            ready=true
+            break
+        fi
+        echo "  waiting... ($i/30)"
+        sleep 1
+    done
+    if [ "$ready" = "false" ]; then
+        echo "ERROR: Floodgate server not ready after 30s." >&2
+        exit 1
+    fi
+
+    # Start Vite on fixed port 3001 (--strictPort fails immediately if port is taken)
+    setsid bash -c 'cd client/packages/floodgate-example && pnpm dev --port 3001 --strictPort' &
+    vite_pid=$!
+
+    # Detect immediate Vite startup failure (e.g., port 3001 in use)
+    sleep 2
+    if ! kill -0 "$vite_pid" 2>/dev/null; then
+        echo "ERROR: Vite dev server failed to start (port 3001 may be in use)." >&2
+        exit 1
+    fi
+
+    echo ""
+    echo "  Floodgate server:   http://localhost:3000"
+    echo "  DiceRoller example: http://localhost:3001"
+    echo ""
+    echo "  Press Ctrl-C to stop both processes."
+    echo ""
+
+    # Terminate the surviving child when either process exits
+    while kill -0 "$floodgate_pid" 2>/dev/null && kill -0 "$vite_pid" 2>/dev/null; do
+        sleep 1
+    done
+
+# Run the two-client SharedMap sync integration test against standalone Floodgate.
+# Starts the server, polls the authenticated token-mint for HTTP 200, runs the
+# test, then stops the server. Fails explicitly if the server does not start.
+test-floodgate-sync:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    export FLOODGATE_JWT_SECRET=floodgate-example-jwt-secret
+    export FLOODGATE_TOKEN_MINT_SECRET=floodgate-example-mint-secret
+    export FLOODGATE_TOKEN_MINT_USER_ID=floodgate-example-user
+    export FLOODGATE_TOKEN_MINT_USER_NAME="Floodgate Example User"
+    export FLOODGATE_STORAGE_BACKEND=memory
+
+    server_pid=""
+    cleanup() {
+        # Kill the entire process group to terminate BEAM descendants.
+        [ -n "$server_pid" ] && kill -- "-$server_pid" 2>/dev/null || true
+    }
+    trap cleanup EXIT INT TERM
+
+    # setsid: new session/PGID = $server_pid so kill -- -$server_pid reaches BEAM.
+    setsid bash -c 'cd server/floodgate && gleam run' &
+    server_pid=$!
+
+    # Detect immediate server startup failure
+    sleep 0.5
+    if ! kill -0 "$server_pid" 2>/dev/null; then
+        echo "ERROR: Floodgate server process exited immediately." >&2
+        exit 1
+    fi
+
+    # Poll authenticated token-mint; require HTTP 200 to confirm server is fully up
+    echo "Waiting for Floodgate server to be ready..."
+    ready=false
+    for i in $(seq 1 30); do
+        code=$(curl --max-time 1 -s -o /dev/null -w "%{http_code}" \
+            -X POST http://localhost:3000/api/tenants/fluid/token-mint \
+            -H "Authorization: Bearer $FLOODGATE_TOKEN_MINT_SECRET" \
+            -H "Content-Type: application/json" \
+            -d '{"documentId":""}' \
+            2>/dev/null) || code="000"
+        if [ "$code" = "200" ]; then
+            echo "Floodgate server ready (HTTP 200)."
+            ready=true
+            break
+        fi
+        echo "  waiting... ($i/30)"
+        sleep 1
+    done
+    if [ "$ready" = "false" ]; then
+        echo "ERROR: Floodgate server not ready after 30s." >&2
+        exit 1
+    fi
+
+    cd client/packages/floodgate-example
+    FLOODGATE_INTEGRATION=1 \
+    FLOODGATE_HTTP_URL=http://localhost:3000 \
+    FLOODGATE_MINT_CREDENTIAL=floodgate-example-mint-secret \
+    pnpm test:vitest:integration
+
 # === DOCKER ===
 
 # Docker image name

@@ -13,6 +13,9 @@
 	},
 	"references": [
 		{
+			"path": "../floodgate-example"
+		},
+		{
 			"path": "../levee-example"
 		},
 		{

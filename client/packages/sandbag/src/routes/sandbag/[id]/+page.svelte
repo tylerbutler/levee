@@ -1,7 +1,7 @@
 <script lang="ts">
 import { base } from "$app/paths";
 import { page } from "$app/state";
-import { buildAppUrl, getSandbag } from "$lib/api";
+import { buildIframeSrc, getSandbag } from "$lib/api";
 import { getAuthToken } from "$lib/auth.svelte";
 import { loadApp } from "$lib/registry";
 import type { SandbagApp } from "$lib/types";
@@ -9,13 +9,14 @@ import type { SandbagApp } from "$lib/types";
 const sandbagId = $derived(page.params.id);
 const sandbag = $derived(getSandbag(sandbagId));
 const authToken = $derived(getAuthToken());
+// Forward mintCredential from the outer page URL (e.g., Floodgate apps)
+// so it is never confused with the Levee authToken.
+const pageCredential = $derived(
+	page.url.searchParams.get("mintCredential") ?? undefined,
+);
 const iframeSrc = $derived(
 	sandbag
-		? buildAppUrl(
-				sandbag.appType,
-				sandbag.documentId || undefined,
-				authToken ?? undefined,
-			)
+		? buildIframeSrc(sandbag, authToken ?? undefined, pageCredential)
 		: "",
 );
 

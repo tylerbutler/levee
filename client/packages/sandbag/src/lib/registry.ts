@@ -17,6 +17,8 @@ export type AppType = string;
 const APP_LOADERS: Record<string, () => Promise<SandbagApp>> = {
 	"dice-roller": () =>
 		import("@tylerbu/levee-example/sandbag").then((m) => m.default),
+	"floodgate-dice-roller": () =>
+		import("@tylerbu/floodgate-example/sandbag").then((m) => m.default),
 	presence: () =>
 		import("@tylerbu/levee-presence-tracker/sandbag").then((m) => m.default),
 	"todo-list": () =>

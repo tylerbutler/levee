@@ -26,6 +26,11 @@ export interface SandbagMountConfig {
 	tenantKey?: string;
 	tenantId?: string;
 	authToken?: string;
+	/**
+	 * Token mint credential for Floodgate apps.
+	 * Distinct from Levee's session `authToken` — do not conflate the two.
+	 */
+	mintCredential?: string;
 	documentId?: string;
 }
 

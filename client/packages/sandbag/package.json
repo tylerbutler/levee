@@ -10,9 +10,11 @@
 		"dev": "vite dev",
 		"build": "vite build",
 		"preview": "vite preview",
-		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"test:vitest": "vitest run test/unit"
 	},
 	"dependencies": {
+		"@tylerbu/floodgate-example": "workspace:^",
 		"@tylerbu/levee-example": "workspace:^",
 		"@tylerbu/levee-presence-tracker": "workspace:^",
 		"@tylerbu/levee-todo-list": "workspace:^"
@@ -24,6 +26,7 @@
 		"svelte": "^5.0.0",
 		"svelte-check": "^4.0.0",
 		"typescript": "~5.9.3",
-		"vite": "^6.0.0"
+		"vite": "^6.0.0",
+		"vitest": "^4.1.0"
 	}
 }

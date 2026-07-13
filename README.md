@@ -54,6 +54,31 @@ just build-server     # Build Gleam packages + Elixir
 
 The server auto-registers a default dev tenant on startup. See [server/DEV.md](server/DEV.md) for server development details.
 
+### Floodgate Standalone
+
+Levee includes a standalone [Floodgate](server/floodgate/) server that the
+official Fluid Framework Routerlicious driver can connect to directly — no
+Phoenix required.
+
+```bash
+# Start Floodgate server + DiceRoller example together (Ctrl-C stops both)
+just floodgate-example
+#  Floodgate server:   http://localhost:3000  (guaranteed)
+#  DiceRoller example: http://localhost:3001  (guaranteed — fails if port taken)
+
+# Or start them separately
+just floodgate-server         # Floodgate server on :3000 only
+just dev-floodgate-example    # Vite DiceRoller on :3001 only (strictPort)
+
+# Run the two-client SharedMap sync integration test
+just test-floodgate-sync
+```
+
+The combined launcher (`just floodgate-example`) waits for the Floodgate server
+to respond HTTP 200 on the authenticated token-mint endpoint before starting
+Vite, pins Vite to port 3001 with `--strictPort`, and terminates both processes
+if either exits. Uses example-only credentials — **never use in production.**
+
 ### Client
 
 ```bash
@@ -62,6 +87,7 @@ just test-client      # Run unit tests (vitest)
 just format-client    # Format with Biome
 just lint-client      # Lint with Biome
 ```
+
 
 ## Testing
 
