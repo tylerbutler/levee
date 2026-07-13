@@ -8,14 +8,14 @@ High-level client library wrapping `@tylerbu/levee-driver`.
 
 ## Strategy Pointer
 
-⚠️ **This client is a thin convenience layer designed to migrate to Routerlicious.**
+**This client is the high-level API for the Levee/Phoenix server stack.**
 
-See [ADR-002](../../../docs/adr/002-client-compatibility-strategy.md) for full context. Key points for contributors:
+See [ADR-004](../../../docs/adr/004-coexisting-client-stacks.md) for full context. Key points for contributors:
 
-- Do **not** add new Phoenix Channels-specific API surface
-- New high-level ergonomics should work with Routerlicious-backed service factories post-migration
-- Keep the public API stable and re-pointable at the official client
-- Bug fixes and reliability work continue; no new Phoenix-only features
+- Levee and Floodgate coexist as independent server implementations
+- Keep this package focused on Levee and `@tylerbu/levee-driver`
+- Put official Routerlicious/Floodgate integration in `@tylerbu/floodgate-client`
+- Preserve the public API and support stack-specific Levee capabilities where useful
 
 ## Essential Commands
 
@@ -29,8 +29,8 @@ pnpm lint           # Lint code
 
 ## Contributing Notes
 
-- **API surface:** Keep stable and re-pointable at official Routerlicious client post-migration
-- **New features:** Target Routerlicious contract first; avoid Phoenix-only APIs
-- **Bug fixes:** Continue; no new Phoenix-only protocol features
+- **API surface:** Keep stable for Levee consumers
+- **New features:** Implement Levee/Phoenix features here; share protocol-neutral code when practical
+- **Floodgate features:** Implement in `@tylerbu/floodgate-client`
 - **Consumer docs:** See [README.md](README.md) for external developers
-- **Strategy questions:** See [ADR-002](../../../docs/adr/002-client-compatibility-strategy.md)
+- **Strategy questions:** See [ADR-004](../../../docs/adr/004-coexisting-client-stacks.md)

@@ -30,8 +30,11 @@ levee/
 │   └── packages/
 │       ├── levee-driver/            # Low-level Phoenix Channels Fluid driver
 │       ├── levee-client/            # High-level client API (fluid-static style)
+│       ├── floodgate-client/        # Official Routerlicious integration for Floodgate
 │       ├── levee-example/           # DiceRoller example app
-│       └── levee-presence-tracker/  # Presence tracking example
+│       ├── levee-presence-tracker/  # Presence tracking example
+│       ├── levee-todo-list/         # Collaborative todo-list example
+│       └── sandbag/                 # SvelteKit testing hub
 ├── justfile          # Task runner (orchestrates both)
 └── mise.toml         # Tool versions
 ```

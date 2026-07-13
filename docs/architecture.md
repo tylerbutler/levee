@@ -62,6 +62,10 @@ Welcome to the Levee architecture talk. Levee is a from-scratch implementation o
 2. **levee-driver** - TypeScript driver implementing Fluid interfaces
 3. **levee-client** - High-level TypeScript API for applications
 
+> **Current ecosystem note:** Levee remains the Phoenix-based implementation
+> described here. Floodgate is a separate Gleam/Routerlicious-compatible
+> implementation with its own `@tylerbu/floodgate-client`; see ADR-004.
+
 <!--
 Levee has three main layers. The server handles all the real-time protocol logic — sequencing operations, managing sessions, storing snapshots. The driver is a TypeScript package that implements Fluid Framework's standard interfaces, so existing Fluid apps can connect to Levee with minimal changes. And the client package wraps the driver in a simpler API, similar to what fluid-static provides in the official Fluid ecosystem.
 -->

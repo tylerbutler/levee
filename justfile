@@ -98,13 +98,14 @@ test-integration-run:
 test-floodgate-routerlicious:
     cd client && pnpm test:floodgate-routerlicious
 
-# Check the Floodgate cutover readiness gate (ADR-003) without hitting the
-# network — runs the manifest/`it.todo`-count consistency test that gates
-# retiring Phoenix/the Socket.IO shim. See
-# docs/adr/003-floodgate-cutover-readiness.md and
-# client/packages/levee-driver/test/integration/cutover-readiness.json.
-check-cutover-readiness:
-    cd client && pnpm exec vitest run packages/levee-driver/test/integration/cutover-readiness.test.ts
+# Check standalone Floodgate release readiness against a running direct target.
+# Levee remains an independent supported stack per ADR-004.
+check-floodgate-readiness:
+    cd client && pnpm check:floodgate-readiness
+
+# Check only that the repo-tracked readiness manifest matches the suite.
+check-floodgate-readiness-manifest:
+    cd client && pnpm check:floodgate-readiness-manifest
 
 # Run admin e2e tests (starts Docker server, runs Playwright, stops server)
 test-e2e:

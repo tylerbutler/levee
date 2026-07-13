@@ -48,8 +48,11 @@ levee/
 │   └── packages/
 │       ├── levee-driver/       # Phoenix Channels Fluid driver
 │       ├── levee-client/       # High-level client API
+│       ├── floodgate-client/   # Official Routerlicious integration for Floodgate
 │       ├── levee-example/      # DiceRoller example app
-│       └── levee-presence-tracker/  # Presence tracking example
+│       ├── levee-presence-tracker/  # Presence tracking example
+│       ├── levee-todo-list/    # Collaborative todo-list example
+│       └── sandbag/            # SvelteKit testing hub
 ├── justfile                    # Task runner (orchestrates both)
 ├── mise.toml                   # Tool versions
 ├── hk.pkl                      # Git hooks config
@@ -80,7 +83,9 @@ Client → Phoenix Router → Auth Plug (JWT) → Controller/Channel → Session
 ### Client Package Dependency Graph
 ```
 levee-presence-tracker → levee-client → levee-driver
+levee-todo-list → levee-client → levee-driver
 levee-example → levee-driver
+floodgate-client → @fluidframework/routerlicious-driver
 ```
 
 ## Server (`server/`)
@@ -144,17 +149,20 @@ cd server && mix phx.server                                    # Dev server
 
 | Package | Description |
 |---------|-------------|
-| `levee-driver` | Low-level Phoenix Channels Fluid driver (supported legacy during Floodgate migration; see ADR-002) |
+| `levee-driver` | Low-level Phoenix Channels Fluid driver for Levee |
 | `levee-client` | High-level client wrapping the driver |
+| `floodgate-client` | Floodgate client boundary using the official Routerlicious driver |
 | `levee-example` | DiceRoller example using driver directly |
 | `levee-presence-tracker` | Presence tracking example using client |
+| `levee-todo-list` | Collaborative todo-list example using client |
+| `sandbag` | SvelteKit testing hub for the examples |
 
-**Client compatibility strategy:** [ADR-002](docs/adr/002-client-compatibility-strategy.md) is the single source of truth. In summary:
+**Client compatibility strategy:** [ADR-004](docs/adr/004-coexisting-client-stacks.md) is the current source of truth. In summary:
 
-- Official `@fluidframework/routerlicious-driver` against Floodgate is the primary long-term path
-- `levee-client` is a thin convenience layer designed to re-point at Routerlicious without breaking API changes
-- `levee-driver`'s Phoenix Channels code is **supported legacy during migration**; it becomes **deprecated after** `floodgate-routerlicious.test.ts` conformance passes
-- Bug fixes continue; new protocol features target Floodgate/Routerlicious first, not Phoenix-specific APIs
+- Levee and Floodgate are independent supported server stacks
+- `levee-client` and `levee-driver` remain the Phoenix Channels client stack
+- `floodgate-client` uses the official Routerlicious driver
+- Shared protocol libraries and conformance fixtures are reused without merging the client packages
 
 ### Client Commands
 
@@ -266,7 +274,7 @@ GET    /admin/*path                       SPA catch-all
 ## Client Release Pipeline
 
 ### Changie (Changelog Management)
-- Config: `client/.changie.yaml` (project mode with `levee-driver` and `levee-client`)
+- Config: `client/.changie.yaml` (project mode with `levee-driver`, `levee-client`, and `floodgate-client`)
 - Fragments go in `client/.changes/unreleased/` (root), NOT per-project subdirectories
 - Each fragment YAML needs a `project` field to route to the correct package
 - `changie` CLI is NOT in `mise.toml` — only available in CI via `miniscruff/changie-action`

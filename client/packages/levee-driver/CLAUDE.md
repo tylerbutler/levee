@@ -12,14 +12,11 @@ Low-level Fluid Framework driver for connecting to Levee servers. This driver pr
 
 See [DEV.md](DEV.md) for development workflows (e.g., updating protocol schema).
 
-**Client compatibility strategy:** Per [ADR-002](../../../docs/adr/002-client-compatibility-strategy.md),
-the official `@fluidframework/routerlicious-driver` against Floodgate is the
-long-term primary client path. This Phoenix Channels driver is legacy during
-the migration and becomes deprecated once Floodgate passes
-`test/integration/floodgate-routerlicious.test.ts` conformance for
-create/load/sync/reconnect/summaries/signals. Do not add new Phoenix
-Channels-only protocol features — new realtime behaviour should target the
-Floodgate/Routerlicious contract (`test/integration/floodgate-contract.ts`) first.
+**Client compatibility strategy:** Per [ADR-004](../../../docs/adr/004-coexisting-client-stacks.md),
+this driver remains the supported Phoenix Channels implementation for Levee.
+Floodgate has a separate `@tylerbu/floodgate-client` package built on the
+official Routerlicious driver. Share protocol-neutral fixtures and libraries
+where useful, but do not couple the two transport implementations.
 
 ## Essential Commands
 
@@ -33,7 +30,8 @@ pnpm lint           # Lint code
 
 ## Contributing Notes
 
-- **Protocol changes:** New Floodgate/Routerlicious features first via `floodgate-contract.ts`; Phoenix Channels is legacy
-- **Bug fixes:** Continue; no new Phoenix-only features
+- **Protocol changes:** Preserve compatibility with the Levee server and Fluid interfaces
+- **Floodgate conformance:** Keep shared tests in `floodgate-contract.ts`, without treating this driver as temporary
+- **Bug fixes and features:** Continue supporting the Phoenix Channels stack
 - **Consumer docs:** See [README.md](README.md) for external developers
-- **Strategy questions:** See [ADR-002](../../../docs/adr/002-client-compatibility-strategy.md)
+- **Strategy questions:** See [ADR-004](../../../docs/adr/004-coexisting-client-stacks.md)

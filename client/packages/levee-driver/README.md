@@ -2,7 +2,7 @@
 
 Low-level Fluid Framework driver for connecting to Levee servers via Phoenix Channels.
 
-> **Status:** This package is currently supported but is part of a planned migration to the official `@fluidframework/routerlicious-driver` against the Floodgate backend. See the [Client Compatibility Strategy](#client-compatibility-strategy) below.
+> **Status:** Supported client driver for the Levee/Phoenix server stack. Floodgate uses a separate official-Routerlicious client path.
 
 ## Quick Start
 
@@ -165,7 +165,7 @@ Integration tests require a running Levee server. See the test directory for exa
 
 ## Client Compatibility Strategy
 
-**This driver uses Phoenix Channels, which is temporary scaffolding during the Levee server migration to Floodgate.**
+**This driver is the supported Phoenix Channels implementation for the Levee server stack.**
 
 ### Current State (2026)
 
@@ -173,34 +173,30 @@ Integration tests require a running Levee server. See the test directory for exa
 - ✅ Use it in production if you're running the Phoenix-based Levee backend
 - ✅ Bug fixes and reliability improvements continue
 
-### Migration Path
+### Floodgate Alternative
 
-Once the Floodgate backend reaches feature parity with the Routerlicious protocol (tracked in `test/integration/floodgate-routerlicious.test.ts`), you should migrate to:
+Floodgate is a separate Gleam server implementation using the official
+Routerlicious protocol. Its release-ready client package provides both
+high-level container APIs and lower-level driver primitives:
 
 ```typescript
-// After migration — use official Routerlicious driver
-import { RouterliciousDocumentServiceFactory } from "@fluidframework/routerlicious-driver";
+import { createFloodgateClientAdapter } from "@tylerbu/floodgate-client";
 
-const serviceFactory = new RouterliciousDocumentServiceFactory(tokenProvider);
-// ... point at Floodgate backend instead
+const floodgate = createFloodgateClientAdapter({
+  httpUrl: "https://floodgate.example.com",
+  tokenProvider,
+});
 ```
 
-### When Will This Happen?
-
-- `levee-driver` becomes **deprecated** (marked in `package.json`) after Floodgate conformance is complete
-- We'll provide a migration guide at that time
-- Phoenix Channels support will transition to **legacy maintenance only** (security fixes, critical bugs)
-- No new protocol features will be added to the Phoenix Channels driver
-
-### For Now
-
-**Use `@tylerbu/levee-client` if you want a higher-level API.** It's designed to remain compatible with the Routerlicious driver path after migration, so you'll have an easier upgrade path.
+Levee and Floodgate coexist; Floodgate readiness does not deprecate this
+driver. Use `@tylerbu/levee-client` for a higher-level Levee API.
 
 ### See Also
 
-- [ADR-002: Client compatibility strategy](../../../docs/adr/002-client-compatibility-strategy.md) — Full architectural decision
+- [ADR-004: Coexisting client stacks](../../../docs/adr/004-coexisting-client-stacks.md) — Current architectural decision
 - [`floodgate-routerlicious.test.ts`](test/integration/floodgate-routerlicious.test.ts) — Conformance test suite
-- `levee-client` — High-level convenience wrapper with migration-friendly design
+- `levee-client` — High-level Levee/Phoenix client
+- `floodgate-client` — Official Routerlicious integration for Floodgate
 
 ## Troubleshooting
 
@@ -241,7 +237,7 @@ See [DEV.md](DEV.md) for:
 
 - **Fluid Framework** — `@fluidframework/*` dependencies pin to `<2.100.0` (currently tested against 2.81.x); no exact version lock
 - **TypeScript 5.0+** (if using TypeScript)
-- Requires a running Levee server with Phoenix 1.7+ or Floodgate backend
+- Requires a running Levee server with Phoenix Channels support
 - No documented Node.js `engines` requirement in `package.json`; use an actively supported Node.js LTS release
 
 ## License
@@ -251,4 +247,4 @@ MIT
 ## Support
 
 - Report bugs: [GitHub Issues](https://github.com/tylerbutler/levee/issues)
-- Discuss architecture: See [ADR-002](../../../docs/adr/002-client-compatibility-strategy.md)
+- Discuss architecture: See [ADR-004](../../../docs/adr/004-coexisting-client-stacks.md)

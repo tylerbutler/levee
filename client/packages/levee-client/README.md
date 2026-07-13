@@ -2,7 +2,7 @@
 
 High-level Fluid Framework client for connecting to Levee servers.
 
-> **Status:** This package is currently supported but is part of a planned migration to the official `@fluidframework/routerlicious-driver` against the Floodgate backend. See the [Client Compatibility Strategy](#client-compatibility-strategy) below.
+> **Status:** Supported high-level client for the Levee/Phoenix server stack. Floodgate uses the separate `@tylerbu/floodgate-client` package.
 
 ## Quick Start
 
@@ -310,7 +310,7 @@ Use `@tylerbu/levee-driver` directly if you need:
 
 ## Client Compatibility Strategy
 
-**This client wraps the Phoenix Channels driver, which is temporary scaffolding during the Levee server migration to Floodgate.**
+**This client is the supported high-level API for the Levee/Phoenix stack.**
 
 ### Current State (2026)
 
@@ -318,47 +318,31 @@ Use `@tylerbu/levee-driver` directly if you need:
 - ✅ Use it in production if you're running the Phoenix-based Levee backend
 - ✅ Bug fixes and reliability improvements continue
 
-### Migration Path
+### Floodgate Alternative
 
-Once the Floodgate backend reaches feature parity with the Routerlicious protocol (tracked in `test/integration/floodgate-routerlicious.test.ts`), you'll migrate to the official Routerlicious driver:
+Floodgate is a separate Gleam server stack using the official Routerlicious
+driver. Its independent, release-ready client package is available through the
+same client release pipeline:
 
 ```typescript
-// After migration — use official Routerlicious client
-import { AzureClient } from "@fluidframework/azure-client";
+import { createFloodgateClientAdapter } from "@tylerbu/floodgate-client";
 
-const client = new AzureClient({
-  connection: {
-    tenantId: "...",
-    tokenProvider: ...,
-    orderer: "https://floodgate-orderer.example.com",
-    storage: "https://floodgate-storage.example.com",
-  },
+const floodgate = createFloodgateClientAdapter({
+  httpUrl: "https://floodgate.example.com",
+  tenantId: "fluid",
+  tokenProvider,
 });
-
-// Same API — just different backend
-const { container, services } = await client.createContainer(schema);
 ```
 
-### Why This Design?
-
-This client is intentionally designed to support that transition:
-
-- **Compatible API** — The high-level methods (`createContainer`, `getContainer`) match the Fluid Framework `fluid-static` patterns
-- **No Phoenix-specific features** — New functionality targets the Routerlicious contract first
-- **Thin wrapper** — Low risk of breaking changes when switching to the official driver
-
-### When Will This Happen?
-
-- `levee-client` becomes **deprecated** (marked in `package.json`) after Floodgate conformance is complete
-- We'll provide a migration guide at that time
-- The package will transition to **legacy maintenance only** (security fixes, critical bugs)
-- It will eventually be archived/removed once the official client is stable
+The two packages may share familiar container lifecycle conventions, but
+neither server stack replaces the other.
 
 ### See Also
 
-- [ADR-002: Client compatibility strategy](../../../docs/adr/002-client-compatibility-strategy.md) — Full architectural decision
+- [ADR-004: Coexisting client stacks](../../../docs/adr/004-coexisting-client-stacks.md) — Current architectural decision
 - [`floodgate-routerlicious.test.ts`](../levee-driver/test/integration/floodgate-routerlicious.test.ts) — Conformance test suite
 - `@tylerbu/levee-driver` — Lower-level driver documentation
+- `@tylerbu/floodgate-client` — Floodgate/Routerlicious client package
 
 ## Important Constraints
 
@@ -414,4 +398,4 @@ MIT
 ## Support
 
 - Report bugs: [GitHub Issues](https://github.com/tylerbutler/levee/issues)
-- Discuss architecture: See [ADR-002](../../../docs/adr/002-client-compatibility-strategy.md)
+- Discuss architecture: See [ADR-004](../../../docs/adr/004-coexisting-client-stacks.md)

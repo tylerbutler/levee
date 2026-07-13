@@ -5,21 +5,9 @@ defmodule LeveeWeb.SocketIOPlug do
   Phoenix Channels remain available at `/socket`; this plug handles the
   Socket.IO/Engine.IO websocket upgrade path used by `socket.io-client`.
 
-  ## Temporary migration scaffolding — removal gate
-
-  This plug (and `LeveeWeb.SocketIOWebSock`) exist only until the standalone
-  `floodgate/` Gleam service can terminate this connection directly. Per
-  `docs/adr/003-floodgate-cutover-readiness.md`, it may only be removed once:
-
-    * `client/packages/levee-driver/test/integration/floodgate-routerlicious.test.ts`
-      has zero outstanding `it.todo` conformance gaps for both the
-      `floodgate-direct` and `levee-proxy` targets (tracked in
-      `client/packages/levee-driver/test/integration/cutover-readiness.json`,
-      `expectedOutstandingTodoCount`), and
-    * `readyForCutover` in that same manifest has been deliberately flipped
-      to `true`.
-
-  Run `just check-cutover-readiness` to check current status.
+  Levee and Floodgate are independent supported server stacks per ADR-004.
+  This optional compatibility endpoint lets the Routerlicious conformance suite
+  exercise Levee without replacing its primary Phoenix Channels transport.
   """
 
   import Plug.Conn

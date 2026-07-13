@@ -1,8 +1,13 @@
 # ADR-002: Client compatibility strategy for the Floodgate migration
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR-004
 - **Date:** 2026-06-30
 - **Context:** Floodgate-first migration — client package (`levee-driver`/`levee-client`) direction
+
+> ADR-004 supersedes this ADR's replacement and deprecation decisions. Levee
+> and Floodgate now coexist as independent server stacks: `levee-client`
+> remains the Levee/Phoenix client, while `floodgate-client` uses the official
+> Routerlicious driver.
 
 ## Context
 

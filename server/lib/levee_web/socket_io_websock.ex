@@ -2,27 +2,16 @@ defmodule LeveeWeb.SocketIOWebSock do
   @moduledoc """
   Engine.IO/Socket.IO WebSock adapter for Fluid Routerlicious compatibility.
 
-  This is the transitional Levee-owned transport shim: it terminates the
+  This Levee-owned compatibility transport terminates the
   WebSocket connection and drives Levee's own JWT verification and document
   Session/Registry runtime, but delegates the Engine.IO/Socket.IO framing and
   `connect_document` payload/scope decisions to Floodgate (`Levee.Floodgate`,
   backed by the Gleam `floodgate/socketio` and `floodgate/connect_document`
-  modules, which build on `windsock`/`dewdrop`/`spillway`). As Floodgate grows
-  its own connection-handling runtime, more of this module's
-  `Levee.Documents.*` calls are expected to move behind that same
-  `Levee.Floodgate` boundary or be replaced outright by a Floodgate-owned
-  listener.
-
-  ## Temporary migration scaffolding — removal gate
-
-  Do not treat this module as permanent runtime. Per
-  `docs/adr/003-floodgate-cutover-readiness.md`, it (along with
-  `LeveeWeb.SocketIOPlug`) may only be removed once
-  `floodgate-routerlicious.test.ts` reaches zero outstanding `it.todo`
-  conformance gaps for both the `floodgate-direct` and `levee-proxy` targets
-  and `cutover-readiness.json`'s `readyForCutover` flag has been
-  deliberately set to `true`. Run `just check-cutover-readiness` to check
-  current status.
+  modules, which build on `windsock`/`dewdrop`/`spillway`). Protocol-neutral
+  behavior can remain shared through `Levee.Floodgate`, while Levee keeps its
+  own Session/Registry runtime. Per ADR-004, Levee and standalone Floodgate
+  coexist; this endpoint is not coupled to replacing the Phoenix Channels
+  stack.
   """
 
   @behaviour WebSock
