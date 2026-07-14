@@ -16,6 +16,12 @@
 			"path": "../floodgate-example"
 		},
 		{
+			"path": "../floodgate-presence-tracker"
+		},
+		{
+			"path": "../floodgate-todo-list"
+		},
+		{
 			"path": "../levee-example"
 		},
 		{

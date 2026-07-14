@@ -49,6 +49,7 @@ levee/
 │       ├── levee-driver/       # Phoenix Channels Fluid driver
 │       ├── levee-client/       # High-level client API
 │       ├── floodgate-client/   # Official Routerlicious integration for Floodgate
+│       ├── floodgate-presence-tracker/ # Floodgate Presence example
 │       ├── levee-example/      # DiceRoller example app
 │       ├── levee-presence-tracker/  # Presence tracking example
 │       ├── levee-todo-list/    # Collaborative todo-list example
@@ -86,6 +87,7 @@ levee-presence-tracker → levee-client → levee-driver
 levee-todo-list → levee-client → levee-driver
 levee-example → levee-driver
 floodgate-client → @fluidframework/routerlicious-driver
+floodgate-presence-tracker → floodgate-client → @fluidframework/routerlicious-driver
 ```
 
 ## Server (`server/`)
@@ -152,6 +154,7 @@ cd server && mix phx.server                                    # Dev server
 | `levee-driver` | Low-level Phoenix Channels Fluid driver for Levee |
 | `levee-client` | High-level client wrapping the driver |
 | `floodgate-client` | Floodgate client boundary using the official Routerlicious driver |
+| `floodgate-presence-tracker` | Presence tracking example using Floodgate |
 | `levee-example` | DiceRoller example using driver directly |
 | `levee-presence-tracker` | Presence tracking example using client |
 | `levee-todo-list` | Collaborative todo-list example using client |

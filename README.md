@@ -34,6 +34,9 @@ levee/
 │       ├── levee-example/           # DiceRoller example app
 │       ├── levee-presence-tracker/  # Presence tracking example
 │       ├── levee-todo-list/         # Collaborative todo-list example
+│       ├── floodgate-example/       # DiceRoller example via Floodgate
+│       ├── floodgate-presence-tracker/ # Presence demo via Floodgate
+│       ├── floodgate-todo-list/     # Collaborative todo-list via Floodgate
 │       └── sandbag/                 # SvelteKit testing hub
 ├── justfile          # Task runner (orchestrates both)
 └── mise.toml         # Tool versions
@@ -66,18 +69,37 @@ just floodgate-example
 #  Floodgate server:   http://localhost:3000  (guaranteed)
 #  DiceRoller example: http://localhost:3001  (guaranteed — fails if port taken)
 
-# Or start them separately
-just floodgate-server         # Floodgate server on :3000 only
-just dev-floodgate-example    # Vite DiceRoller on :3001 only (strictPort)
+# Start Floodgate server + Todo List example together (Ctrl-C stops both)
+just floodgate-todo-list
+#  Floodgate server:  http://localhost:3000  (guaranteed)
+#  Todo List example: http://localhost:3002  (guaranteed — fails if port taken)
 
-# Run the two-client SharedMap sync integration test
-just test-floodgate-sync
+# Start Floodgate server + Presence demo together (Ctrl-C stops both)
+just floodgate-presence
+#  Floodgate server: http://localhost:3000  (guaranteed)
+#  Presence demo:    http://localhost:3003  (guaranteed — fails if port taken)
+
+# Or start them separately
+just floodgate-server              # Floodgate server on :3000 only
+just dev-floodgate-example         # Vite DiceRoller on :3001 only (strictPort)
+just dev-floodgate-todo-list       # Vite Todo List on :3002 only (strictPort)
+just dev-floodgate-presence        # Vite Presence demo on :3003 only (strictPort)
+
+# Run integration tests
+just test-floodgate-sync           # Two-client SharedMap sync test
+just test-floodgate-todo-sync      # Two-client SharedTree + SharedString sync test
+just test-floodgate-presence-sync  # Two-client Presence state + notification test
 ```
 
-The combined launcher (`just floodgate-example`) waits for the Floodgate server
-to respond HTTP 200 on the authenticated token-mint endpoint before starting
-Vite, pins Vite to port 3001 with `--strictPort`, and terminates both processes
-if either exits. Uses example-only credentials — **never use in production.**
+The combined Floodgate launchers wait for
+the Floodgate server to respond HTTP 200 on the authenticated token-mint endpoint before
+starting Vite, pin Vite to their respective port with `--strictPort`, and terminate both
+processes if either exits. Uses example-only credentials — **never use in production.**
+
+#### Document sharing
+
+The URL hash contains the document ID. Open the app in multiple browser tabs and share
+the URL (hash included) to collaborate on the same document.
 
 ### Client
 

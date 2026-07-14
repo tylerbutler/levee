@@ -8,8 +8,9 @@ let container: HTMLDivElement;
 let unmount: (() => void) | undefined;
 let error = $state<string | undefined>();
 let loading = $state(true);
+let destroyed = false;
 
-const appType = $derived(page.params.type);
+const appType = $derived(page.params.type ?? "");
 
 onMount(async () => {
 	const config = parseConfigFromParams(new URLSearchParams(page.url.search));
@@ -21,14 +22,25 @@ onMount(async () => {
 			return;
 		}
 		const result = await app.mount(container, config);
+		if (destroyed) {
+			result.unmount();
+			return;
+		}
 		unmount = result.unmount;
 	} catch (err) {
-		error = err instanceof Error ? err.message : String(err);
+		if (!destroyed) {
+			error = err instanceof Error ? err.message : String(err);
+		}
 	}
-	loading = false;
+	if (!destroyed) {
+		loading = false;
+	}
 });
 
-onDestroy(() => unmount?.());
+onDestroy(() => {
+	destroyed = true;
+	unmount?.();
+});
 </script>
 
 {#if error}

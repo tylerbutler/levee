@@ -6,7 +6,7 @@ import { getAuthToken } from "$lib/auth.svelte";
 import { loadApp } from "$lib/registry";
 import type { SandbagApp } from "$lib/types";
 
-const sandbagId = $derived(page.params.id);
+const sandbagId = $derived(page.params.id ?? "");
 const sandbag = $derived(getSandbag(sandbagId));
 const authToken = $derived(getAuthToken());
 // Forward mintCredential from the outer page URL (e.g., Floodgate apps)
