@@ -3,30 +3,30 @@ defmodule Levee.Protocol.Bridge do
   Elixir bridge to Gleam protocol modules.
 
   Provides idiomatic Elixir wrappers around the Gleam functions for sequence
-  number management and protocol validation. Sequence-state management (still
-  keyed off `levee_protocol`'s vendored `SequenceState`, threaded as opaque
-  state through `Levee.Documents.Session`) and JWT claim validation stay on
-  `levee_protocol` for now; nack construction, session decision logic
-  (feature/version negotiation, signal recipients, wire builders, history
-  trimming), and signal v1/v2 normalization delegate to `Levee.Floodgate`
-  (`floodgate/nack`, `floodgate/session_logic`, `floodgate/signals`, built on
-  `spillway`) instead of duplicating that logic in `levee_protocol`.
+  number management and protocol validation. Sequence-state management
+  (`spillway`'s `SequenceState`, threaded as opaque state through
+  `Levee.Documents.Session`) and JWT claim validation run on `spillway`; nack
+  construction, session decision logic (feature/version negotiation, signal
+  recipients, wire builders, history trimming), and signal v1/v2 normalization
+  delegate to `Levee.Floodgate` (`floodgate/nack`, `floodgate/session_logic`,
+  `floodgate/signals`), also built on `spillway`. Both paths now share the one
+  `spillway` protocol implementation.
 
   The Gleam modules compile to BEAM bytecode, so we can call
   them directly using the Erlang module naming convention.
   """
 
   # Gleam modules compile to :module_name atoms
-  # Note: Gleam submodules use @ separator (e.g., :levee_protocol@sequencing)
-  @gleam_module :levee_protocol
-  @gleam_sequencing :levee_protocol@sequencing
+  # Note: Gleam submodules use @ separator (e.g., :spillway@sequencing)
+  @gleam_module :spillway
+  @gleam_sequencing :spillway@sequencing
 
   # Gleam modules are built separately and not visible to the Elixir compiler.
   # This directive tells the compiler these modules will exist at runtime.
   @compile {:no_warn_undefined,
             [
-              :levee_protocol,
-              :levee_protocol@sequencing
+              :spillway,
+              :spillway@sequencing
             ]}
 
   @doc """
@@ -145,8 +145,7 @@ defmodule Levee.Protocol.Bridge do
   # Nack generation helpers
   #
   # Nack construction delegates to Levee.Floodgate (floodgate/nack.gleam, built on
-  # spillway/nack) rather than levee_protocol's vendored copy of the same
-  # logic.
+  # spillway/nack), the shared protocol implementation.
   # ─────────────────────────────────────────────────────────────────────────────
 
   @doc """
@@ -253,8 +252,7 @@ defmodule Levee.Protocol.Bridge do
   # Session logic helpers
   #
   # Delegates to Levee.Floodgate (floodgate/session_logic.gleam, built on
-  # spillway/session_logic) rather than levee_protocol's vendored copy of the
-  # same logic.
+  # spillway/session_logic), the shared protocol implementation.
   # ─────────────────────────────────────────────────────────────────────────────
 
   @doc """
@@ -329,8 +327,7 @@ defmodule Levee.Protocol.Bridge do
   # Signal normalization helpers
   #
   # Delegates to Levee.Floodgate (floodgate/signals.gleam, built on
-  # spillway/signals) rather than levee_protocol's vendored copy of the same
-  # logic.
+  # spillway/signals), the shared protocol implementation.
   # ─────────────────────────────────────────────────────────────────────────────
 
   @doc """

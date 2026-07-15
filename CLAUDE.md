@@ -35,9 +35,10 @@ levee/
 │   │   └── levee_web/          # Web layer (routes, channels)
 │   ├── test/                   # Elixir tests
 │   ├── priv/                   # Static assets, migrations
-│   ├── levee_protocol/         # Gleam protocol types
 │   ├── levee_auth/             # Gleam auth library
 │   └── levee_admin/            # Lustre admin UI
+│   # Fluid protocol logic lives in the external `spillway` package
+│   # (a dependency of floodgate), not an in-repo Gleam package
 ├── client/                     # TypeScript client packages
 │   ├── package.json            # pnpm workspace root
 │   ├── pnpm-workspace.yaml     # Workspace config
@@ -121,14 +122,19 @@ floodgate-presence-tracker → floodgate-client → @fluidframework/routerliciou
 
 ### Gleam Packages
 
-- **levee_protocol/** - Protocol message types, sequencing, validation, schema generation
 - **levee_auth/** - JWT, password hashing, tenant/user management
 - **levee_storage/** - Storage types and ETS backend (bravo for typed ETS access)
 - **levee_admin/** - Lustre SPA for admin UI
 
+The Fluid protocol logic (message types, sequencing, validation, signals,
+nacks, schema generation) lives in the external **spillway** package, shared by
+both the classic Levee path (`Levee.Protocol.Bridge`) and floodgate. It is
+pulled in as a dependency of `floodgate`, so it compiles under
+`floodgate/build/`.
+
 ### Gleam Testing (startest)
 
-levee_protocol uses **startest** (not gleeunit) for tests.
+The Gleam packages use **startest** (not gleeunit) for tests.
 - `should.*` → `expect.*` (e.g., `expect.to_equal`, `expect.to_be_ok`)
 - **Gotcha:** `let assert Pattern = expr` inside startest tests wraps values in `Ok()` due to startest's rescue mechanism. Use `case` expressions for error variant destructuring instead of `let assert`.
 
@@ -198,7 +204,8 @@ just generate-schema-ts
 4. Run `just test-elixir` to verify
 
 ### Modifying Gleam Protocol
-1. Edit files in `server/levee_protocol/src/`
+1. Edit protocol logic in the external `spillway` package (repo:
+   tylerbutler/spillway); bump the ref in `server/floodgate/gleam.toml`
 2. Run `just build-gleam` to compile
 3. Update `server/lib/levee/protocol/bridge.ex` if Elixir interop changes
 4. Run `just test` to verify both Gleam and Elixir tests
@@ -248,9 +255,9 @@ GET    /admin/*path                       SPA catch-all
 
 | Gleam File | Erlang/Elixir Module |
 |------------|---------------------|
-| `levee_protocol.gleam` | `:levee_protocol` |
-| `sequencing.gleam` | `:levee_protocol@sequencing` |
-| `message.gleam` | `:levee_protocol@message` |
+| `spillway.gleam` | `:spillway` |
+| `sequencing.gleam` | `:spillway@sequencing` |
+| `message.gleam` | `:spillway@message` |
 
 ### Type Conversions
 

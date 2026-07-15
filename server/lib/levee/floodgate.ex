@@ -11,8 +11,9 @@ defmodule Levee.Floodgate do
   and the pure document-session decision logic (feature/version negotiation,
   signal v1/v2 normalization and recipient targeting, sequenced-op/
   summary-ack wire builders, nack construction, op-history trimming) — all
-  built on `spillway` rather than Levee's vendored `levee_protocol` copy of
-  the same logic, so the two don't drift. Levee still owns JWT verification
+  built on `spillway`, the single shared Fluid protocol implementation that the
+  classic Levee path (`Levee.Protocol.Bridge`) now also uses. Levee still owns
+  JWT verification
   (tenant secrets) and the document Session/Registry runtime (connected
   client PIDs, storage, op history storage); it calls through this module
   for the protocol decisions so `LeveeWeb.SocketIOWebSock` and
