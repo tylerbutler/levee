@@ -200,12 +200,18 @@ defmodule Levee.StorageBackendCase do
       # -----------------------------------------------------------------------
 
       describe "create_blob/2" do
-        test "creates a blob with SHA-256 hash", %{tenant_id: tid} do
+        test "creates a blob with git-canonical SHA-1 id", %{tenant_id: tid} do
           content = "hello world"
           assert {:ok, blob} = @backend.create_blob(tid, content)
 
-          expected_sha = :crypto.hash(:sha256, content) |> Base.encode16(case: :lower)
+          # silt hashes blobs git-canonically: sha1("blob " <len> \0 <content>),
+          # so the id equals a real `git hash-object` id.
+          expected_sha =
+            :crypto.hash(:sha, "blob #{byte_size(content)}\0#{content}")
+            |> Base.encode16(case: :lower)
+
           assert blob.sha == expected_sha
+          assert blob.sha == "95d09f2b10159347eece71399a7e2e907ea3df4f"
           assert blob.content == content
           assert blob.size == byte_size(content)
         end

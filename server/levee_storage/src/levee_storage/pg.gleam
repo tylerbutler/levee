@@ -4,19 +4,18 @@
 //// Uses parameterized SQL queries via pog (gleam_pgo).
 
 import gleam/bit_array
-import gleam/crypto
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import gleam/string
 import levee_storage/types.{
   type Blob, type Commit, type Delta, type Document, type Ref, type StorageError,
   type Summary, type Tree, type TreeEntry, AlreadyExists, Blob, Commit, Delta,
   Document, NotFound, Ref, StorageError, Summary, Tree, TreeEntry,
 }
 import pog
+import silt/object
 
 pub type Connection =
   pog.Connection
@@ -251,7 +250,7 @@ pub fn create_blob(
   content: Dynamic,
 ) -> Result(Blob, StorageError) {
   let content_bits: BitArray = coerce(content)
-  let sha = compute_sha256(content_bits)
+  let sha = object.blob_id(content_bits)
   let size = byte_size(content)
 
   let _ =
@@ -308,7 +307,7 @@ pub fn create_tree(
   entries: List(TreeEntry),
 ) -> Result(Tree, StorageError) {
   let tree_content = json_encode_entries(entries)
-  let sha = compute_sha256(tree_content)
+  let sha = object.sha1(bit_array.from_string(tree_content))
 
   let _ =
     pog.query(
@@ -433,7 +432,7 @@ pub fn create_commit(
       #("author", json_from_dynamic(author)),
     ])
   let commit_content = json.to_string(commit_map)
-  let sha = compute_sha256(commit_content)
+  let sha = object.sha1(bit_array.from_string(commit_content))
 
   let author_json = dynamic_to_json_string(author)
   let committer_json = dynamic_to_json_string(committer)
@@ -766,13 +765,6 @@ fn summary_decoder() -> decode.Decoder(Summary) {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-fn compute_sha256(content: a) -> String {
-  let bits: BitArray = coerce(content)
-  crypto.hash(crypto.Sha256, bits)
-  |> bit_array.base16_encode()
-  |> string.lowercase()
-}
 
 fn json_encode_entries(entries: List(TreeEntry)) -> String {
   json.array(entries, fn(e) {
