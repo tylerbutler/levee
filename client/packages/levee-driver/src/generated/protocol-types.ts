@@ -1,7 +1,7 @@
 /* This file is auto-generated from Gleam protocol types. Do not edit manually. */
 
 export type ConnectionMode = "write" | "read";
-export type Scope = "doc:read" | "doc:write" | "summary:write";
+export type Scope = "doc:read" | "doc:write" | "summary:read" | "summary:write";
 
 export interface ProtocolSchema {
 	Client?: Client;

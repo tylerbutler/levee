@@ -138,6 +138,7 @@
       "enum": [
         "doc:read",
         "doc:write",
+        "summary:read",
         "summary:write"
       ],
       "type": "string"

@@ -23,10 +23,14 @@ defmodule Levee.Protocol.Bridge do
 
   # Gleam modules are built separately and not visible to the Elixir compiler.
   # This directive tells the compiler these modules will exist at runtime.
+  # `spillway` and `signet` are declared as direct deps of the `levee_bridge`
+  # Gleam package (built via mix `gleam.build`), so their presence on the BEAM
+  # code path is owned by Levee rather than inherited transitively via floodgate.
   @compile {:no_warn_undefined,
             [
               :spillway,
-              :spillway@sequencing
+              :spillway@sequencing,
+              :signet@types
             ]}
 
   @doc """
@@ -385,8 +389,13 @@ defmodule Levee.Protocol.Bridge do
         id -> {:some, id}
       end
 
-    {:token_claims, claims.documentId, claims.scopes, claims.tenantId, user, claims.iat,
-     claims.exp, Map.get(claims, :ver, "1.0"), jti}
+    # signet's TokenClaims.scopes is a typed List(Scope), not wire strings.
+    # Convert here at the interop boundary so the Gleam JWT functions (which
+    # match scopes structurally, e.g. list.contains) see the right atoms.
+    scopes = :signet@types.scopes_from_strings(claims.scopes)
+
+    {:token_claims, claims.documentId, scopes, claims.tenantId, user, claims.iat, claims.exp,
+     Map.get(claims, :ver, "1.0"), jti}
   end
 
   @doc """

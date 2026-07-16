@@ -1,47 +1,37 @@
 //// Authorization scopes for Levee document access.
 ////
-//// Scopes control what operations a token holder can perform.
+//// The `Scope` type and its wire-string conversions are sourced from signet
+//// (the shared token domain — a light dependency that avoids pulling in the
+//// Fluid protocol surface). This module layers Levee's role-based scope-set
+//// helpers on top of that shared vocabulary.
 
 import gleam/list
+import signet/types.{DocRead, DocWrite, SummaryRead, SummaryWrite}
 
-/// Authorization scopes for document and summary access.
-pub type Scope {
-  DocRead
-  DocWrite
-  SummaryRead
-  SummaryWrite
-}
+/// Authorization scope for document and summary access. Re-exported from
+/// signet so Levee shares one canonical `Scope` vocabulary with spillway and
+/// floodgate.
+pub type Scope =
+  types.Scope
 
-/// Convert a scope to its string representation.
+/// Convert a scope to its wire string representation.
 pub fn to_string(scope: Scope) -> String {
-  case scope {
-    DocRead -> "doc:read"
-    DocWrite -> "doc:write"
-    SummaryRead -> "summary:read"
-    SummaryWrite -> "summary:write"
-  }
+  types.scope_to_string(scope)
 }
 
-/// Parse a scope from its string representation.
+/// Parse a scope from its wire string representation.
 pub fn from_string(s: String) -> Result(Scope, Nil) {
-  case s {
-    "doc:read" -> Ok(DocRead)
-    "doc:write" -> Ok(DocWrite)
-    "summary:read" -> Ok(SummaryRead)
-    "summary:write" -> Ok(SummaryWrite)
-    _ -> Error(Nil)
-  }
+  types.scope_from_string(s)
 }
 
-/// Convert a list of scopes to strings.
+/// Convert a list of scopes to wire strings.
 pub fn list_to_strings(scopes: List(Scope)) -> List(String) {
-  list.map(scopes, to_string)
+  types.scopes_to_strings(scopes)
 }
 
-/// Parse a list of strings to scopes, ignoring invalid entries.
+/// Parse a list of wire strings to scopes, ignoring invalid entries.
 pub fn list_from_strings(strings: List(String)) -> List(Scope) {
-  strings
-  |> list.filter_map(from_string)
+  types.scopes_from_strings(strings)
 }
 
 /// Check if a list of scopes contains a required scope.

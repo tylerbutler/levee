@@ -24,6 +24,7 @@ build-gleam:
     cd server/levee_auth && gleam build --target erlang
     cd server/levee_storage && gleam build --target erlang
     cd server/levee_oauth && gleam build --target erlang
+    cd server/levee_bridge && gleam build --target erlang
     cd server/levee_admin && gleam build --target javascript
     cd server/floodgate && gleam build --target erlang
 
@@ -127,6 +128,7 @@ format-gleam:
     cd server/levee_auth && gleam format
     cd server/levee_storage && gleam format
     cd server/levee_oauth && gleam format
+    cd server/levee_bridge && gleam format
     cd server/levee_admin && gleam format
     cd server/floodgate && gleam format
 
@@ -149,6 +151,7 @@ lint-gleam:
     cd server/levee_auth && gleam format --check
     cd server/levee_storage && gleam format --check
     cd server/levee_oauth && gleam format --check
+    cd server/levee_bridge && gleam format --check
     cd server/levee_admin && gleam format --check
     cd server/floodgate && gleam format --check
 
@@ -176,6 +179,7 @@ clean-gleam:
     cd server/levee_auth && rm -rf build
     cd server/levee_storage && rm -rf build
     cd server/levee_oauth && rm -rf build
+    cd server/levee_bridge && rm -rf build
     cd server/levee_admin && rm -rf build
     rm -rf server/priv/static/admin
 
@@ -232,6 +236,7 @@ setup-gleam:
     cd server/levee_auth && gleam deps download
     cd server/levee_storage && gleam deps download
     cd server/levee_oauth && gleam deps download
+    cd server/levee_bridge && gleam deps download
     cd server/levee_admin && gleam deps download
 
 # Install Elixir dependencies

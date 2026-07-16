@@ -115,7 +115,7 @@
 			"type": "object"
 		},
 		"Scope": {
-			"enum": ["doc:read", "doc:write", "summary:write"],
+			"enum": ["doc:read", "doc:write", "summary:read", "summary:write"],
 			"type": "string"
 		},
 		"SequencedClient": {
