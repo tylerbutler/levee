@@ -239,17 +239,20 @@ export class LeveeDeltaConnection
 
 		this._disposed = true;
 
-		// Leave channel gracefully
-		if (this.channel) {
-			this.channel.leave();
-			this.channel = null;
-		}
+		const socket = this.socket;
 
-		// Disconnect socket
-		if (this.socket) {
-			this.socket.disconnect();
-			this.socket = null;
+		// Leave channel gracefully before closing the underlying socket so the
+		// server can sequence a leave op for other clients.
+		if (this.channel) {
+			this.channel
+				.leave()
+				.receive("ok", () => socket?.disconnect())
+				.receive("timeout", () => socket?.disconnect());
+			this.channel = null;
+		} else if (socket) {
+			socket.disconnect();
 		}
+		this.socket = null;
 
 		this.removeAllListeners();
 	}

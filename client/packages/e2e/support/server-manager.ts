@@ -6,10 +6,7 @@ import { promisify } from "node:util";
 const execAsync = promisify(exec);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DOCKER_COMPOSE_DIR = join(
-	__dirname,
-	"../../client/packages/levee-driver",
-);
+const DOCKER_COMPOSE_DIR = join(__dirname, "../../levee-driver");
 const HEALTH_URL = "http://localhost:4000/health";
 const HEALTH_CHECK_TIMEOUT_MS = 30_000;
 const HEALTH_CHECK_INTERVAL_MS = 1_000;
