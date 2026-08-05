@@ -178,7 +178,10 @@ pub fn delete_session(actor: Subject(Message), id: String) -> Nil {
 }
 
 /// Store a membership (fire-and-forget).
-pub fn store_membership(actor: Subject(Message), membership: Membership) -> Nil {
+pub fn store_membership(
+  actor: Subject(Message),
+  membership: Membership,
+) -> Nil {
   process.send(actor, StoreMembership(membership:))
 }
 

@@ -92,7 +92,10 @@ pub fn create(claims: TokenClaims, config: TokenConfig) -> String {
 }
 
 /// Verify a JWT token and extract claims.
-pub fn verify(token: String, secret: String) -> Result(TokenClaims, TokenError) {
+pub fn verify(
+  token: String,
+  secret: String,
+) -> Result(TokenClaims, TokenError) {
   use payload <- result.try(
     jwt.verify(token, secret)
     |> result.map_error(fn(e) {

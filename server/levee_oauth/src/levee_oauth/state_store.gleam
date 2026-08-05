@@ -86,7 +86,10 @@ fn schedule_cleanup(subject: Subject(Message)) -> Nil {
 }
 
 /// Handle incoming messages.
-fn handle_message(state: State, message: Message) -> actor.Next(State, Message) {
+fn handle_message(
+  state: State,
+  message: Message,
+) -> actor.Next(State, Message) {
   case message {
     Store(token:, code_verifier:, ttl_seconds:) -> {
       let expires_at = now_seconds() + ttl_seconds
