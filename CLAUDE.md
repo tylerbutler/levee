@@ -186,6 +186,20 @@ so Floodgate is a drop-in replacement for the Elixir server for existing
 Verify with `just test-floodgate-dual-mode`, which runs both conformance suites
 plus cross-mode tests against a single server process.
 
+**Drop-in parity check:** `just test-levee-suite-vs-floodgate` runs Levee's
+*unmodified* integration suites (`levee-driver`, `levee-client`,
+`levee-example`) against a containerised Floodgate, repointed only via
+`LEVEE_HTTP_URL`/`LEVEE_SOCKET_URL`/`LEVEE_TENANT_KEY`. Nothing in those suites
+is Floodgate-aware, so a failure there is a real behavioural difference between
+the servers. [ADR-009](docs/adr/009-floodgate-standalone-repo.md) records the
+parity surface, the known remaining gaps, and what blocks extracting Floodgate
+into its own repository.
+
+Floodgate has its own container image (`server/floodgate/Dockerfile`,
+`docker-compose.yml`) built from a `gleam export erlang-shipment` — no Elixir or
+Mix — plus its own `README.md`, `justfile`, and CI workflow, so it is ready to
+move out as a directory.
+
 ### Client Commands
 
 ```bash
@@ -300,6 +314,8 @@ Floodgate (Gleam server) reads its own set:
 |----------|---------|
 | `FLOODGATE_TENANT_ID` | Configured tenant (default: `fluid`) |
 | `FLOODGATE_JWT_SECRET` | Required; verifies every REST and socket JWT |
+| `PORT` / `FLOODGATE_PORT` | Listen port (default: `3000`; `PORT` wins) |
+| `FLOODGATE_BIND` | Listen interface (default: `localhost`); containers need `0.0.0.0` |
 | `FLOODGATE_TOKEN_MINT_SECRET` | Enables the token-mint endpoint |
 | `FLOODGATE_STORAGE_BACKEND` | `ets`/`shelf` (persistent, default) or `memory` |
 | `FLOODGATE_DATA_DIR` | Shelf DETS directory (default: `priv/floodgate_data`) |

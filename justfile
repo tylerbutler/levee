@@ -90,6 +90,37 @@ test-integration-down:
 test-integration-run:
     cd client && pnpm test:integration:run
 
+# Drop-in check: run the *unmodified* Levee integration suites — levee-driver,
+# levee-client, levee-example — against Floodgate instead of the Elixir server.
+# Nothing about those suites is Floodgate-aware; they are simply repointed via
+# LEVEE_HTTP_URL/LEVEE_SOCKET_URL/LEVEE_TENANT_KEY. Any failure here is a real
+# behavioural difference between the two servers.
+#
+# Compare against the same suites on Levee with `just test-integration`.
+test-levee-suite-vs-floodgate:
+    cd server/floodgate && docker compose up -d --wait --build
+    cd client && LEVEE_HTTP_URL=http://localhost:3000 \
+        LEVEE_SOCKET_URL=ws://localhost:3000/socket \
+        LEVEE_TENANT_KEY=dev-tenant-secret-key \
+        pnpm vitest run integration; \
+        result=$?; \
+        cd ../server/floodgate && docker compose down -v; \
+        exit $result
+
+# Same drop-in check against an already-running Floodgate (e.g. `just floodgate-server`).
+test-levee-suite-vs-floodgate-run:
+    cd client && LEVEE_HTTP_URL=http://localhost:3000 \
+        LEVEE_SOCKET_URL=ws://localhost:3000/socket \
+        LEVEE_TENANT_KEY=${FLOODGATE_JWT_SECRET:-dev-tenant-secret-key} \
+        pnpm vitest run integration
+
+# Start/stop the containerised Floodgate used by the drop-in check.
+floodgate-up:
+    cd server/floodgate && docker compose up -d --wait --build
+
+floodgate-down:
+    cd server/floodgate && docker compose down -v
+
 # Run Routerlicious driver compatibility contract against a running Floodgate server.
 # This is the north-star conformance suite for the Floodgate-first client
 # strategy (see docs/adr/002-client-compatibility-strategy.md): the official
