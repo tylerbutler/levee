@@ -12,7 +12,6 @@ import type {
 	IDocumentDeltaConnection,
 	IDocumentDeltaConnectionEvents,
 	IDocumentMessage,
-	INack,
 	ISequencedDocumentMessage,
 	ISignalClient,
 	ISignalMessage,
@@ -26,6 +25,7 @@ import {
 	type DisconnectReason,
 	LeveeDebugLogger,
 	normalizeConnectedResponse,
+	normalizeNackPayload,
 	normalizeOpPayload,
 	type SerializationFormat,
 } from "./contracts.js";
@@ -508,13 +508,16 @@ export class LeveeDeltaConnection
 		});
 
 		// Handle nacks (negative acknowledgments)
-		this.channel.on("nack", (payload: INack) => {
+		this.channel.on("nack", (rawPayload: unknown) => {
 			if (this._disposed) {
 				return;
 			}
 
-			this.logger.log("Received nack:", payload);
-			this.emit("nack", this.documentId, [payload]);
+			this.logger.log("Received nack (raw):", rawPayload);
+			const nacks = normalizeNackPayload(rawPayload);
+			this.logger.log("Received nack (normalized):", nacks);
+
+			this.emit("nack", this.documentId, nacks);
 		});
 
 		// Handle pong (keepalive response)

@@ -3,6 +3,7 @@
  */
 
 import type {
+	INack,
 	IResolvedUrl,
 	ISignalClient,
 	ITokenClaims,
@@ -484,4 +485,39 @@ export function normalizeOpPayload(
 			? normalizeKeys<ISequencedDocumentMessage[]>(ops)
 			: [],
 	};
+}
+
+/**
+ * Normalizes an incoming nack event payload.
+ *
+ * The server might send nacks in different formats:
+ * - [...] (array directly)
+ * - { clientId: string, nacks: [...] }
+ * - { operation, sequenceNumber, content } (a single nack)
+ *
+ * @param payload - Raw payload from server
+ * @returns Normalized array of nacks
+ */
+export function normalizeNackPayload(payload: unknown): INack[] {
+	// Handle array directly
+	if (Array.isArray(payload)) {
+		return normalizeKeys<INack[]>(payload);
+	}
+
+	if (!payload || typeof payload !== "object") {
+		return [];
+	}
+
+	const normalized = normalizeKeys<Record<string, unknown>>(payload);
+	const nacks = normalized["nacks"];
+
+	if (Array.isArray(nacks)) {
+		return normalizeKeys<INack[]>(nacks);
+	}
+
+	if (nacks === undefined && normalized["content"] !== undefined) {
+		return [normalizeKeys<INack>(payload)];
+	}
+
+	return [];
 }
