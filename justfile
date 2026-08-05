@@ -97,6 +97,63 @@ test-integration-run:
 test-floodgate-routerlicious:
     cd client && pnpm test:floodgate-routerlicious
 
+# Run both wire protocols against ONE Floodgate process (ADR-008 dual mode):
+# the Routerlicious driver over Socket.IO and the full levee-driver over the
+# Phoenix endpoint, including cross-mode collaboration on a shared document.
+# Starts the server, waits for readiness, runs both suites, then stops it.
+test-floodgate-dual-mode:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    export FLOODGATE_JWT_SECRET=floodgate-routerlicious-compat-secret
+    export FLOODGATE_TOKEN_MINT_SECRET=floodgate-routerlicious-mint-secret
+    export FLOODGATE_STORAGE_BACKEND=memory
+
+    server_pid=""
+    cleanup() {
+        # Kill the entire process group to terminate BEAM descendants.
+        [ -n "$server_pid" ] && kill -- "-$server_pid" 2>/dev/null || true
+    }
+    trap cleanup EXIT INT TERM
+
+    # setsid: new session/PGID = $server_pid so kill -- -$server_pid reaches BEAM.
+    setsid bash -c 'cd server/floodgate && gleam run' &
+    server_pid=$!
+
+    sleep 0.5
+    if ! kill -0 "$server_pid" 2>/dev/null; then
+        echo "ERROR: Floodgate server process exited immediately." >&2
+        exit 1
+    fi
+
+    echo "Waiting for Floodgate server to be ready..."
+    ready=false
+    for i in $(seq 1 30); do
+        code=$(curl --max-time 1 -s -o /dev/null -w "%{http_code}" \
+            -X POST http://localhost:3000/api/tenants/fluid/token-mint \
+            -H "Authorization: Bearer $FLOODGATE_TOKEN_MINT_SECRET" \
+            -H "Content-Type: application/json" \
+            -d '{"documentId":""}' \
+            2>/dev/null) || code="000"
+        if [ "$code" = "200" ]; then
+            echo "Floodgate server ready (HTTP 200)."
+            ready=true
+            break
+        fi
+        echo "  waiting... ($i/30)"
+        sleep 1
+    done
+    if [ "$ready" = "false" ]; then
+        echo "ERROR: Floodgate server not ready after 30s." >&2
+        exit 1
+    fi
+
+    cd client
+    echo "=== Socket.IO endpoint (Routerlicious driver) ==="
+    pnpm test:floodgate-routerlicious
+    echo "=== Phoenix endpoint (levee-driver) + cross-mode ==="
+    pnpm test:floodgate-phoenix
+
 # Check standalone Floodgate release readiness against a running direct target.
 # Levee remains an independent supported stack per ADR-004.
 check-floodgate-readiness:

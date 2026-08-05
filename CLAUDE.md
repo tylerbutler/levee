@@ -173,6 +173,19 @@ cd server && mix phx.server                                    # Dev server
 - `floodgate-client` uses the official Routerlicious driver
 - Shared protocol libraries and conformance fixtures are reused without merging the client packages
 
+**Floodgate is dual-mode** ([ADR-008](docs/adr/008-floodgate-phoenix-endpoint.md)): one
+Floodgate process serves both wire protocols from the same beryl coordinator,
+channels, session, and storage —
+
+- `/socket.io/` — official Fluid/Routerlicious drivers (`floodgate-client`)
+- `/socket/websocket` — Phoenix Channels (`levee-driver`/`levee-client`), wire-compatible
+  with the Elixir server's `DocumentChannel`
+
+so Floodgate is a drop-in replacement for the Elixir server for existing
+`levee-client` apps. Clients of both kinds can collaborate on one document.
+Verify with `just test-floodgate-dual-mode`, which runs both conformance suites
+plus cross-mode tests against a single server process.
+
 ### Client Commands
 
 ```bash
@@ -280,6 +293,18 @@ GET    /admin/*path                       SPA catch-all
 | `SECRET_KEY_BASE` | Phoenix secret (production) |
 | `PHX_HOST` | Host for production |
 | `PORT` | HTTP port (default: 4000) |
+
+Floodgate (Gleam server) reads its own set:
+
+| Variable | Purpose |
+|----------|---------|
+| `FLOODGATE_TENANT_ID` | Configured tenant (default: `fluid`) |
+| `FLOODGATE_JWT_SECRET` | Required; verifies every REST and socket JWT |
+| `FLOODGATE_TOKEN_MINT_SECRET` | Enables the token-mint endpoint |
+| `FLOODGATE_STORAGE_BACKEND` | `ets`/`shelf` (persistent, default) or `memory` |
+| `FLOODGATE_DATA_DIR` | Shelf DETS directory (default: `priv/floodgate_data`) |
+| `FLOODGATE_PUBLIC_URL` | Externally reachable base URL |
+| `FLOODGATE_ALLOWED_ORIGINS` | Phoenix endpoint origin allow-list (comma-separated, or `*` to disable checking). Defaults to same-origin, which rejects cross-origin browser upgrades |
 
 ## Client Release Pipeline
 
