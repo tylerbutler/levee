@@ -1,7 +1,7 @@
 [tools]
 elixir = "1.18.4-otp-28"
 erlang = "28.3"
-gleam = "1.14.0"
+gleam = "1.18.1"
 hk = "latest"
 just = "latest"
 rebar = "3.26.0"

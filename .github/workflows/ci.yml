@@ -76,7 +76,7 @@ jobs:
         uses: tylerbutler/actions/setup-gleam@d6442585b31f72e73b950f455deab089211ef1ed # ratchet:tylerbutler/actions/setup-gleam@main
         with:
           erlang-version: '28.3'
-          gleam-version: '1.14.0'
+          gleam-version: '1.18.1'
           elixir-version: '1.18.4'
           rebar-version: '3'
           working-directory: server
@@ -125,7 +125,7 @@ jobs:
         uses: tylerbutler/actions/setup-gleam@d6442585b31f72e73b950f455deab089211ef1ed # ratchet:tylerbutler/actions/setup-gleam@main
         with:
           erlang-version: '28.3'
-          gleam-version: '1.14.0'
+          gleam-version: '1.18.1'
           elixir-version: '1.18.4'
           rebar-version: '3'
           working-directory: server
