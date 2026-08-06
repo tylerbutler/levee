@@ -148,7 +148,7 @@ test-floodgate-dual-mode:
     trap cleanup EXIT INT TERM
 
     # setsid: new session/PGID = $server_pid so kill -- -$server_pid reaches BEAM.
-    setsid bash -c 'cd server/floodgate && gleam run' &
+    scripts/setsid-portable bash -c 'cd server/floodgate && gleam run' &
     server_pid=$!
 
     sleep 0.5
@@ -432,7 +432,7 @@ floodgate-example:
 
     # setsid creates a new session/process group (PGID = $!) so cleanup can kill
     # the group leader and all descendants (gleam + BEAM, pnpm + node workers).
-    setsid bash -c 'cd server/floodgate && gleam run' &
+    scripts/setsid-portable bash -c 'cd server/floodgate && gleam run' &
     floodgate_pid=$!
 
     # Wait for authenticated token-mint to return HTTP 200 (proves server is fully up)
@@ -463,7 +463,7 @@ floodgate-example:
     fi
 
     # Start Vite on fixed port 3001 (--strictPort fails immediately if port is taken)
-    setsid bash -c 'cd client/packages/floodgate-example && pnpm dev --port 3001 --strictPort' &
+    scripts/setsid-portable bash -c 'cd client/packages/floodgate-example && pnpm dev --port 3001 --strictPort' &
     vite_pid=$!
 
     # Detect immediate Vite startup failure (e.g., port 3001 in use)
@@ -509,7 +509,7 @@ floodgate-presence:
     }
     trap cleanup EXIT INT TERM
 
-    setsid bash -c 'cd server/floodgate && gleam run' &
+    scripts/setsid-portable bash -c 'cd server/floodgate && gleam run' &
     floodgate_pid=$!
 
     echo "Waiting for Floodgate server to be ready..."
@@ -538,7 +538,7 @@ floodgate-presence:
         exit 1
     fi
 
-    setsid bash -c 'cd client/packages/floodgate-presence-tracker && pnpm dev --port 3003 --strictPort' &
+    scripts/setsid-portable bash -c 'cd client/packages/floodgate-presence-tracker && pnpm dev --port 3003 --strictPort' &
     vite_pid=$!
     sleep 2
     if ! kill -0 "$vite_pid" 2>/dev/null; then
@@ -591,7 +591,7 @@ floodgate-todo-list:
 
     # setsid creates a new session/process group (PGID = $!) so cleanup can kill
     # the group leader and all descendants (gleam + BEAM, pnpm + node workers).
-    setsid bash -c 'cd server/floodgate && gleam run' &
+    scripts/setsid-portable bash -c 'cd server/floodgate && gleam run' &
     floodgate_pid=$!
 
     # Wait for authenticated token-mint to return HTTP 200 (proves server is fully up)
@@ -622,7 +622,7 @@ floodgate-todo-list:
     fi
 
     # Start Vite on fixed port 3002 (--strictPort fails immediately if port is taken)
-    setsid bash -c 'cd client/packages/floodgate-todo-list && pnpm dev --port 3002 --strictPort' &
+    scripts/setsid-portable bash -c 'cd client/packages/floodgate-todo-list && pnpm dev --port 3002 --strictPort' &
     vite_pid=$!
 
     # Detect immediate Vite startup failure (e.g., port 3002 in use)
@@ -665,7 +665,7 @@ test-floodgate-sync:
     trap cleanup EXIT INT TERM
 
     # setsid: new session/PGID = $server_pid so kill -- -$server_pid reaches BEAM.
-    setsid bash -c 'cd server/floodgate && gleam run' &
+    scripts/setsid-portable bash -c 'cd server/floodgate && gleam run' &
     server_pid=$!
 
     # Detect immediate server startup failure
@@ -725,7 +725,7 @@ test-floodgate-todo-sync:
     trap cleanup EXIT INT TERM
 
     # setsid: new session/PGID = $server_pid so kill -- -$server_pid reaches BEAM.
-    setsid bash -c 'cd server/floodgate && gleam run' &
+    scripts/setsid-portable bash -c 'cd server/floodgate && gleam run' &
     server_pid=$!
 
     # Detect immediate server startup failure
@@ -781,7 +781,7 @@ test-floodgate-presence-sync:
     }
     trap cleanup EXIT INT TERM
 
-    setsid bash -c 'cd server/floodgate && gleam run' &
+    scripts/setsid-portable bash -c 'cd server/floodgate && gleam run' &
     server_pid=$!
 
     sleep 0.5
