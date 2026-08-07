@@ -16,10 +16,14 @@ var opts = new Dictionary<string, string>();
 for (var i = 1; i < args.Length - 1; i += 2)
     opts[args[i].TrimStart('-')] = args[i + 1];
 
+if (args.Length > 0 && args[0] == "diff")
+    return WireDiffer.Run(opts.GetValueOrDefault("left", ""), opts.GetValueOrDefault("right", ""));
+
 if (args.Length == 0 || args[0] != "record")
 {
     Console.Error.WriteLine("usage: wirediff record --http <url> --out <dir> [--tenant fluid] " +
                             "[--jwt-secret s] [--mint-secret s] [--label l]");
+    Console.Error.WriteLine("       wirediff diff --left <dir> --right <dir>");
     return 2;
 }
 
@@ -30,6 +34,10 @@ var jwtSecret = opts.GetValueOrDefault("jwt-secret", "dev-tenant-secret-key");
 var mintSecret = opts.GetValueOrDefault("mint-secret", "dev-token-mint-secret");
 var label = opts.GetValueOrDefault("label", "unlabeled");
 var wsBase = httpBase.Replace("http://", "ws://").Replace("https://", "wss://");
+// Comma-separated scenario name prefixes to record; empty = all.
+var only = opts.GetValueOrDefault("only", "");
+bool Enabled(string name) =>
+    only.Length == 0 || only.Split(',').Any(p => name.StartsWith(p, StringComparison.Ordinal));
 
 Directory.CreateDirectory(outDir);
 File.WriteAllText(Path.Combine(outDir, "SOURCE.txt"), $"{label}\ncaptured: {DateTime.UtcNow:O}\nfrom: {httpBase}\n");
@@ -96,6 +104,7 @@ async Task<SocketRecorder> OpenSocketIo(Transcript log, string label = "")
 }
 
 // ── REST ────────────────────────────────────────────────────────────────────
+if (Enabled("rest-basics"))
 {
     var log = new Transcript();
     log.Add("# rest: health, token-mint, create document, session, deltas");
@@ -125,6 +134,7 @@ async Task<SocketRecorder> OpenSocketIo(Transcript log, string label = "")
 }
 
 // ── Socket.IO: handshake + write connect + submitOp + disconnect ────────────
+if (Enabled("socketio-write-connect-op"))
 {
     var log = new Transcript();
     log.Add("# socketio: handshake, connect_document (write), submitOp, leave");
@@ -146,6 +156,7 @@ async Task<SocketRecorder> OpenSocketIo(Transcript log, string label = "")
 }
 
 // ── Socket.IO: read-mode connect + submitOp → nack ──────────────────────────
+if (Enabled("socketio-read-nack"))
 {
     var log = new Transcript();
     log.Add("# socketio: read-mode connect, submitOp must nack");
@@ -164,6 +175,7 @@ async Task<SocketRecorder> OpenSocketIo(Transcript log, string label = "")
 }
 
 // ── Socket.IO: expired token + bad signature ────────────────────────────────
+if (Enabled("socketio-auth-failures"))
 {
     var log = new Transcript();
     log.Add("# socketio: expired token, then bad signature");
@@ -186,6 +198,7 @@ async Task<SocketRecorder> OpenSocketIo(Transcript log, string label = "")
 }
 
 // ── Socket.IO: unicode escaping probe ───────────────────────────────────────
+if (Enabled("socketio-unicode"))
 {
     var log = new Transcript();
     log.Add("# socketio: non-ASCII + HTML-sensitive chars in user.name");
@@ -200,6 +213,7 @@ async Task<SocketRecorder> OpenSocketIo(Transcript log, string label = "")
 }
 
 // ── Socket.IO: two clients, signals (broadcast + targeted), leave op ────────
+if (Enabled("signals-broadcast-targeted-leave"))
 {
     var log = new Transcript();
     log.Add("# two Socket.IO write clients A/B + one Phoenix client P;");
@@ -249,6 +263,7 @@ async Task<SocketRecorder> OpenSocketIo(Transcript log, string label = "")
 }
 
 // ── Phoenix: two-phase join + connect + submitOp + heartbeat + leave ────────
+if (Enabled("phoenix-write-connect-op"))
 {
     var log = new Transcript();
     log.Add("# phoenix: vsn=2.0.0, phx_join, connect_document push, submitOp, heartbeat, phx_leave");
@@ -277,6 +292,7 @@ async Task<SocketRecorder> OpenSocketIo(Transcript log, string label = "")
 }
 
 // ── Phoenix: bad vsn must be rejected before upgrade ────────────────────────
+if (Enabled("phoenix-bad-vsn"))
 {
     var log = new Transcript();
     log.Add("# phoenix: vsn=1.0.0 must be rejected before upgrade");

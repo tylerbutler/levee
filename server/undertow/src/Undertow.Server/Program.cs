@@ -56,9 +56,36 @@ switch (config.StorageBackend)
 
 builder.Services.AddSingleton<DocumentService>();
 
+// Socket runtime: registry, broadcaster, document sessions, channel dispatch.
+builder.Services.AddSingleton<Undertow.Runtime.SocketRegistry>();
+builder.Services.AddSingleton<Undertow.Runtime.IChannelBroadcaster>(sp =>
+    new Undertow.Runtime.LocalBroadcaster(sp.GetRequiredService<Undertow.Runtime.SocketRegistry>()));
+builder.Services.AddSingleton(sp => new Undertow.Runtime.DocumentRegistry(
+    sp.GetRequiredService<IDocumentStore>(), sp.GetRequiredService<IGitObjectStore>(),
+    sp.GetRequiredService<TimeProvider>(), config.CompatRestoreMsnFromSummary));
+builder.Services.AddSingleton<Undertow.Runtime.IChannelHandler>(sp =>
+    new Undertow.Runtime.DocumentChannel(
+        sp.GetRequiredService<Undertow.Runtime.DocumentRegistry>(),
+        sp.GetRequiredService<IDocumentStore>(), sp.GetRequiredService<IGitObjectStore>(),
+        config.Tenant, config.JwtSecret, config.MaxFrameBytes, sp.GetRequiredService<TimeProvider>()));
+builder.Services.AddSingleton(sp => new Undertow.Runtime.ChannelDispatcher(
+    sp.GetRequiredService<Undertow.Runtime.SocketRegistry>(),
+    sp.GetRequiredService<Undertow.Runtime.IChannelBroadcaster>(),
+    sp.GetRequiredService<Undertow.Runtime.IChannelHandler>()));
+builder.Services.AddSingleton(Undertow.Protocol.OriginPolicyBox.FromEnv(config.AllowedOrigins));
+builder.Services.AddSingleton(sp => new Undertow.Transports.PhoenixTransport(
+    sp.GetRequiredService<Undertow.Runtime.ChannelDispatcher>(),
+    sp.GetRequiredService<Undertow.Runtime.SocketRegistry>(),
+    sp.GetRequiredService<Undertow.Protocol.OriginPolicyBox>(),
+    config.MaxFrameBytes, sp.GetRequiredService<TimeProvider>()));
+
 builder.WebHost.UseUrls($"http://{config.Bind}:{config.Port}");
 
 var app = builder.Build();
+
+app.UseWebSockets();
+app.Map(Undertow.Transports.PhoenixTransport.Path, (HttpContext context) =>
+    context.RequestServices.GetRequiredService<Undertow.Transports.PhoenixTransport>().HandleAsync(context));
 
 // RestLess rewrites the request method, so it must run before routing.
 app.UseRestLess();
