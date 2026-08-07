@@ -78,6 +78,11 @@ builder.Services.AddSingleton(sp => new Undertow.Transports.PhoenixTransport(
     sp.GetRequiredService<Undertow.Runtime.SocketRegistry>(),
     sp.GetRequiredService<Undertow.Protocol.OriginPolicyBox>(),
     config.MaxFrameBytes, sp.GetRequiredService<TimeProvider>()));
+builder.Services.AddSingleton(sp => new Undertow.Transports.SocketIoTransport(
+    sp.GetRequiredService<Undertow.Runtime.ChannelDispatcher>(),
+    sp.GetRequiredService<Undertow.Runtime.SocketRegistry>(),
+    sp.GetRequiredService<Undertow.Protocol.OriginPolicyBox>(),
+    config.MaxFrameBytes, sp.GetRequiredService<TimeProvider>()));
 
 builder.WebHost.UseUrls($"http://{config.Bind}:{config.Port}");
 
@@ -86,9 +91,20 @@ var app = builder.Build();
 app.UseWebSockets();
 app.Map(Undertow.Transports.PhoenixTransport.Path, (HttpContext context) =>
     context.RequestServices.GetRequiredService<Undertow.Transports.PhoenixTransport>().HandleAsync(context));
+app.Use(async (context, next) =>
+{
+    if (Undertow.Transports.SocketIoTransport.Matches(context.Request.Path))
+        await context.RequestServices.GetRequiredService<Undertow.Transports.SocketIoTransport>()
+            .HandleAsync(context);
+    else
+        await next();
+});
 
-// RestLess rewrites the request method, so it must run before routing.
+// RestLess rewrites the request method, so it must run before route matching —
+// and WebApplication would otherwise auto-insert UseRouting at the very start
+// of the pipeline, so routing is anchored explicitly after RestLess.
 app.UseRestLess();
+app.UseRouting();
 app.MapUndertowRoutes();
 
 app.Run();

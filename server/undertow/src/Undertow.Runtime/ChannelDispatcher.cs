@@ -65,6 +65,7 @@ public sealed class ChannelDispatcher(SocketRegistry registry, IChannelBroadcast
 
         if (outcome.Ok)
         {
+            instance.Assigns = outcome.Assigns;
             connection.Channels[topic] = instance;
             registry.Subscribe(topic, connection.Id);
         }

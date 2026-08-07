@@ -29,7 +29,23 @@ public static class FrameReader
             }
 
             if (result.MessageType == WebSocketMessageType.Close)
+            {
+                // Complete the close handshake so the peer sees a clean 1000
+                // rather than an aborted connection.
+                try
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                    await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", cts.Token);
+                }
+                catch (Exception e) when (e is WebSocketException or OperationCanceledException
+                                              or ObjectDisposedException or InvalidOperationException)
+                {
+                    // A concurrent outbound send can race the close; the peer
+                    // is gone either way.
+                }
+
                 return new Frame(null, Closed: true, TooLarge: false, Binary: false);
+            }
 
             binary |= result.MessageType == WebSocketMessageType.Binary;
             buffer.Advance(result.Count);
