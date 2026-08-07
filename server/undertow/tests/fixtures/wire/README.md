@@ -11,6 +11,10 @@ sequencing — is baked in).
 Transcript line prefixes: `>` sent to server, `<` received, `#` annotation.
 Multi-socket scenarios label the socket (`>A` / `<B` / `<P`).
 
+Re-captured 2026-08-07 after the 0x4b2 fix landed in Gleam floodgate:
+`initialSignals` in IConnected is now always `[]` (matching levee), so the
+fixtures no longer show the client's own presence-join signal there.
+
 ## Files
 
 | File | Scenario |
@@ -51,14 +55,16 @@ These are the counts Undertow must reproduce (Phases 5 and 7).
 ## Deliberate divergence from these fixtures
 
 - **Supplied IClient echo is verbatim, not key-sorted.** The Gleam fixtures
-  show the client's IClient re-serialized with sorted keys
-  (`normalize_client_json`); Undertow preserves the supplied key order.
-  Sorting trips container-loader assert 0x4b2 in live multi-user flows —
-  the loader seeds its own audience entry with the object it *sent* (original
-  key order) and requires byte-identity with every later echo. Reproduced:
-  Gleam floodgate fails the levee-todo-list multi-user e2e 3/9 on this;
-  Elixir levee (verbatim echo) and Undertow (after this change) pass 9/9.
-  All server-side copies (join op `data`, `initialClients`, presence signals)
-  remain byte-identical to each other either way, so the 0x4b2 identity the
-  sort was introduced for still holds — verbatim also matches the client's
-  local seed, which the sort cannot.
+  show the client's IClient re-serialized with term-sorted keys (an Erlang
+  map cannot preserve order); Undertow preserves the supplied key order.
+  This mattered because the container-loader seeds its own audience entry
+  with the object it *sent* (original key order) and assert 0x4b2 requires
+  byte-identity with any later add for the same client id. The bug this
+  caused — the loader receiving its own join back as an `initialSignals`
+  presence signal in a different key order and closing the container — was
+  fixed in *both* servers by making `initialSignals` always `[]`, matching
+  levee (levee-todo-list multi-user e2e: 6/9 before, 9/9 after on both).
+  Undertow keeps the verbatim echo anyway: every remaining echo path (join
+  op `data`, `initialClients`, peer presence signals) then matches the
+  client's own bytes too, which the sort can never do. The differ flags the
+  key order inside those payloads as the one expected difference.

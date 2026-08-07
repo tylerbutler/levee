@@ -116,9 +116,14 @@ public sealed class DocumentChannel(
             context.Broadcaster.BroadcastFrom(clientId, context.Topic, FluidEvents.Signal, presenceJoin);
         }
 
+        // initialSignals is always empty, matching levee and (now) Gleam
+        // floodgate: returning the client's own presence-join used to close
+        // containers with assert 0x4b2 against payloads whose key order had
+        // changed in transit. Undertow's verbatim echo made it harmless, but
+        // the wire shape stays aligned across all three servers.
         var response = DocumentProtocol.connectedResponse(
             auth.Claims, clientId, mode, result.Existing, result.Roster, result.InitialOps,
-            [presenceJoin],
+            [],
             result.SummaryHandle, result.SummarySequenceNumber, result.CurrentSequenceNumber,
             maxFrameBytes);
 

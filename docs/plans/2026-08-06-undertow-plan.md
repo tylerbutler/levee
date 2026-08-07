@@ -12,8 +12,13 @@
 > key-sorted — Gleam floodgate's sort trips container-loader assert 0x4b2 in
 > live browser flows (todo-list e2e: levee 9/9, Gleam floodgate 6/9, Undertow
 > 9/9 after the change), because the loader seeds its own audience entry with
-> the as-sent key order. That is a live Gleam floodgate bug this plan's
-> canonicalization table did not predict.
+> the as-sent key order. That was a live Gleam floodgate bug this plan's
+> canonicalization table did not predict; it was subsequently fixed in Gleam
+> floodgate as well, by making IConnected's `initialSignals` always `[]`
+> (matching levee) so the loader never receives its own join back through a
+> byte-reordering path — both servers now pass the todo-list e2e 9/9, and the
+> conformance suite's read-mode-nack test was updated to pin the empty
+> `initialSignals`.
 
 > **Revision note (second revision).** This plan has now been re-pinned twice, because
 > Floodgate moved under it both times.
