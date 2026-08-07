@@ -1,15 +1,35 @@
 # Undertow — .NET Reimplementation of Floodgate
 
-**Status:** Planned, not started · **Date:** 2026-08-06 · **Ported-from reference:** Floodgate at `d95dea5`
+**Status:** Planned, not started · **Date:** 2026-08-06 · **Ported-from reference:** Floodgate at `22cf469`
 
-> **Revision note.** The first draft of this plan was written against Floodgate one commit
-> before `d95dea5`, and repeated three diagnoses that
-> `2026-08-06-floodgate-gap-closure-plan.md` corrected when that work landed: the heartbeat
-> sweep is on rather than off, per-socket push already exists in beryl, and the Socket.IO
-> endpoint now has an origin check, a frame cap, connection slots, and rate limits. The
-> affected sections — "Why the BEAM story is narrower than it looks", both transport
-> sections, Concurrency design, and Critical files — have been rewritten. Anything not
-> flagged here was unaffected.
+> **Revision note (second revision).** This plan has now been re-pinned twice, because
+> Floodgate moved under it both times.
+>
+> The **first draft** was written one commit before `d95dea5` and repeated three diagnoses
+> that `2026-08-06-floodgate-gap-closure-plan.md` corrected: the heartbeat sweep is on
+> rather than off, per-socket push already exists in beryl, and the Socket.IO endpoint has
+> an origin check, a frame cap, connection slots, and rate limits.
+>
+> The **first revision** re-pinned to `d95dea5`.
+>
+> This **second revision** re-pins to `22cf469`, which adds the gap plan's entire second
+> landing plus item 3.3. Six things this plan told Undertow to reproduce or design around
+> are no longer true of the reference, and in four cases the *advice inverts* — Undertow
+> must now do the thing the plan told it to skip:
+>
+> | Was | Now |
+> |---|---|
+> | Signal targeting parsed and ignored; ship it behind a default-off flag | Honoured. Required for parity, not a Phase-9 flag |
+> | Socket.IO ping never times out on a missing pong; replicate the permissiveness | Enforces `pingInterval + pingTimeout`; replicate the deadline |
+> | Floodgate never emits `42["close"]`; replicate the silence | Emits it; Undertow must too |
+> | Op history unbounded and documents never evicted; don't copy | Capped at 1000, idle eviction at 5 min; copy both |
+> | `get_ops`/`list_refs` full-scan every table; SQLite indexes are a *fix* | Indexed by topic/tenant; they are now *parity* |
+> | One actor sequences all documents | One actor per document — Undertow's per-document design is now the same shape, not a divergence |
+>
+> Rewritten sections: "Why the BEAM story is narrower than it looks", Concurrency design,
+> the channel coordinator's crash-isolation note, both transport sections, Storage, Testing
+> strategy, Phased sequence, Risks, and Critical files. Anything not flagged here was
+> unaffected. Line citations throughout are as of `22cf469`.
 
 **Undertow** is the name of the .NET implementation. Throughout this document,
 "Floodgate" refers to the existing Gleam server being ported from; "Undertow" refers to
@@ -48,22 +68,42 @@ it to `server/priv/protocol-schema.json`, which `just generate-schema-ts` copies
 
 ### Why the BEAM story is narrower than it looks
 
-> **Reference point:** this section describes Floodgate at commit `d95dea5`, which landed
-> supervision of the session actor, the unified message-size contract, the Socket.IO origin
-> check, connection/rate limits, and `register_closer`. An earlier draft of this plan
-> described the pre-`d95dea5` state and repeated three diagnoses that
-> `2026-08-06-floodgate-gap-closure-plan.md` subsequently corrected. Where that plan and
-> this one disagree about what the Gleam server does, **the gap-closure plan's
-> "Implementation status" section wins.**
+> **Reference point:** this section describes Floodgate at commit `22cf469`. `d95dea5`
+> landed supervision of the session actor, the unified message-size contract, the Socket.IO
+> origin check, connection/rate limits, and `register_closer`; everything between there and
+> `22cf469` landed the gap plan's second landing (Engine.IO ping timeout, op-history cap and
+> idle eviction, topic-indexed storage, the `close` encoder, signal targeting, crash-safe
+> summary write ordering) plus item 3.3, per-document sequencing. Where
+> `2026-08-06-floodgate-gap-closure-plan.md` and this one disagree about what the Gleam
+> server does, **the gap-closure plan's "Implementation status" sections win.**
 
-**Floodgate is single-node in practice.** One actor holds sequence state for *all* documents
-(supervised since `d95dea5`, but still one mailbox for every document — per-document
-sequencing is gap-plan item 3.3, deferred); topic→socket maps are plain dicts in one
-coordinator process; and the `pg`-based pub/sub is wired up but delivers nothing in the
+**Floodgate is single-node in practice.** Topic→socket maps are plain dicts in one
+coordinator process, and the `pg`-based pub/sub is wired up but delivers nothing in the
 shipped single-process deployment, because `beryl.gleam:934-936` broadcasts with
 `broadcast_from(coordinator_pid, …)` and the coordinator is the only group member. Levee
 isn't distributed either — its architecture deck claims PubSub fan-out and CRDT presence,
 but the code sends to raw PIDs in a node-local Registry.
+
+**Sequencing is no longer one mailbox for everything.** Gap-plan item 3.3 landed in
+`22cf469`: one actor per document, found through an ETS registry read in the calling
+process, started by a serialized owner actor. This plan's per-document `SemaphoreSlim`
+design was drawn up as an *improvement* on the Gleam server; it is now the same shape, which
+removes a whole class of "is this divergence deliberate?" question from the port. Two
+details of that landing are worth carrying over rather than rediscovering:
+
+- **Read paths must not be able to allocate a session.** `session.exists` is reachable from
+  REST paths that do not require the document to exist, so resolving it through
+  get-or-start would let any `GET` for an unknown id create state. In Gleam
+  `exists`/`clients`/`roster` answer from the registry plus storage with no process at all.
+  Undertow's `DocumentRegistry` needs the same split — a `TryGet` that does not run the
+  `Lazy` factory, alongside the get-or-create used by writes.
+- **Acks precede durability in the Gleam handlers.** `Submit` sends `Assigned` and only
+  *then* calls `store.put_op`; `SubmitSummary` acks before `store.put_summary`. The old
+  shared mailbox concealed this, because a subsequent read queued behind the write. It does
+  not survive per-document actors, and it is why Gleam's `since`/`summary` still route
+  through the document's actor rather than reading storage directly. **Undertow does not
+  inherit this problem** — its critical section commits storage at step 3 and replies after
+  — which is one place the .NET design is genuinely better, not merely different.
 
 So there is no distributed reference behaviour to port. Five things genuinely must be
 replicated:
@@ -98,19 +138,26 @@ recovery ordering, named-process registration, `process.monitor`, the `make_tabl
 ETS hack. Easier in .NET: `finally`-based teardown on clean disconnect (Gleam's coordinator
 state is reclaimed only by `on_close` or the heartbeat sweep) and per-socket targeted push.
 
-**On targeted push — the BEAM is not the blocker.** `beryl.send_info` (`beryl.gleam:1026`)
-takes a `socket_id` and dispatches to that one socket's `handle_info`. Signal targeting is
-parsed-and-ignored in Floodgate for a mundane reason: `floodgate.gleam:174` writes
-`let _ = beryl.register(...)`, discarding the `RegisteredChannel` handle the channel would
-need to push with. It is a wiring gap (gap-plan item 3.1, not landed), not a platform
-limitation. .NET gets the same capability with no equivalent obstacle, which is why the
-Phase-7 flag below is a scheduling choice rather than a new feature.
+**Targeted push is now live, and it is parity.** `beryl.send_info` (`beryl.gleam:1026`)
+takes a `socket_id` and dispatches to that one socket's `handle_info`. The earlier drafts
+described targeting as parsed-and-ignored because `floodgate.gleam` discarded the
+`RegisteredChannel` handle the channel needed to push with. Gap-plan item 3.1 landed:
+`floodgate.gleam:199` now captures the registration through a holder, and
+`document_channel.gleam:1056` consults `session_logic.determine_signal_recipients`, falling
+back to a topic broadcast only when a signal names no recipients (`:1072`). So the
+Phase-7/9 flag this plan previously recommended is gone — **broadcasting every signal is now
+a divergence from the reference, not parity with it.**
 
-**One structural simplification falls out.** Three of the Gleam session actor's message
-variants carry closures (`CreateInitialized`, `SubmitMessage`, `SubmitSummaryMessages`)
-so the wire message can be built *inside* the critical section and embed the just-assigned
-SN/MSN atomically. Those closures exist only because sequencer state lived in a separate
-process from the message-building code. With a per-document object guarded by a
+That also settles the open question the earlier draft flagged: Floodgate uses
+`session_logic.determine_signal_recipients`, which *intersects* the targeted list with the
+known client ids, not `signals.get_signal_recipients`, which does not. Match the former.
+
+**One structural simplification still falls out.** Three of the Gleam document actor's
+message variants carry closures (`CreateInitialized`, `SubmitMessage`,
+`SubmitSummaryMessages`) so the wire message can be built *inside* the critical section and
+embed the just-assigned SN/MSN atomically. Those closures exist because sequencer state
+lives in a separate process from the message-building code — still true per-document, since
+3.3 moved the mailbox rather than removing it. With a per-document object guarded by a
 per-document primitive, the handler runs inside the critical section and calls the pure
 transition and the pure builder back to back. The closures disappear.
 
@@ -300,15 +347,34 @@ via `requestOps`, so eviction is cheap and correct.
 
 **Crash isolation.** Wrap every handler callback in `try/catch`, log with
 topic+socketId+event, terminate only that socket's channel membership (Phoenix: `phx_error`;
-Socket.IO: silence — see the `close`-encoder note below). Never let it escape into the
-transport read loop or leak a held semaphore.
+Socket.IO: `42["close"]` — the coordinator asks the codec for a close frame on channel
+termination, and since `c161f89` restored dewdrop's `encode_close` it actually gets one.
+Earlier revisions of this plan said "silence" here, which was a consequence of that dropped
+encoder rather than a design choice). Never let it escape into the transport read loop or
+leak a held semaphore.
 
 **Registry and lifetime.** `ConcurrentDictionary<string, Lazy<Task<DocumentSession>>>` keyed
 by topic — the `Lazy` gives exactly-once async rehydration when two connects race a cold
-document. Note Gleam never evicts documents and loads the full op history into memory per
-document, unbounded on both axes. Don't copy that: keep no in-memory op history (serve
-`requestOps` and deltas from the indexed range query) and add idle eviction once parity is
-green.
+document. This is now the direct analogue of Gleam's registry rather than an improvement on
+it: `22cf469` put topic→actor in a public ETS table read in the calling process, with
+inserts serialized through one owner actor for exactly the same reason the `Lazy` exists.
+
+Undertow gets two things free here that cost Gleam real code, and it is worth knowing they
+are *absent* rather than forgotten. A `DocumentSession` is an object, not a process, so it
+cannot die independently of the registry entry — so there is no stale-entry window, no
+monitor-based cleanup, and no retry-once-on-a-dead-callee path. Gleam needs all three.
+
+Both growth bounds are now parity, not improvements, and both have reference values:
+
+| Axis | Gleam at `22cf469` | Undertow |
+|---|---|---|
+| In-memory op history | capped at 1000 (`doc_state.gleam:39`), matching levee's `@max_history_size` | keep none — serve `requestOps` and deltas from the indexed range query. Strictly tighter, and invisible on the wire because the cap only ever truncates `initialMessages` |
+| Idle documents | evicted after `FLOODGATE_DOC_IDLE_MS` (default 300 000), checked per-actor on a timer at half that interval | `UNDERTOW_DOC_IDLE_MS`, same default, same half-interval |
+
+The one *un*bounded axis left in Gleam is stored ops: nothing prunes below the last summary,
+because `requestOps` and `GET /deltas` can still ask for them. Undertow inherits the same
+constraint, which is why op pruning stays in Phase 9 behind a flag rather than being designed
+in.
 
 **Liveness and reaping.** Port beryl's heartbeat sweep — it is live in Floodgate and it is
 what keeps a stale RSN from pinning MSN. One `PeriodicTimer` on a hosted service, sweeping
@@ -320,11 +386,18 @@ emits the sequenced leave op), drop the socket from `SocketRegistry`, then close
 WebSocket. Use the injected `TimeProvider` so the sweep is testable with
 `FakeTimeProvider`.
 
-The Socket.IO ping timer is a separate mechanism and stays as Gleam has it — fires every
-25 s, **never times out on a missing pong** (see the transport section). The sweep is what
-actually reaps; the ping merely gives an idle-but-live client something to answer. Do not
-conclude from the ping's permissiveness that reaping is absent, which is the error the
-earlier draft made.
+**The Socket.IO ping now has a deadline too, and it is a second reaper.** Earlier drafts of
+this plan said the ping timer fires every 25 s and never times out on a missing pong, and
+told Undertow to replicate that permissiveness. That is no longer true:
+`socketio_transport.gleam:252` checks `pong_overdue` on each interval tick and closes the
+socket when the last inbound frame is older than `ping_interval_ms + ping_timeout_ms`
+(25 s + 20 s = 45 s, `:272`). The interval is added deliberately — a pong arriving just
+before a tick must not be judged late by the next one.
+
+So Undertow needs **both**: the coordinator sweep at 30 s/60 s for every socket, and the
+Socket.IO transport's own 45 s pong deadline. They overlap but are not redundant — the
+transport deadline is what makes the server honour the `pingTimeout` it advertises in its
+own handshake, which is a wire-visible promise; the sweep is what protects MSN.
 
 Gleam's other reclaim paths have direct .NET equivalents and should not be dropped either:
 the connection limiter's `process.monitor` reclaim becomes releasing the slot in the
@@ -363,7 +436,8 @@ Undertow.Runtime/
   ChannelContext.cs      ~60   SocketId, Topic, JoinRef, Assigns, IChannelBroadcaster
   IChannelHandler.cs     ~40
   DocumentSession.cs    ~180   per-document semaphore + SequenceState + checkpoint commit
-  DocumentRegistry.cs    ~80
+  DocumentRegistry.cs   ~100   get-or-create for writes, allocation-free TryGet for reads,
+                               idle eviction on a timer
 ```
 
 ```csharp
@@ -443,9 +517,15 @@ upgrade send
 it in `d95dea5` and a hardcoded 1 MB is now a wire difference the shadow differ will flag.
 Then register and start a 25 s ping timer. `"2"`/`"3"` → Heartbeat (and, as in Gleam, these
 refresh the coordinator's liveness clock — route them, don't swallow them in the transport);
-`"40"` → reply `40{"sid":…}`; `42[...]` → decode; anything else → **ignore silently**. The
-ping timer is unconditional and **never times out on a missing pong** — replicate, and
-comment the spec divergence. Reaping is the sweep's job, not the ping's.
+`"40"` → reply `40{"sid":…}`; `42[...]` → decode; anything else → **ignore silently**.
+
+**The ping timer enforces its own timeout.** Earlier drafts said it never times out on a
+missing pong and told Undertow to replicate that, commenting the spec divergence. There is
+no divergence left to comment: `socketio_transport.gleam:252` closes the socket when the
+last inbound frame is older than `ping_interval_ms + ping_timeout_ms` (45 s, `:272`) —
+the interval is included so a pong arriving just before a tick is not judged late by the
+next one. Track last-inbound on the connection and check it on the same timer tick that
+sends the ping; do not add a second timer.
 
 Positional-args → payload-object translation, with the **sticky per-socket topic** learned
 from `connect_document`:
@@ -464,7 +544,7 @@ as `socketio.gleam` does.
 
 **Origin checking applies here too.** The earlier draft said this path had none and
 recommended leaving it off; that was true of ADR-008-era Floodgate and is no longer true.
-Gap-plan item 4.1 landed in `d95dea5`: `socketio_transport.gleam:93-95` evaluates the same
+Gap-plan item 4.1 landed in `d95dea5`: `socketio_transport.gleam:100` evaluates the same
 policy as the Phoenix endpoint and rejects with **403 before upgrade**, and
 `floodgate/origin.gleam` exists precisely so one policy serves both endpoints. Undertow
 should do the same — a single policy object read from `UNDERTOW_ALLOWED_ORIGINS`, consulted
@@ -500,7 +580,10 @@ with empty payload (`HasReply=true`), assigns `connected=false`; then `connect_d
 ## Storage
 
 **SQLite via `Microsoft.Data.Sqlite`, WAL mode.** Single file, real indexes, real
-transactions (giving cross-table atomicity the Gleam version can't express), and
+transactions (giving cross-table atomicity the Gleam version still can't express — `22cf469`
+mitigated it instead, by ordering a summary's five writes so every crash prefix is safe,
+pointers last, plus one idempotent repair of a missing summary ref on rehydration; a real
+transaction subsumes both, but keep the repair as defence-in-depth for pre-existing data), and
 `SQLitePCLRaw.bundle_e_sqlite3` bundles the native lib so a chiseled container needs
 nothing extra. LiteDB is rejected (weaker concurrency, no SQL for the composite range
 scans); RocksDB/FASTER/LMDB rejected (native deps plus hand-rolled composite-key
@@ -525,10 +608,21 @@ CREATE TABLE refs       (tenant TEXT NOT NULL, path TEXT NOT NULL, sha TEXT NOT 
                          PRIMARY KEY (tenant, path)) WITHOUT ROWID;
 ```
 
-The `ops` PK replaces Gleam's full scan for both `get_ops` and `since(topic, from)`; the
-`refs` PK gives `list_refs` its ordered scan. Both `WITHOUT ROWID` because the PK *is* the
-access path. Note the key asymmetry inherited from Gleam: ops and summaries are keyed by
-document **topic**, objects and refs by **tenant**.
+The `ops` PK serves both `get_ops` and `since(topic, from)`; the `refs` PK gives `list_refs`
+its ordered scan. Both `WITHOUT ROWID` because the PK *is* the access path. Note the key
+asymmetry inherited from Gleam: ops and summaries are keyed by document **topic**, objects
+and refs by **tenant**.
+
+This is **parity now, not a fix.** Earlier drafts justified these indexes as repairing a
+Gleam full-table scan on every reconnect, catch-up, and delta request. Gap-plan item 3.2
+landed: `shelf_store.gleam` keeps a `PBag` index alongside each set — `ops_index` topic→sn
+(`:34`) and `refs_index` tenant→ref (`:39`) — so lookup cost is already independent of
+unrelated documents. Two consequences for the port. First, the SQLite schema is no longer
+buying a headline win, so do not budget one. Second, Gleam's set-plus-bag arrangement has a
+failure mode SQLite's PK does not: the set stays authoritative and the bag is only an index,
+so a half-written prune can leave an index entry with no row — `get_ops` `filter_map`s those
+away silently. Undertow gets that consistency from the PK for free, which is one fewer
+invariant to test.
 
 Two interfaces rather than one 13-method record — `IDocumentStore` and `IGitObjectStore`.
 The design point is:
@@ -545,7 +639,9 @@ and costs one `WHERE` clause today. **This is the one thing painful to retrofit*
 designing it in now.
 
 **Cold start must reproduce Gleam's `from_checkpoint(max(maxOpSn, summarySn), summarySn)`**
-(`session.gleam:373-399`). When `LoadCheckpointAsync` returns null, fall back to
+(`doc_state.gleam:68-97`, moved out of `session.gleam` by 3.3 and now the single
+implementation shared by the document actor and the no-actor read path). When
+`LoadCheckpointAsync` returns null, fall back to
 `SELECT MAX(sequence_number) FROM ops WHERE topic=?` plus the summary row and synthesize a
 checkpoint at version 0. That makes the checkpoint a pure rebuildable cache, so the table
 can ship empty.
@@ -690,9 +786,10 @@ MSN + noop advance, duplicate-join replacement, read-mode nack, `submitOp` befor
 Inject `TimeProvider` (`FakeTimeProvider`) for deterministic timestamps, plus a one-liner
 asserting every emitted timestamp is `≡ 0 (mod 1000)` (Gleam emits `now_seconds() * 1000`).
 
-The guards ported from `d95dea5` each want a test here, mirroring the ones that commit
-added on the Gleam side (`origin_test.gleam`, 19 cases, plus the supervision test — the
-floodgate suite is 128 tests, up from 108):
+The guards each want a test here, mirroring the ones the Gleam side added as they landed
+(`origin_test.gleam`, 19 cases; the supervision test; `heartbeat_test.gleam`; and 3.3's five
+isolation/crash/stale-row/cold-read/owner-restart tests — the floodgate suite is 144 tests
+at `22cf469`, up from 108 before any of this work):
 
 - **Origin policy**, as pure unit tests over `from_env`/`allowed`, both transports: a
   cross-origin browser upgrade is rejected 403; an `Origin`-less upgrade is admitted; `*`
@@ -707,6 +804,20 @@ floodgate suite is 128 tests, up from 108):
   the eviction. Then assert a socket with recent inbound activity survives the same sweep.
 - **Ceilings**: the N+1th connection from one address is refused with 429, and `0` means
   unlimited.
+- **The Socket.IO pong deadline**, separately from the sweep: a socket silent for
+  `pingInterval + pingTimeout` is closed by the transport itself, and one that pongs just
+  before a tick is not. These are different mechanisms with different windows (45 s vs 60 s)
+  and a test that only covers the sweep will not catch a missing deadline.
+- **Signal targeting**: three clients on one document, a signal naming one of them reaches
+  exactly that one — and a signal naming an *unknown* client reaches nobody, since Floodgate
+  intersects the targeted list against the known client ids.
+- **Document isolation**, the 3.3 property: a slow `create_initialized` on one document does
+  not delay a submit on another. Gleam's version spawns the slow build, asserts the fast
+  document's join completes well inside the slow one's window, then asserts the slow build
+  really did commit — without that last step the test passes even if the slow work never ran.
+- **Idle eviction**: a document with no connected clients is dropped after the idle window
+  and rehydrates with its sequence numbering intact but an empty roster; a document with a
+  connected client is never dropped, however idle.
 
 **The TS conformance gate (acceptance).** Mirror the Gleam `just` recipes; they need only
 env vars. Reuse the existing readiness probe (POST `/api/tenants/fluid/token-mint` until
@@ -749,16 +860,16 @@ loud.
 
 | Phase | Work | Milestone |
 |---|---|---|
-| **0** | Skeleton; `WireDiff` **recorder**; capture golden fixtures from the running Gleam server; record baseline pass counts | Gleam baseline reproduced (38 + 7; 53/54). `tests/fixtures/wire/` committed. **Do not skip — the reference disappears after the port.** **Capture from `d95dea5` or later** — an older binary bakes in `maxPayload: 1000000` against `maxMessageSize: 16777216`, and every fixture would encode a contract that no longer exists. Record the source commit alongside the fixtures. |
+| **0** | Skeleton; `WireDiff` **recorder**; capture golden fixtures from the running Gleam server; record baseline pass counts | Gleam baseline reproduced (38 + 7; 53/54). `tests/fixtures/wire/` committed. **Do not skip — the reference disappears after the port.** **Capture from `22cf469` or later** — `d95dea5` is no longer sufficient: a binary from before the second landing bakes in an unbounded ping, no `42["close"]`, and untargeted signals, so those fixtures would encode a contract that no longer exists (an even older one also bakes in `maxPayload: 1000000` against `maxMessageSize: 16777216`). Record the source commit alongside the fixtures. |
 | **1** | F# `Json` AST + `canonicalize` + `toUtf8`; spillway sequencing/types/message/nack/validation; signet | spillway + signet suites green (~700 LOC of Gleam tests). MSN-monotonicity property green. |
 | **2** | `IDocumentStore`/`IGitObjectStore`; Memory + SQLite; etag'd checkpoint; silt | Backend-substitution suite green across three backends. silt suite green. |
 | **3** | ASP.NET host, env config, RestLess middleware, six `authorize_*`, full REST router, Historian with pre-loaded closure | `rest-api.test.ts` passes (minus the known 403). `/health` byte-exact. Container builds, `--healthcheck` works. |
 | **4** | Coordinator (registry, dispatch, per-socket pump, duplicate-join replacement); Phoenix codec + vsn/origin gate; two-phase join; document sessions + semaphore + `CommitSequencedAsync`; extend WireDiff into a differ | `connection.test.ts` + `levee-client` suite green. Phoenix half of the 7 cross-mode tests. |
 | **5** | Socket.IO transport: handshake (`maxPayload` from config), ping timer, origin check + 403, sticky topic, positional-args translation, one-phase join, two-arg framing, connect-time ordering per mode | **38 Routerlicious tests pass.** Headline milestone. Origin-less clients still admitted. |
 | **6** | Summaries: `submitSummary` nack path, sequenced `summarize`, `summaryAck` with reserved SN, `initial_summary` (two shapes × two layouts) | `levee-example/container.test.ts` green (the 0x4b2 case) + `floodgate-readiness.test.ts`. |
-| **7** | Signals v1/v2 normalization + targeting parse; `noop` RSN advance; leave ops/signals | Presence-tracker and todo-list suites green. **Full 38 + 7 green.** |
-| **8** | Heartbeat sweep + eviction; connection and rate limits (the four `UNDERTOW_*` ceilings); container hardening, CI conformance job, `just` recipes, compose | **53/54 on the repointed Levee suite** (the 1 is the intentional 401). CI gates on counts. Limits do not trip the suites. |
-| **9** | Post-parity: idle eviction, backpressure tuning, op pruning below the last summary, signal-targeting flag flip, OpenTelemetry | No regression; memory bounded under soak. |
+| **7** | Signals v1/v2 normalization + **targeting honoured** (per-socket push, intersected against known client ids); `noop` RSN advance; leave ops/signals; graceful-close `42["close"]` | Presence-tracker and todo-list suites green. **Full 38 + 7 green.** |
+| **8** | Heartbeat sweep + eviction; the Socket.IO 45 s pong deadline; idle document eviction; connection and rate limits (the four `UNDERTOW_*` ceilings); container hardening, CI conformance job, `just` recipes, compose | **53/54 on the repointed Levee suite** (the 1 is the intentional 401). CI gates on counts. Limits do not trip the suites. |
+| **9** | Post-parity: backpressure tuning, op pruning below the last summary (flagged, default off — it changes `requestOps`/`GET /deltas` results), OpenTelemetry | No regression; memory bounded under soak. |
 
 Phoenix (4) precedes Socket.IO (5) deliberately even though Socket.IO is the bigger prize:
 Phoenix's two-phase join exercises the coordinator's join/reply/push paths *separately*,
@@ -807,12 +918,13 @@ label maps to the SQLite backend.
 4. **Duplicate-join replacement emitting a leave op.**
 5. **Enqueue-under-the-document-lock** — the bug it prevents appears only under concurrency,
    so the suite may pass without it and then fail intermittently under soak.
-6. **Dropping the heartbeat sweep** while also replicating the never-times-out Socket.IO
-   ping. Each is defensible alone; together they leave Undertow with no liveness reaping at
-   all, and the failure mode — a half-open socket's stale RSN pinning MSN, so summarization
-   stalls for everyone else on the document — is invisible to the conformance suites, which
-   never abandon a connection. This is the specific error the earlier draft of this plan
-   made, on the strength of a misread beryl default.
+6. **Dropping either liveness reaper.** Floodgate now has two — the coordinator sweep
+   (30 s/60 s) and the Socket.IO transport's own 45 s pong deadline — and earlier drafts of
+   this plan told Undertow to skip both, the first on the strength of a misread beryl
+   default and the second because the ping used to be unconditional. The failure mode is
+   invisible to the conformance suites, which never abandon a connection: a half-open
+   socket's stale RSN pins MSN, so summarization stalls for everyone else on that document.
+   Test it with an abandoned socket and a `FakeTimeProvider`, since nothing in the gate will.
 
 **Open questions to settle during implementation:**
 
@@ -822,23 +934,20 @@ label maps to the SQLite backend.
   live there; it's the highest-complexity pure module after signals. Capture fixtures for all
   four combinations in Phase 0.
 - **`>32-key` objects** in the Phase-0 captures (see the canonicalization caveat).
-- **`server_codec.gleam` rebuilds the codec with `codec.new(...)`, dropping dewdrop's `close`
-  encoder** — so Floodgate never emits `42["close"]` on graceful channel end. Latent bug;
-  replicate the silence for parity, then decide.
 
-**Two decisions wanted before Phase 7:**
+**Settled since the first revision, and now the opposite of what this plan said:**
 
-1. **Per-client signal targeting.** `determine_signal_recipients` is fully implemented and
-   fully ignored — not because beryl lacks per-socket push (`beryl.send_info` has it), but
-   because `floodgate.gleam:174` discards the `RegisteredChannel` handle needed to use it.
-   .NET has no equivalent obstacle. Recommendation: build the plumbing but ship behind
-   `UNDERTOW_SIGNAL_TARGETING=0` (default off = broadcast everything), preserving strict
-   parity for the gate, then flip in Phase 9 with the suites green as a control. Note the
-   subtlety the Gleam survey flagged: `session_logic.determine_signal_recipients` intersects
-   its targeted list with the known client ids while `signals.get_signal_recipients` does
-   not — pick one deliberately and test which the clients expect. Levee's filtering
-   behaviour is the reference, since Floodgate is the one diverging.
-2. **Op contents: canonicalize or pass through.** Recommending passthrough — faster, safer,
+- **The graceful-close frame.** `server_codec.gleam` used to rebuild the codec with
+  `codec.new(...)`, dropping dewdrop's `close` encoder, so Floodgate never emitted
+  `42["close"]`. This plan called it a latent bug and told Undertow to replicate the silence
+  for parity. It was restored — `server_codec.gleam:39-40` re-attaches `encode_close` — so
+  **emitting it is now parity and staying silent is the divergence.**
+- **Per-client signal targeting**, likewise: honoured rather than ignored. See "Targeted
+  push is now live" above.
+
+**One decision wanted before Phase 7:**
+
+1. **Op contents: canonicalize or pass through.** Recommending passthrough — faster, safer,
    dodges Erlang-vs-STJ float formatting. But it is a documented byte-level divergence for
    any op whose contents has unsorted keys. The Phase-0 fixtures will show whether that case
    occurs; decide then.
@@ -847,26 +956,42 @@ label maps to the SQLite backend.
 
 ## Critical files
 
-Line numbers are as of `d95dea5`; `session.gleam` and `floodgate.gleam` both moved
-substantially in that commit, so older citations elsewhere are off by 50–70 lines.
+Line numbers are as of `22cf469`. `session.gleam` grew by ~350 lines and shed its
+rehydration logic to a new module in that commit, so citations from either earlier revision
+of this plan are stale for that file specifically.
 
-- `server/floodgate/src/floodgate/document_channel.gleam` (1208) — the protocol brain;
-  source of the F#/C# split, the ordering contract, and the top risks. `:244` is the
-  `maxMessageSize` read that ties IConnected to the enforced frame cap
-- `server/floodgate/src/floodgate/session.gleam` (950) — closure-carrying `Msg` variants,
-  `stored_message_json`/`raw_json`, the name-based supervised `Session`
-  (`new_name`/`from_name`/`child_spec`), and the rehydration semantics at `:435-460`
-  (`from_checkpoint` at `:455`) the etag'd checkpoint must reproduce
+- `server/floodgate/src/floodgate/document_channel.gleam` (1348) — the protocol brain;
+  source of the F#/C# split, the ordering contract, and the top risks. `:309` is the
+  `maxMessageSize` read that ties IConnected to the enforced frame cap; `:1032-1072` is the
+  signal fan-out that now consults `determine_signal_recipients` and falls back to a
+  broadcast only for untargeted signals
+- `server/floodgate/src/floodgate/session.gleam` (1294) — closure-carrying `Msg` variants,
+  `stored_message_json`/`raw_json`, and — since 3.3 — the registry owner (`handle_owner`
+  `:738`) plus the per-document actor (`start_document` `:819`). `new_name`/`from_name`/
+  `child_spec` (`:349`) still describe the supervised handle; `child_spec` is now a
+  `RestForOne` pair of owner-then-factory, which is what stops an owner restart orphaning
+  document actors
+- `server/floodgate/src/floodgate/doc_state.gleam` (128) — the rehydration semantics the
+  etag'd checkpoint must reproduce (`rehydrate` `:68`, `from_checkpoint` `:91`) and the
+  1000-op history cap (`:39`)
+- `server/floodgate/src/floodgate/doc_registry.gleam` + `src/floodgate_registry_ffi.erl` —
+  topic→actor in public ETS, read in the calling process. The model for
+  `DocumentRegistry`, including the read-only lookup that must not allocate a session
 - `spillway/src/spillway/sequencing.gleam` (274) — port target for the F# sequencer:
   validation order and MSN monotonicity
 - `spillway/src/spillway/signals.gleam` (596) — the highest-risk module
-- `server/floodgate/src/floodgate.gleam` (1072) — REST router, six `authorize_*`,
-  `normalize_restless_request` (`:975`), full env-var surface. `:114-158` is the config
-  chain (frame cap, connection ceilings, rate buckets); `:161-176` the supervision tree and
-  the discarded `beryl.register` result at `:174`
-- `server/floodgate/src/floodgate/socketio_transport.gleam` (408) — the hand-rolled
-  transport: origin check `:93`, connection slot `:101`, frame cap `:139,210,219`,
-  `register_closer` `:171`, heartbeat routing `:278,286`, ping timer `:400`
+- `server/floodgate/src/floodgate.gleam` (1109) — REST router, six `authorize_*`,
+  `normalize_restless_request` (`:1012`), full env-var surface. `:145-169` is the config
+  chain (frame cap, connection ceilings, rate buckets); `:181-186` the supervision tree, and
+  `:199` the `beryl.register` result now *captured* through a holder rather than discarded —
+  which is what made signal targeting possible
+- `server/floodgate/src/floodgate/socketio_transport.gleam` (441) — the hand-rolled
+  transport: origin check `:100`, connection slot `:108`, `register_closer` `:178`, ping
+  scheduling `:194,255,430`, frame cap `:219,230,281`, and the pong deadline at `:252`
+  (`pong_overdue` `:272`) that makes the advertised `pingTimeout` real
+- `server/floodgate/src/floodgate/shelf_store.gleam` — the `PBag` indexes (`ops_index` `:34`,
+  `refs_index` `:39`) that removed the full-table scans, and the backfill that rebuilds them
+  for a DETS directory written before they existed
 - `server/floodgate/src/floodgate/origin.gleam` (104) — the shared origin policy, with pure
   `from_env`/`allowed`/`same_origin`; the model for Undertow's single-policy-both-transports
 - `server/floodgate/src/floodgate/initial_summary.gleam` (382) — two input shapes × two
@@ -876,9 +1001,12 @@ substantially in that commit, so older citations elsewhere are off by 50–70 li
   Read `:183`'s `heartbeat_check_interval_ms: 0` as the *directly constructed* default only —
   the live values come from `beryl.gleam:239-240` via `beryl.gleam:650`
 - `docs/plans/2026-08-06-floodgate-gap-closure-plan.md` — its "Implementation status"
-  section is authoritative for what the Gleam server currently does, and its open items
-  (1.2 remainder, 1.3, 3.1, 3.2, 3.3, Phase 5) are the gaps Undertow should design out
-  rather than reproduce
+  sections are authoritative for what the Gleam server currently does. As of `22cf469` the
+  only items still open are **op pruning below the last summary**, **telemetry and a metrics
+  endpoint**, **the ADR-009 extraction blocker**, **the `message_too_large` nack**, and
+  **shelf's late-bound table handles** — that short list, not the much longer one earlier
+  revisions of this plan worked from, is what Undertow should design out rather than
+  reproduce. Everything else it once listed as a gap has landed and is now parity
 - `docs/adr/009-floodgate-standalone-repo.md` — the nine divergences as a checklist, and the
   deliberate 401 decision
 - `justfile:100-170` — the conformance recipes to mirror
