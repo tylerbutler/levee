@@ -11,11 +11,14 @@ public enum CreateInitializedResult
 }
 
 /// <summary>
-/// The REST surface's document/session facade over storage. Read paths answer
-/// from storage only — they must never allocate a live session (Gleam's
-/// `exists`/`sequence_number`/`since` have the same property).
+/// The REST surface's document/session facade. Read paths answer from storage
+/// only — they must never allocate a live session (Gleam's
+/// `exists`/`sequence_number`/`since` have the same property) — while document
+/// creation goes through the live session so REST and socket writes share one
+/// serialized state.
 /// </summary>
-public sealed class DocumentService(IDocumentStore documents, IGitObjectStore gitObjects)
+public sealed class DocumentService(
+    IDocumentStore documents, IGitObjectStore gitObjects, Undertow.Runtime.DocumentRegistry registry)
 {
     public IGitObjectStore GitObjects => gitObjects;
     public IDocumentStore Documents => documents;
@@ -44,28 +47,14 @@ public sealed class DocumentService(IDocumentStore documents, IGitObjectStore gi
     public async ValueTask<CreateInitializedResult> CreateInitializedAsync(
         string topic, string tenant, string body, long nowSeconds, CancellationToken ct = default)
     {
-        if (await documents.StoredDocumentExistsAsync(topic, ct))
-            return CreateInitializedResult.AlreadyExists;
-
-        var plan = InitialSummaryBoundary.plan(body, nowSeconds, sha =>
-            gitObjects.GetObjectAsync(tenant, sha, ct).AsTask().GetAwaiter().GetResult() is not null);
-
-        switch (plan.Status)
+        var session = await registry.GetOrCreateAsync(topic);
+        return await session.CreateInitializedAsync(tenant, body, nowSeconds, ct) switch
         {
-            case InitialSummaryStatus.Invalid:
-                return CreateInitializedResult.InvalidInitialSummary;
-
-            case InitialSummaryStatus.NoSummary:
-                await documents.CreateDocumentAsync(topic, nowSeconds, ct);
-                return CreateInitializedResult.Created;
-
-            default:
-                foreach (var (sha, objectBody) in plan.Objects)
-                    await gitObjects.PutObjectAsync(tenant, sha, objectBody, ct);
-                await documents.CreateDocumentAsync(topic, nowSeconds, ct);
-                await documents.PutSummaryAsync(topic, new SummaryRecord(plan.CommitSha, plan.SequenceNumber), ct);
-                return CreateInitializedResult.Created;
-        }
+            Undertow.Runtime.CreateInitializedOutcome.AlreadyExists => CreateInitializedResult.AlreadyExists,
+            Undertow.Runtime.CreateInitializedOutcome.InvalidInitialSummary =>
+                CreateInitializedResult.InvalidInitialSummary,
+            _ => CreateInitializedResult.Created,
+        };
     }
 
     /// <summary>The ref a document's latest summary commit is published under.</summary>
