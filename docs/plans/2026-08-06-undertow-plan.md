@@ -1,6 +1,19 @@
 # Undertow — .NET Reimplementation of Floodgate
 
-**Status:** Planned, not started · **Date:** 2026-08-06 · **Ported-from reference:** Floodgate at `22cf469`
+**Status:** Implemented (phases 0–9, branch `feat/undertow`, `server/undertow/`) · **Date:** 2026-08-06 · **Ported-from reference:** Floodgate at `22cf469` (fixtures captured at `2687b5f`)
+
+> **Implementation notes (2026-08-07).** All phase gates met: dual-mode 38 + 7
+> green (`just test-undertow-dual-mode`), drop-in parity 53/54 with the one
+> intentional ADR-009 401 (`just test-levee-suite-vs-undertow`), readiness 8/8,
+> levee-example 15 green, 187 unit/integration tests. Two deviations found and
+> recorded in `server/undertow/tests/fixtures/wire/README.md`:
+> the Phoenix bad-vsn rejection is **403** (fixture), not the 400 this plan
+> stated; and the supplied IClient is echoed **verbatim** rather than
+> key-sorted — Gleam floodgate's sort trips container-loader assert 0x4b2 in
+> live browser flows (todo-list e2e: levee 9/9, Gleam floodgate 6/9, Undertow
+> 9/9 after the change), because the loader seeds its own audience entry with
+> the as-sent key order. That is a live Gleam floodgate bug this plan's
+> canonicalization table did not predict.
 
 > **Revision note (second revision).** This plan has now been re-pinned twice, because
 > Floodgate moved under it both times.
