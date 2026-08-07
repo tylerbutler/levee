@@ -1,6 +1,82 @@
 # Closing the Floodgate Gaps
 
-## Implementation status (2026-08-06)
+## Implementation status — second landing (2026-08-06)
+
+Everything in this plan is now done except what is listed as **deliberately not
+done** below. Six commits, one per item, in this order:
+
+| Commit | Item | Gate |
+|---|---|---|
+| `supervise the memory store backend` | 1.1 leftover | `gleam test` 129 |
+| `honour the advertised Engine.IO ping timeout` | 1.2 | 130 |
+| `cap the op history and evict idle documents` | 1.3 | 132 |
+| `index ops and refs by topic instead of scanning` | 3.2 | 133 |
+| `stop dropping dewdrop's close encoder` | Phase 5 close frame | 135 |
+| `honour signal targeting` | 3.1 | 137 |
+
+`gleam test` 128 → 137. Dual-mode conformance **38 + 7** and drop-in parity
+**53 passed / 1 failed** (the intentional 401) at every step — including 3.1,
+which this plan expected to move a count. It did not: neither suite covers signal
+targeting, so the new three-client tests are what pin it.
+
+### Four findings that changed the work
+
+1. **`Doc.history` was not dead.** A grep for readers finds only writes, but it is
+   passed positionally as `Connected`'s `initial_ops`, which becomes
+   `initialMessages`. So the fix is the plan's original one — *cap* it — not
+   delete it. Capped at 1000 and stored newest-first via
+   `session_logic.add_to_history`, matching levee's `@max_history_size` and
+   `op_history` exactly; reversed at the two read sites. Storing it newest-first
+   is also what removes the `list.append` copy per op, so reusing the spillway
+   helper turned out to be both the parity move and the performance one, despite
+   this plan saying it could not be reused.
+2. **1.2's reaping was already working.** The coordinator sweeps *all* sockets,
+   joined or not, and the `register_closer` added in the first landing lets it
+   actually close them. What was missing was a test and the transport-level pong
+   deadline. Making the heartbeat window configurable
+   (`FLOODGATE_HEARTBEAT_TIMEOUT_MS`, defaulting to beryl's own 60 s) is what made
+   the sweep testable at all.
+3. **3.1 needed no client→socket map.** `join` assigns `socket.id(sock)` as the
+   Fluid client id, so a recipient *is* a socket id and `beryl.send_info`
+   addresses it directly. Much cheaper than this plan assumed.
+4. **The ops table could not simply become a bag.** `put_op` must keep
+   overwrite-by-`(topic, sn)` to stay observationally identical to
+   `memory_store`'s dict, and a bag dedupes only exact duplicates. The set stays
+   the authority with a bag as the *index*. This also surfaced an upgrade hazard
+   the plan missed: a DETS directory written before the indexes existed has no
+   index files, so without a backfill on open every pre-existing document would
+   read back as having no history.
+
+### Deliberately not done
+
+- **Op pruning below the last summary** (1.3's third axis). `requestOps` and
+  `GET /deltas` can still request those ops, so pruning changes observable API
+  results. Rather than ship a default-off path nobody exercises, this stays a
+  known unbounded axis: stored ops grow without limit even though in-memory
+  history and the document cache no longer do.
+- **Telemetry and a metrics endpoint** (Phase 5). `beryl/telemetry.gleam` and
+  `beryl/stats.gleam` remain unwired; there is still no visibility into connection
+  counts or op rates. `session.cached_documents` was added along the way and is
+  the kind of thing such an endpoint would expose.
+- **Per-document sequencing** (3.3) and **the ADR-009 extraction blocker**, both
+  already deferred by this plan.
+- **The `message_too_large` nack** — see the first landing's note below; the
+  reasoning is unchanged.
+
+### Also still open
+
+- **Cross-table atomicity.** A `submitSummary` is still five independent DETS
+  inserts with no transaction; a crash mid-sequence leaves inconsistent state.
+  Rehydration tolerates a missing summary, so this is a known limitation rather
+  than a live fault.
+- **shelf table ownership.** `shelf_store`'s ETS tables are owned by whichever
+  process calls `new` — `main`, via `floodgate.serve` — and the `Backend` closures
+  capture the table handles, so a restart of that process would leave them stale.
+  `store.Backend` now has a `supervise` hook (used by `memory_store`), but fixing
+  this needs the *handles* to become late-bound, not just the owner. Recorded in
+  `shelf_store.new`.
+
+## Implementation status — first landing (2026-08-06)
 
 **Landed:** Phase 1.1 (supervise the session actor), Phase 2 (the message-size contract),
 Phase 4.1 (Socket.IO origin check), Phase 4.2 (connection and rate limits), and —
