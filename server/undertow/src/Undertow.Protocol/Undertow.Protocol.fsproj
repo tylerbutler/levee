@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Zero project references, FSharp.Core + BCL only. The <Compile> order below
+       mirrors the Gleam module DAG and is the dependency documentation. -->
+  <ItemGroup>
+    <Compile Include="Json.fs" />
+  </ItemGroup>
+</Project>

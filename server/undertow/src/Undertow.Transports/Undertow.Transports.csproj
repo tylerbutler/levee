@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Undertow.Runtime/Undertow.Runtime.csproj" />
+  </ItemGroup>
+</Project>
