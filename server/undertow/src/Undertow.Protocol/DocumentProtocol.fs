@@ -106,12 +106,24 @@ module DocumentProtocol =
         |> Json.canonicalize
         |> Json.toString
 
-    /// The IClient the peer supplied in its connect payload, normalized; null
-    /// when absent or not an object (fall back to the server-built record).
+    /// The IClient the peer supplied in its connect payload, re-rendered
+    /// compactly with its ORIGINAL key order preserved; null when absent or
+    /// not an object (fall back to the server-built record).
+    ///
+    /// Deliberate divergence from Gleam floodgate, which key-sorts here
+    /// (normalize_client_json) because Erlang maps cannot preserve order. The
+    /// container-loader seeds its own audience entry with the object it sent
+    /// (as-constructed key order) and asserts byte-identity (0x4b2) against
+    /// every later echo of that client — so sorting trips the assert and
+    /// closes the container in live multi-user flows (reproduced against
+    /// Gleam floodgate; Elixir levee echoes verbatim and passes). Preserving
+    /// the supplied order keeps every server-side copy — join op detail,
+    /// initialClients, presence signals — byte-identical to each other AND to
+    /// the client's own seed, which is the identity 0x4b2 actually demands.
     let suppliedClientJson (payload: JsonElement) : string | null =
         match Dyn.tryField "client" payload with
         | Some client when client.ValueKind = JsonValueKind.Object ->
-            normalizeClientJson (client.GetRawText())
+            Json.toString (Dyn.toJson client)
         | _ -> null
 
     /// The join op's `data`: a JSON *string* of {clientId, detail}. The client
