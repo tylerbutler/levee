@@ -37,4 +37,15 @@ if System.get_env("DATABASE_URL") do
   Application.ensure_all_started(:pgo)
 end
 
+# config/test.exs points each run at its own DETS directory so no run can
+# inherit document IDs from an earlier one. Remove it on the way out — the
+# application already opened its tables there, so it cannot be deleted now.
+# Levee.Storage.DataDirIsolationTest asserts this teardown is registered.
+storage_data_dir = Application.get_env(:levee, :storage_data_dir)
+
+if is_binary(storage_data_dir) do
+  System.at_exit(fn _status -> File.rm_rf(storage_data_dir) end)
+  :persistent_term.put(:levee_test_storage_cleanup_registered, true)
+end
+
 ExUnit.start(exclude: [:postgres])
