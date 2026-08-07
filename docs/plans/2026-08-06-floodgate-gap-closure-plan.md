@@ -1,5 +1,86 @@
 # Closing the Floodgate Gaps
 
+## Implementation status — third landing (2026-08-06)
+
+**3.3 (per-document sequencing) is done.** It had been deferred twice as
+throughput-only; that undersold it. The single actor was also a single *crash
+domain* — one crash discarded `client_states` for every document at once, nacking
+every connected client until it rejoined. It now costs one document's roster.
+
+Gates: `gleam test` **139 → 144** (+5 new tests; note the second landing's note
+said 137, which was already stale). Dual-mode conformance **38 + 7** and drop-in
+parity **53 passed / 1 failed** (the intentional 401), both unchanged. Elixir
+`mix test` **367 passed / 0 failures**.
+
+### Five findings that changed the work
+
+1. **The split was internal to `session.gleam`.** 22 of 24 `Msg` variants already
+   carried `topic` as their first field, and every `pub fn` already took
+   `(Session, topic, ...)`. So `document_channel.gleam` — ~27 call sites,
+   including the hot path — did not change at all, and neither did
+   `floodgate.gleam`'s supervision wiring beyond a comment.
+2. **The plan's three-way module split had to become two.** Gleam type aliases do
+   not re-export constructors, so moving `Msg` and the result types into a
+   `doc_actor` module would have broken every `session.Connected(...)` /
+   `session.MessageAssigned(...)` pattern in `document_channel`. Keeping them in
+   `session.gleam` is what preserved the public API the plan cared about. Only
+   `doc_state` (pure) and `doc_registry` (generic) came out.
+3. **A real ordering bug, caught by the existing suite.** The submit handlers
+   reply *before* they write: `Submit` sends `Assigned` and only then calls
+   `store.put_op`; `SubmitSummary` acks before `store.put_summary`. The old shared
+   mailbox hid this, because `since`/`summary` queued behind the write. Making
+   them direct storage reads — which looked safe, since neither handler ever
+   touched the in-memory `Doc` — let a caller read back state older than an ack it
+   had already received. Two tests failed immediately. They now route through the
+   actor when one exists and read storage only when none does, where nothing can
+   be in flight.
+4. **Reading must not be able to allocate.** `session.exists` is reachable from
+   REST paths that do not require the document to exist (`floodgate.gleam:330,
+   353, 802`), so get-or-start routing would have let any `GET` for an unknown id
+   spawn an actor. `exists`/`clients`/`roster` now answer from the registry plus
+   storage with no process at all, which is both the fix and a speedup for cold
+   REST reads.
+5. **The registry is ETS behind a small FFI, named after an atom that already
+   existed.** `process.new_name` mints an atom per call, so document ids cannot
+   name actors. The table is named after the registry owner's `process.Name`,
+   which is allocated once per instance — so no new atoms, the name survives an
+   owner restart, and independently started sessions (the test suite starts many)
+   do not collide.
+
+### What was built
+
+- `floodgate/doc_state.gleam` (new) — the `Doc` record and the storage-only logic
+  that rebuilds it, shared by the actor and the no-actor read path.
+- `floodgate/doc_registry.gleam` + `floodgate_registry_ffi.erl` (new) — topic →
+  actor in a public ETS table, read in the calling process. Generic in the stored
+  message type so the actor can deregister itself without a module cycle.
+- `floodgate/session.gleam` — now a registry owner actor (serialized get-or-start,
+  monitors children) plus one actor per document, plus the unchanged public API.
+  Idle eviction moved from one global sweep into a per-actor timer that
+  deregisters cooperatively before stopping. `cached_documents` is an ETS size
+  read. Document actors are `Temporary` under a `factory_supervisor`; the owner
+  and factory are a `RestForOne` pair so the owner's death takes the actors its
+  table pointed at down with it.
+- `exception` added as a direct dependency, for `call_doc`'s retry when a row
+  outlives its actor.
+
+### Verified, not assumed
+
+- The isolation test is not vacuous: temporarily routing every topic to one actor
+  makes it fail (along with 12 others), and it asserts the slow build was really
+  in flight and really committed.
+- `just check-floodgate-readiness` run against `just floodgate-up` fails
+  identically before and after this change (27 failed / 19 passed) — the compose
+  file's secrets do not match what the conformance suite mints. Pre-existing
+  papercut in that recipe pairing, not a regression; the dual-mode harness starts
+  its own server with the right env and passes.
+
+### Still not done
+
+Unchanged from the second landing minus 3.3: op pruning below the last summary,
+telemetry and a metrics endpoint, the ADR-009 extraction blocker, the
+`message_too_large` nack, and shelf's late-bound table handles.
+
 ## Implementation status — second landing (2026-08-06)
 
 Everything in this plan is now done except what is listed as **deliberately not
