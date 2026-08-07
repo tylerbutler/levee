@@ -41,6 +41,13 @@ public interface IDocumentStore
     ValueTask<bool> CommitSequencedAsync(
         string topic, OpRecord[] ops, CheckpointRecord next, long expectedVersion,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Delete stored ops with sequence number &lt; <paramref name="belowExclusive"/>.
+    /// Only the flagged post-parity pruning path calls this — it changes what
+    /// requestOps and GET /deltas can serve, so it is opt-in.
+    /// </summary>
+    ValueTask PruneOpsBelowAsync(string topic, long belowExclusive, CancellationToken ct = default);
 }
 
 /// <summary>Git-like object storage keyed by tenant (not topic).</summary>

@@ -54,12 +54,14 @@ public sealed class DocumentSession
     private readonly Dictionary<string, string> _presence = [];
     private long _version;
     private long _lastTouchedMs;
+    private readonly bool _pruneOpsBelowSummary;
 
     private DocumentSession(
         IDocumentStore store, IGitObjectStore gitObjects, string topic, TimeProvider time,
         Sequencing.SequenceState seq, List<KeyValuePair<long, string>> history,
-        (string, long) summary, long version)
+        (string, long) summary, long version, bool pruneOpsBelowSummary)
     {
+        _pruneOpsBelowSummary = pruneOpsBelowSummary;
         _store = store;
         _gitObjects = gitObjects;
         _topic = topic;
@@ -88,7 +90,8 @@ public sealed class DocumentSession
     /// </summary>
     public static async Task<DocumentSession> RehydrateAsync(
         IDocumentStore store, IGitObjectStore gitObjects, string topic, TimeProvider time,
-        bool compatRestoreMsnFromSummary, CancellationToken ct = default)
+        bool compatRestoreMsnFromSummary, bool pruneOpsBelowSummary = false,
+        CancellationToken ct = default)
     {
         var summary = await store.GetSummaryAsync(topic, ct);
         var summaryHandle = summary?.Handle ?? "";
@@ -128,7 +131,8 @@ public sealed class DocumentSession
 
         return new DocumentSession(
             store, gitObjects, topic, time,
-            Sequencing.fromCheckpoint(sn, msn), history, (summaryHandle, summarySn), version);
+            Sequencing.fromCheckpoint(sn, msn), history, (summaryHandle, summarySn), version,
+            pruneOpsBelowSummary);
     }
 
     // ── Storage commit under the etag ───────────────────────────────────────
@@ -269,7 +273,15 @@ public sealed class DocumentSession
                         [new OpRecord(summarySn, summaryMessage), new OpRecord(responseSn, responseMessage)],
                         responseSn, ok.msn, ct);
                     if (handle is not null)
+                    {
                         await _store.PutSummaryAsync(_topic, new SummaryRecord(handle, summarySn), ct);
+
+                        // Post-parity, opt-in: ops below the last summary are
+                        // only reachable through requestOps / GET /deltas, so
+                        // pruning them changes those results — default off.
+                        if (_pruneOpsBelowSummary)
+                            await _store.PruneOpsBelowAsync(_topic, summarySn, ct);
+                    }
 
                     broadcast?.Invoke(summarySn, summaryMessage, responseSn, responseMessage);
 

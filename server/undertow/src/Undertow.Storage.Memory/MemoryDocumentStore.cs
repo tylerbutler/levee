@@ -78,6 +78,20 @@ public sealed class MemoryDocumentStore : IDocumentStore
         }
     }
 
+    public ValueTask PruneOpsBelowAsync(string topic, long belowExclusive, CancellationToken ct = default)
+    {
+        lock (_lock)
+        {
+            if (_ops.TryGetValue(topic, out var ops))
+            {
+                foreach (var sn in ops.Keys.Where(sn => sn < belowExclusive).ToArray())
+                    ops.Remove(sn);
+            }
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
     public ValueTask<bool> CommitSequencedAsync(
         string topic, OpRecord[] ops, CheckpointRecord next, long expectedVersion,
         CancellationToken ct = default)

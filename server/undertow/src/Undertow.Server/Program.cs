@@ -1,3 +1,6 @@
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Undertow.Abstractions;
 using Undertow.Server;
 using Undertow.Storage.Memory;
@@ -62,7 +65,8 @@ builder.Services.AddSingleton<Undertow.Runtime.IChannelBroadcaster>(sp =>
     new Undertow.Runtime.LocalBroadcaster(sp.GetRequiredService<Undertow.Runtime.SocketRegistry>()));
 builder.Services.AddSingleton(sp => new Undertow.Runtime.DocumentRegistry(
     sp.GetRequiredService<IDocumentStore>(), sp.GetRequiredService<IGitObjectStore>(),
-    sp.GetRequiredService<TimeProvider>(), config.CompatRestoreMsnFromSummary));
+    sp.GetRequiredService<TimeProvider>(), config.CompatRestoreMsnFromSummary,
+    config.OpPruneBelowSummary));
 builder.Services.AddSingleton<Undertow.Runtime.IChannelHandler>(sp =>
     new Undertow.Runtime.DocumentChannel(
         sp.GetRequiredService<Undertow.Runtime.DocumentRegistry>(),
@@ -101,6 +105,21 @@ builder.Services.AddSingleton(sp => new Undertow.Runtime.DocumentIdleSweeper(
     sp.GetRequiredService<TimeProvider>(), config.DocIdleMs));
 builder.Services.AddHostedService<SocketSweeperService>();
 builder.Services.AddHostedService<DocumentIdleSweeperService>();
+
+// Post-parity, opt-in telemetry: traces + ASP.NET Core metrics over OTLP.
+// Off unless an endpoint is configured, so the parity path adds nothing.
+var otelEndpoint = Environment.GetEnvironmentVariable("UNDERTOW_OTEL_ENDPOINT");
+if (!string.IsNullOrEmpty(otelEndpoint))
+{
+    builder.Services.AddOpenTelemetry()
+        .ConfigureResource(resource => resource.AddService("undertow"))
+        .WithTracing(tracing => tracing
+            .AddAspNetCoreInstrumentation()
+            .AddOtlpExporter(options => options.Endpoint = new Uri(otelEndpoint)))
+        .WithMetrics(metrics => metrics
+            .AddAspNetCoreInstrumentation()
+            .AddOtlpExporter(options => options.Endpoint = new Uri(otelEndpoint)));
+}
 
 builder.WebHost.UseUrls($"http://{config.Bind}:{config.Port}");
 

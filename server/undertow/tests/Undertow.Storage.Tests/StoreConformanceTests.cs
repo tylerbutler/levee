@@ -167,6 +167,19 @@ public abstract class StoreConformanceTests : IDisposable
     }
 
     [Fact]
+    public async Task PruneOpsBelow_RemovesOnlyOlderOps()
+    {
+        var topic = "document:t:prune";
+        var checkpoint = await Documents.LoadOrSynthesizeCheckpointAsync(topic);
+        OpRecord[] ops = [new(1, "one"), new(2, "two"), new(3, "three")];
+        Assert.True(await Documents.CommitSequencedAsync(topic, ops, Next(checkpoint, 3, 0), 0));
+
+        await Documents.PruneOpsBelowAsync(topic, belowExclusive: 3);
+        var remaining = await Documents.GetOpsAsync(topic, 0, null);
+        Assert.Equal([3L], remaining.Select(o => o.SequenceNumber));
+    }
+
+    [Fact]
     public async Task GitObjects_AreKeyedByTenant_NotTopic()
     {
         // The key asymmetry inherited from Gleam: ops/summaries by topic,

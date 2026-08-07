@@ -3,6 +3,11 @@
     <PublishReadyToRun>true</PublishReadyToRun>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../Undertow.Protocol/Undertow.Protocol.fsproj" />
     <ProjectReference Include="../Undertow.Abstractions/Undertow.Abstractions.csproj" />
     <ProjectReference Include="../Undertow.Runtime/Undertow.Runtime.csproj" />

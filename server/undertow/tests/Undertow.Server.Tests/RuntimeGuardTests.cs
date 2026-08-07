@@ -241,6 +241,37 @@ public class RuntimeGuardTests
     }
 
     [Fact]
+    public async Task OpPruning_Flagged_PrunesBelowSummaryAfterSummaryCommit()
+    {
+        // Post-parity, default off: with UNDERTOW_OP_PRUNE_BELOW_SUMMARY=1,
+        // a committed summary prunes stored ops below its sequence number.
+        var time = new FakeTimeProvider();
+        var store = new MemoryDocumentStore();
+        var git = new MemoryGitObjectStore();
+        var registry = new DocumentRegistry(
+            store, git, time, compatRestoreMsnFromSummary: false, pruneOpsBelowSummary: true);
+        var session = await registry.GetOrCreateAsync("document:fluid:prune-doc");
+
+        await session.ConnectAsync("c1", "write", "{}", "{}", 0);
+        for (var csn = 1; csn <= 3; csn++)
+        {
+            await session.SubmitMessageAsync(
+                "c1", csn, 0, (sn, msn) => $$"""{"sequenceNumber":{{sn}},"n":{{sn}}}""");
+        }
+
+        var summary = await session.SubmitSummaryMessagesAsync(
+            "c1", 4, 0, (summarySn, responseSn, msn) =>
+                ($$"""{"sequenceNumber":{{summarySn}},"type":"summarize"}""",
+                 $$"""{"sequenceNumber":{{responseSn}},"type":"summaryAck"}""",
+                 "summary-sha"));
+        Assert.True(summary.Assigned);
+
+        var remaining = await store.GetOpsAsync("document:fluid:prune-doc", 0, null);
+        Assert.All(remaining, op => Assert.True(op.SequenceNumber >= summary.SummarySn));
+        Assert.Contains(remaining, op => op.SequenceNumber == summary.ResponseSn);
+    }
+
+    [Fact]
     public async Task DocumentIsolation_SlowWorkOnOneDocumentDoesNotDelayAnother()
     {
         var harness = NewHarness();

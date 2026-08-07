@@ -184,6 +184,17 @@ public sealed class SqliteStorage : IDocumentStore, IGitObjectStore, IDisposable
                 : null);
     }
 
+    public ValueTask PruneOpsBelowAsync(string topic, long belowExclusive, CancellationToken ct = default)
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "DELETE FROM ops WHERE topic = @topic AND sequence_number < @below";
+        command.Parameters.AddWithValue("@topic", topic);
+        command.Parameters.AddWithValue("@below", belowExclusive);
+        command.ExecuteNonQuery();
+        return ValueTask.CompletedTask;
+    }
+
     public ValueTask<bool> CommitSequencedAsync(
         string topic, OpRecord[] ops, CheckpointRecord next, long expectedVersion,
         CancellationToken ct = default)
