@@ -320,7 +320,16 @@ Floodgate (Gleam server) reads its own set:
 | `FLOODGATE_STORAGE_BACKEND` | `ets`/`shelf` (persistent, default) or `memory` |
 | `FLOODGATE_DATA_DIR` | Shelf DETS directory (default: `priv/floodgate_data`) |
 | `FLOODGATE_PUBLIC_URL` | Externally reachable base URL |
-| `FLOODGATE_ALLOWED_ORIGINS` | Phoenix endpoint origin allow-list (comma-separated, or `*` to disable checking). Defaults to same-origin, which rejects cross-origin browser upgrades |
+| `FLOODGATE_ALLOWED_ORIGINS` | Origin allow-list for **both** socket endpoints (comma-separated, or `*` to disable checking). Defaults to same-origin, which rejects cross-origin browser upgrades; clients sending no `Origin`, including the official Fluid drivers, are always admitted |
+| `FLOODGATE_MAX_FRAME_BYTES` | Inbound frame ceiling (default 16 MiB). Also the `maxMessageSize` advertised in IConnected and the Engine.IO handshake's `maxPayload` — one value, so the three cannot drift |
+| `FLOODGATE_MAX_CONNECTIONS_PER_IP` / `FLOODGATE_MAX_CONNECTIONS` | Concurrent socket ceilings, per peer address (default 256) and node-wide (default 4096) |
+| `FLOODGATE_MESSAGE_RATE` / `_BURST`, `FLOODGATE_JOIN_RATE` / `_BURST` | Per-socket inbound frame and join rate limits (defaults 1000/2000, 100/200) |
+
+Set any limit to `0` to disable it. Both socket endpoints now share the same guards —
+origin policy, connection ceilings, rate limits, frame cap, and coordinator-initiated
+close. Historically only the Phoenix endpoint had them, because `beryl_mist` applies them
+and `floodgate/socketio_transport.gleam` is separate code; any new guard added to
+`beryl_mist` should be checked against that file.
 
 ## Client Release Pipeline
 
