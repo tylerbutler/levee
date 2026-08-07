@@ -3,6 +3,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/Undertow.Protocol/Undertow.Protocol.fsproj" />
     <ProjectReference Include="../../src/Undertow.Storage.Memory/Undertow.Storage.Memory.csproj" />
     <ProjectReference Include="../../src/Undertow.Storage.Sqlite/Undertow.Storage.Sqlite.csproj" />
   </ItemGroup>
