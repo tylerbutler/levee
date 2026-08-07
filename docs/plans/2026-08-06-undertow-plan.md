@@ -1,6 +1,11 @@
-# .NET Reimplementation of Floodgate — Technology Plan
+# Undertow — .NET Reimplementation of Floodgate
 
 **Status:** Planned, not started · **Date:** 2026-08-06
+
+**Undertow** is the name of the .NET implementation. Throughout this document,
+"Floodgate" refers to the existing Gleam server being ported from; "Undertow" refers to
+the .NET server being built. The two are wire-compatible peers, not successor and
+predecessor — Gleam Floodgate keeps working.
 
 ## Context
 
@@ -72,27 +77,27 @@ transition and the pure builder back to back. The closures disappear.
 ## Solution layout
 
 ```
-Floodgate.slnx
+Undertow.slnx
 Directory.Build.props        # net10.0, Nullable, TreatWarningsAsErrors, InvariantGlobalization
 Directory.Packages.props     # central package management
 .editorconfig                # serves both dotnet-format and Fantomas
 src/
-  Floodgate.Protocol/        F#   zero project references — FSharp.Core + BCL only
-  Floodgate.Abstractions/    C#   -> Protocol
-  Floodgate.Runtime/         C#   -> Abstractions, Protocol
-  Floodgate.Transports/      C#   -> Runtime
-  Floodgate.Storage.Memory/  C#   -> Abstractions
-  Floodgate.Storage.Sqlite/  C#   -> Abstractions
-  Floodgate.Server/          C#   -> all
+  Undertow.Protocol/        F#   zero project references — FSharp.Core + BCL only
+  Undertow.Abstractions/    C#   -> Protocol
+  Undertow.Runtime/         C#   -> Abstractions, Protocol
+  Undertow.Transports/      C#   -> Runtime
+  Undertow.Storage.Memory/  C#   -> Abstractions
+  Undertow.Storage.Sqlite/  C#   -> Abstractions
+  Undertow.Server/          C#   -> all
 tests/
-  Floodgate.Protocol.Tests/  F#   Expecto + FsCheck + YoloDev.Expecto.TestSdk
-  Floodgate.Storage.Tests/   C#   xunit, parameterized over backends
-  Floodgate.Server.Tests/    C#   xunit + WebApplicationFactory
+  Undertow.Protocol.Tests/  F#   Expecto + FsCheck + YoloDev.Expecto.TestSdk
+  Undertow.Storage.Tests/   C#   xunit, parameterized over backends
+  Undertow.Server.Tests/    C#   xunit + WebApplicationFactory
 tools/
-  Floodgate.WireDiff/        C#   Phase-0 recorder, later a shadow differ
+  Undertow.WireDiff/        C#   Phase-0 recorder, later a shadow differ
 ```
 
-`Floodgate.Protocol` is **one** F# project with explicit `<Compile>` ordering mirroring the
+`Undertow.Protocol` is **one** F# project with explicit `<Compile>` ordering mirroring the
 Gleam module DAG — the file order *is* the dependency documentation. It holds spillway,
 signet, silt, windsock, dewdrop events, the Socket.IO and Phoenix framing, RestLess
 parsing, `initial_summary`, REST response shaping, **and the pure half of
@@ -268,7 +273,7 @@ green.
 ## The channel coordinator (~700 lines)
 
 ```
-Floodgate.Runtime/
+Undertow.Runtime/
   SocketConnection.cs   ~130   id, WebSocket, outbound Channel, pump, codec, channel instances
   SocketRegistry.cs     ~120   socketId -> connection ; topic -> ImmutableHashSet<socketId>
   ChannelDispatcher.cs  ~170   join / handle_in / terminate, duplicate-join replacement, guards
@@ -360,7 +365,7 @@ as a decision, not an oversight.
 ### `/socket/websocket` — Phoenix Channels V2
 
 `vsn` gate: reject unless it starts with `"2."` (HTTP 400 before upgrade). Origin/CSWSH
-policy from `FLOODGATE_ALLOWED_ORIGINS` (`*` = allow all, comma-separated otherwise,
+policy from `UNDERTOW_ALLOWED_ORIGINS` (`*` = allow all, comma-separated otherwise,
 missing = deny cross-origin), rejected with 403 before upgrade. **Do not use ASP.NET CORS
 middleware** — CORS does not govern WebSockets; relying on it is the classic CSWSH hole.
 
@@ -430,7 +435,7 @@ can ship empty.
 **One deliberate divergence to gate:** Gleam restores MSN from the *summary* SN, discarding
 the live MSN. Storing the live MSN is strictly more accurate and monotonicity still holds;
 no conformance test restarts a server mid-document. Gate it behind
-`FLOODGATE_COMPAT_RESTORE_MSN_FROM_SUMMARY=1`.
+`UNDERTOW_COMPAT_RESTORE_MSN_FROM_SUMMARY=1`.
 
 **Historian fetches — kill the N+1 before it exists.** `silt/rest.gleam` takes a
 `Fetch = fn(sha) -> Result(String, Nil)` callback and recursively flattens trees to depth
@@ -499,13 +504,40 @@ with a `MemoryStream` over `body=`. Gleam stashes it in a header because `mist` 
 aren't rewindable; .NET can replace the stream properly — just update `Content-Type` and
 `Content-Length` to match.
 
-**Config comes from the `FLOODGATE_*` env vars read explicitly at startup**, not through
-`IConfiguration`'s `ASPNETCORE_`/`DOTNET_` conventions or appsettings: `PORT` (wins over
-`FLOODGATE_PORT`), `FLOODGATE_PORT`, `FLOODGATE_BIND`, `FLOODGATE_TENANT_ID`,
-`FLOODGATE_JWT_SECRET` (unset ⇒ hard startup failure), `FLOODGATE_TOKEN_MINT_SECRET`,
-`FLOODGATE_TOKEN_MINT_USER_ID`, `FLOODGATE_TOKEN_MINT_USER_NAME`, `FLOODGATE_PUBLIC_URL`,
-`FLOODGATE_ALLOWED_ORIGINS`, `FLOODGATE_STORAGE_BACKEND`, `FLOODGATE_DATA_DIR`. The TS
-suites and compose files depend on these exact names.
+**Config comes from env vars read explicitly at startup**, not through `IConfiguration`'s
+`ASPNETCORE_`/`DOTNET_` conventions or appsettings. The surface mirrors Floodgate's one
+for one: `PORT` (wins over `UNDERTOW_PORT`), `UNDERTOW_PORT`, `UNDERTOW_BIND`,
+`UNDERTOW_TENANT_ID`, `UNDERTOW_JWT_SECRET` (unset ⇒ hard startup failure),
+`UNDERTOW_TOKEN_MINT_SECRET`, `UNDERTOW_TOKEN_MINT_USER_ID`,
+`UNDERTOW_TOKEN_MINT_USER_NAME`, `UNDERTOW_PUBLIC_URL`, `UNDERTOW_ALLOWED_ORIGINS`,
+`UNDERTOW_STORAGE_BACKEND`, `UNDERTOW_DATA_DIR`, plus the limit vars
+(`UNDERTOW_MAX_FRAME_BYTES`, `UNDERTOW_MAX_CONNECTIONS[_PER_IP]`,
+`UNDERTOW_MESSAGE_RATE`/`_BURST`, `UNDERTOW_JOIN_RATE`/`_BURST`).
+
+**Env var names are not part of the wire contract** and carry no compatibility
+obligation — they are a deployment interface, and every file that sets them
+(`docker-compose.yml`, `Dockerfile`, the `justfile` recipes) is ours. What the
+conformance suites actually require is that the *value* the suite signs with matches the
+value the server verifies with, not that the two sides spell the variable the same way.
+
+One transitional convenience: **each key falls back to its `FLOODGATE_*` spelling when
+the `UNDERTOW_*` one is unset.** This is purely so the Phase-0 shadow differ can drive
+both binaries from a single compose file with only `image:` changed. It is a dozen lines
+in the config reader, and it should be deleted once the differ retires. Precedence is
+`UNDERTOW_*` → `FLOODGATE_*` → default, and startup logs which spelling supplied each
+value so a stale `FLOODGATE_*` can't silently win.
+
+The TS suites keep their own `FLOODGATE_*` variables (`FLOODGATE_HTTP_URL`,
+`FLOODGATE_SOCKET_URL`, `FLOODGATE_TARGET_LABEL`, …). Those are read by
+`floodgate-target.ts` to decide what to point at and what to sign with; they name the
+*suite*, not the server, and are independent of what the server under test calls its own
+config. Adding Undertow means adding a target label, not renaming them.
+
+**Two default *values* must stay byte-identical**, because they reach clients through JWT
+claims and the resulting `IConnected` payload: `UNDERTOW_TOKEN_MINT_USER_ID` defaults to
+`"floodgate-token-mint"` and `UNDERTOW_TOKEN_MINT_USER_NAME` to `"Floodgate Token Mint"`.
+These are wire-observable, so the shadow differ will flag any change. They are values, not
+names — leave them alone regardless of what the project is called.
 
 ---
 
@@ -544,7 +576,7 @@ asserting every emitted timestamp is `≡ 0 (mod 1000)` (Gleam emits `now_second
 env vars. Reuse the existing readiness probe (POST `/api/tenants/fluid/token-mint` until
 200) rather than `/health`, matching `justfile:163`.
 
-**Shadow differ (`tools/Floodgate.WireDiff`).** The highest-leverage tool here. Run Gleam on
+**Shadow differ (`tools/Undertow.WireDiff`).** The highest-leverage tool here. Run Gleam on
 :3000 and .NET on :3001, drive both with the same recorded script, diff frame streams. This
 converts "7 of 38 tests fail" into "byte 412 of IConnected differs: `scopes` before
 `documentId`". Build the recorder in Phase 0, extend to a differ in Phase 4.
@@ -555,9 +587,9 @@ converts "7 of 38 tests fail" into "byte 412 of IConnected differs: `scopes` bef
 
 Two-stage Dockerfile mirroring the Gleam one: `sdk:10.0` builder with a restore layer before
 sources, `dotnet publish -p:PublishReadyToRun=true` (**not** NativeAOT — F# doesn't survive
-it), then `aspnet:10.0-noble-chiseled` runtime. `ENV FLOODGATE_DATA_DIR=/data PORT=3000
-FLOODGATE_BIND=0.0.0.0 FLOODGATE_TENANT_ID=fluid`, `mkdir /data && chown $APP_UID`,
-`VOLUME ["/data"]`, `FLOODGATE_JWT_SECRET` deliberately unset.
+it), then `aspnet:10.0-noble-chiseled` runtime. `ENV UNDERTOW_DATA_DIR=/data PORT=3000
+UNDERTOW_BIND=0.0.0.0 UNDERTOW_TENANT_ID=fluid`, `mkdir /data && chown $APP_UID`,
+`VOLUME ["/data"]`, `UNDERTOW_JWT_SECRET` deliberately unset.
 
 Two deliberate deviations, both improvements: the chiseled image has no shell or `wget`, so
 **HEALTHCHECK uses a `--healthcheck` argv mode** — a ~15-line branch that GETs
@@ -565,7 +597,9 @@ Two deliberate deviations, both improvements: the chiseled image has no shell or
 IPv4 reason the Gleam Dockerfile documents). This is on the critical path:
 `docker compose up --wait` and the drop-in parity recipe both depend on it.
 
-`docker-compose.yml` copies the Gleam one verbatim, changing only the image name.
+`docker-compose.yml` copies the Gleam one, changing the image name and the `UNDERTOW_*`
+env keys. While the shadow differ is live the `FLOODGATE_*` fallback above means one
+compose file can drive either binary with only `image:` swapped.
 
 CI, three jobs: **lint** (`dotnet format --verify-no-changes` + `fantomas --check`), **test**
 (`dotnet build -warnaserror`, `dotnet test`, `dotnet list package --vulnerable`), and
@@ -653,7 +687,7 @@ label maps to the SQLite backend.
 
 1. **Per-client signal targeting.** `determine_signal_recipients` is fully implemented and
    fully ignored, because beryl has no per-socket push. .NET has it free. Recommendation:
-   build the plumbing but ship behind `FLOODGATE_SIGNAL_TARGETING=0` (default off =
+   build the plumbing but ship behind `UNDERTOW_SIGNAL_TARGETING=0` (default off =
    broadcast everything), preserving strict parity for the gate, then flip in Phase 9 with
    the suites green as a control.
 2. **Op contents: canonicalize or pass through.** Recommending passthrough — faster, safer,
