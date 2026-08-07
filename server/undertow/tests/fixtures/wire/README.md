@@ -47,3 +47,18 @@ These are the counts Undertow must reproduce (Phases 5 and 7).
   legacy string signal content is passed through verbatim.
 - A legacy broadcast signal is delivered to the sender too (plain `broadcast`,
   not `broadcast_from`).
+
+## Deliberate divergence from these fixtures
+
+- **Supplied IClient echo is verbatim, not key-sorted.** The Gleam fixtures
+  show the client's IClient re-serialized with sorted keys
+  (`normalize_client_json`); Undertow preserves the supplied key order.
+  Sorting trips container-loader assert 0x4b2 in live multi-user flows —
+  the loader seeds its own audience entry with the object it *sent* (original
+  key order) and requires byte-identity with every later echo. Reproduced:
+  Gleam floodgate fails the levee-todo-list multi-user e2e 3/9 on this;
+  Elixir levee (verbatim echo) and Undertow (after this change) pass 9/9.
+  All server-side copies (join op `data`, `initialClients`, presence signals)
+  remain byte-identical to each other either way, so the 0x4b2 identity the
+  sort was introduced for still holds — verbatim also matches the client's
+  local seed, which the sort cannot.
