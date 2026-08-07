@@ -17,34 +17,44 @@ module Summary =
     type SummaryTree = { Tree: Map<string, SummaryObject> }
 
     type SummaryOp =
-        { ParentSummaryHandle: string
-          SummaryTree: SummaryTree
-          SequenceNumber: int64 }
+        {
+            ParentSummaryHandle: string
+            SummaryTree: SummaryTree
+            SequenceNumber: int64
+        }
 
     /// Contents of a summarize message as submitted by client.
     type SummarizeContents =
-        { Handle: string
-          Message: string
-          Parents: string list
-          Head: string
-          IncludesProtocolTree: bool option }
+        {
+            Handle: string
+            Message: string
+            Parents: string list
+            Head: string
+            IncludesProtocolTree: bool option
+        }
 
     type SummaryAck =
-        { Handle: string
-          SummarySequenceNumber: int64 }
+        {
+            Handle: string
+            SummarySequenceNumber: int64
+        }
 
     type SummaryNack =
-        { SummarySequenceNumber: int64
-          Code: int option
-          Message: string option
-          RetryAfter: int64 option }
+        {
+            SummarySequenceNumber: int64
+            Code: int option
+            Message: string option
+            RetryAfter: int64 option
+        }
 
     /// Pending summary tracking state.
     type PendingSummary =
-        { ClientId: string
-          Contents: SummarizeContents
-          SequenceNumber: int64
-          Timestamp: int64 }
+        {
+            ClientId: string
+            Contents: SummarizeContents
+            SequenceNumber: int64
+            Timestamp: int64
+        }
 
     type SummaryContext = Message.SummaryContext
 
@@ -85,21 +95,29 @@ module Summary =
     let getFromSummaryTree (summary: SummaryTree) path = Map.tryFind path summary.Tree
 
     let createSummaryAck handle sequenceNumber : SummaryAck =
-        { Handle = handle
-          SummarySequenceNumber = sequenceNumber }
+        {
+            Handle = handle
+            SummarySequenceNumber = sequenceNumber
+        }
 
     let createSummaryNack sequenceNumber code message : SummaryNack =
-        { SummarySequenceNumber = sequenceNumber
-          Code = code
-          Message = message
-          RetryAfter = None }
+        {
+            SummarySequenceNumber = sequenceNumber
+            Code = code
+            Message = message
+            RetryAfter = None
+        }
 
     let createSummaryNackWithRetry sequenceNumber code message retryAfter : SummaryNack =
-        { SummarySequenceNumber = sequenceNumber
-          Code = code
-          Message = message
-          RetryAfter = Some retryAfter }
+        {
+            SummarySequenceNumber = sequenceNumber
+            Code = code
+            Message = message
+            RetryAfter = Some retryAfter
+        }
 
     let createSummaryContext handle sequenceNumber : Message.SummaryContext =
-        { Handle = handle
-          SequenceNumber = sequenceNumber }
+        {
+            Handle = handle
+            SequenceNumber = sequenceNumber
+        }

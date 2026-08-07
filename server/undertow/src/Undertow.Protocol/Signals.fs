@@ -33,14 +33,14 @@ module Signals =
         | BroadcastAddress
         | ContainerAddress of string
 
-    type SignalV1Contents =
-        { SignalType: string
-          Content: Json }
+    type SignalV1Contents = { SignalType: string; Content: Json }
 
     type SignalV1Envelope =
-        { Address: string
-          Contents: SignalV1Contents
-          ClientBroadcastSignalSequenceNumber: int64 }
+        {
+            Address: string
+            Contents: SignalV1Contents
+            ClientBroadcastSignalSequenceNumber: int64
+        }
 
     type SignalParseError =
         | InvalidFormat of string
@@ -62,7 +62,11 @@ module Signals =
         match json with
         | JArr items ->
             let strings = items |> List.choose asString
-            if List.length strings = List.length items then Some strings else None
+
+            if List.length strings = List.length items then
+                Some strings
+            else
+                None
         | _ -> None
 
     let private asMap json : Map<string, Json> =
@@ -71,47 +75,58 @@ module Signals =
         | _ -> Map.empty
 
     /// Parse a v1 signal envelope from a map.
-    let parseV1EnvelopeFromMap (raw: Map<string, Json>) : Result<SignalV1Envelope, SignalParseError> =
+    let parseV1EnvelopeFromMap
+        (raw: Map<string, Json>)
+        : Result<SignalV1Envelope, SignalParseError> =
         match Map.tryFind "address" raw, Map.tryFind "contents" raw with
         | Some addr, Some contents ->
             let contentsMap = asMap contents
 
             Ok
-                { Address = asString addr |> Option.defaultValue ""
-                  Contents =
-                    { SignalType =
-                        Map.tryFind "type" contentsMap
-                        |> Option.bind asString
-                        |> Option.defaultValue ""
-                      Content = Map.tryFind "content" contentsMap |> Option.defaultValue JNull }
-                  ClientBroadcastSignalSequenceNumber =
-                    Map.tryFind "clientBroadcastSignalSequenceNumber" raw
-                    |> Option.bind asInt
-                    |> Option.defaultValue 0L }
+                {
+                    Address = asString addr |> Option.defaultValue ""
+                    Contents =
+                        {
+                            SignalType =
+                                Map.tryFind "type" contentsMap
+                                |> Option.bind asString
+                                |> Option.defaultValue ""
+                            Content = Map.tryFind "content" contentsMap |> Option.defaultValue JNull
+                        }
+                    ClientBroadcastSignalSequenceNumber =
+                        Map.tryFind "clientBroadcastSignalSequenceNumber" raw
+                        |> Option.bind asInt
+                        |> Option.defaultValue 0L
+                }
         | _ -> Error(MissingField "address or contents")
 
     // ── Normalization (v1/v2 → internal format) ─────────────────────────────
 
     type NormalizedSignal =
-        { Content: Json
-          SignalType: string option
-          ClientConnectionNumber: int64 option
-          ReferenceSequenceNumber: int64 option
-          TargetClientId: string option
-          TargetedClients: string list option
-          IgnoredClients: string list option }
+        {
+            Content: Json
+            SignalType: string option
+            ClientConnectionNumber: int64 option
+            ReferenceSequenceNumber: int64 option
+            TargetClientId: string option
+            TargetedClients: string list option
+            IgnoredClients: string list option
+        }
 
     let private normalizeV1 (raw: Map<string, Json>) : NormalizedSignal =
-        let contents = Map.tryFind "contents" raw |> Option.map asMap |> Option.defaultValue Map.empty
+        let contents =
+            Map.tryFind "contents" raw |> Option.map asMap |> Option.defaultValue Map.empty
 
-        { Content = Map.tryFind "content" contents |> Option.defaultValue JNull
-          SignalType = Map.tryFind "type" contents |> Option.bind asString
-          ClientConnectionNumber =
-            Map.tryFind "clientBroadcastSignalSequenceNumber" raw |> Option.bind asInt
-          ReferenceSequenceNumber = None
-          TargetClientId = None
-          TargetedClients = None
-          IgnoredClients = None }
+        {
+            Content = Map.tryFind "content" contents |> Option.defaultValue JNull
+            SignalType = Map.tryFind "type" contents |> Option.bind asString
+            ClientConnectionNumber =
+                Map.tryFind "clientBroadcastSignalSequenceNumber" raw |> Option.bind asInt
+            ReferenceSequenceNumber = None
+            TargetClientId = None
+            TargetedClients = None
+            IgnoredClients = None
+        }
 
     let private normalizeV2 (raw: Map<string, Json>) : NormalizedSignal =
         // A wrapper envelope carries the signal under "signal"; an empty inner
@@ -123,14 +138,17 @@ module Signals =
                 if Map.isEmpty m then raw else m
             | None -> raw
 
-        { Content = Map.tryFind "content" inner |> Option.defaultValue JNull
-          SignalType = Map.tryFind "type" inner |> Option.bind asString
-          ClientConnectionNumber = Map.tryFind "clientConnectionNumber" inner |> Option.bind asInt
-          ReferenceSequenceNumber = Map.tryFind "referenceSequenceNumber" inner |> Option.bind asInt
-          TargetClientId = Map.tryFind "targetClientId" inner |> Option.bind asString
-          // Targeting lives at the envelope level, not the inner signal.
-          TargetedClients = Map.tryFind "targetedClients" raw |> Option.bind asStringList
-          IgnoredClients = Map.tryFind "ignoredClients" raw |> Option.bind asStringList }
+        {
+            Content = Map.tryFind "content" inner |> Option.defaultValue JNull
+            SignalType = Map.tryFind "type" inner |> Option.bind asString
+            ClientConnectionNumber = Map.tryFind "clientConnectionNumber" inner |> Option.bind asInt
+            ReferenceSequenceNumber =
+                Map.tryFind "referenceSequenceNumber" inner |> Option.bind asInt
+            TargetClientId = Map.tryFind "targetClientId" inner |> Option.bind asString
+            // Targeting lives at the envelope level, not the inner signal.
+            TargetedClients = Map.tryFind "targetedClients" raw |> Option.bind asStringList
+            IgnoredClients = Map.tryFind "ignoredClients" raw |> Option.bind asStringList
+        }
 
     /// Normalize a raw signal map. v1 is detected by "address"/"contents".
     let normalizeSignal (raw: Map<string, Json>) : NormalizedSignal =
@@ -159,27 +177,33 @@ module Signals =
 
     /// An untargeted normalized signal wrapping raw content (the legacy path).
     let untargeted (content: Json) : NormalizedSignal =
-        { Content = content
-          SignalType = None
-          ClientConnectionNumber = None
-          ReferenceSequenceNumber = None
-          TargetClientId = None
-          TargetedClients = None
-          IgnoredClients = None }
+        {
+            Content = content
+            SignalType = None
+            ClientConnectionNumber = None
+            ReferenceSequenceNumber = None
+            TargetClientId = None
+            TargetedClients = None
+            IgnoredClients = None
+        }
 
     // ── V2 format ───────────────────────────────────────────────────────────
 
     type SignalV2 =
-        { Content: Json
-          SignalType: string option
-          ClientConnectionNumber: int64 option
-          ReferenceSequenceNumber: int64 option
-          TargetClientId: string option }
+        {
+            Content: Json
+            SignalType: string option
+            ClientConnectionNumber: int64 option
+            ReferenceSequenceNumber: int64 option
+            TargetClientId: string option
+        }
 
     type ClientBroadcastSignalEnvelope =
-        { Signal: SignalV2
-          TargetedClients: string list option
-          IgnoredClients: string list option }
+        {
+            Signal: SignalV2
+            TargetedClients: string list option
+            IgnoredClients: string list option
+        }
 
     // ── Targeting logic ─────────────────────────────────────────────────────
 
@@ -194,7 +218,11 @@ module Signals =
     /// SessionLogic.determineSignalRecipients this does NOT intersect targets
     /// with the known clients — the channel layer must use the SessionLogic
     /// version (levee's behaviour is the reference).
-    let getSignalRecipients (envelope: ClientBroadcastSignalEnvelope) (allClients: string list) (senderClientId: string) =
+    let getSignalRecipients
+        (envelope: ClientBroadcastSignalEnvelope)
+        (allClients: string list)
+        (senderClientId: string)
+        =
         match envelope.TargetedClients, envelope.IgnoredClients with
         | Some targets, _ -> targets |> List.filter (fun c -> c <> senderClientId)
         | None, Some ignored ->
@@ -202,7 +230,11 @@ module Signals =
             |> List.filter (fun c -> c <> senderClientId && not (List.contains c ignored))
         | None, None -> allClients |> List.filter (fun c -> c <> senderClientId)
 
-    let shouldClientReceiveSignal (envelope: ClientBroadcastSignalEnvelope) (clientId: string) (senderClientId: string) =
+    let shouldClientReceiveSignal
+        (envelope: ClientBroadcastSignalEnvelope)
+        (clientId: string)
+        (senderClientId: string)
+        =
         if clientId = senderClientId then
             false
         else
@@ -214,51 +246,65 @@ module Signals =
     // ── Constructors ────────────────────────────────────────────────────────
 
     let broadcast content signalType connectionNumber rsn : SignalV2 =
-        { Content = content
-          SignalType = signalType
-          ClientConnectionNumber = connectionNumber
-          ReferenceSequenceNumber = rsn
-          TargetClientId = None }
+        {
+            Content = content
+            SignalType = signalType
+            ClientConnectionNumber = connectionNumber
+            ReferenceSequenceNumber = rsn
+            TargetClientId = None
+        }
 
     let targeted content targetClientId signalType connectionNumber rsn : SignalV2 =
-        { Content = content
-          SignalType = signalType
-          ClientConnectionNumber = connectionNumber
-          ReferenceSequenceNumber = rsn
-          TargetClientId = Some targetClientId }
+        {
+            Content = content
+            SignalType = signalType
+            ClientConnectionNumber = connectionNumber
+            ReferenceSequenceNumber = rsn
+            TargetClientId = Some targetClientId
+        }
 
     let broadcastEnvelope signal : ClientBroadcastSignalEnvelope =
-        { Signal = signal
-          TargetedClients = None
-          IgnoredClients = None }
+        {
+            Signal = signal
+            TargetedClients = None
+            IgnoredClients = None
+        }
 
     let targetedEnvelope signal targets : ClientBroadcastSignalEnvelope =
-        { Signal = signal
-          TargetedClients = Some targets
-          IgnoredClients = None }
+        {
+            Signal = signal
+            TargetedClients = Some targets
+            IgnoredClients = None
+        }
 
     let ignoredEnvelope signal ignored : ClientBroadcastSignalEnvelope =
-        { Signal = signal
-          TargetedClients = None
-          IgnoredClients = Some ignored }
+        {
+            Signal = signal
+            TargetedClients = None
+            IgnoredClients = Some ignored
+        }
 
     // ── Server -> client signal message ─────────────────────────────────────
 
     let signalMessageFromV2 (senderClientId: string) (signal: SignalV2) : Message.SignalMessage =
-        { ClientId = Some senderClientId
-          Content = signal.Content
-          SignalType = signal.SignalType
-          ClientConnectionNumber = signal.ClientConnectionNumber
-          ReferenceSequenceNumber = signal.ReferenceSequenceNumber
-          TargetClientId = signal.TargetClientId }
+        {
+            ClientId = Some senderClientId
+            Content = signal.Content
+            SignalType = signal.SignalType
+            ClientConnectionNumber = signal.ClientConnectionNumber
+            ReferenceSequenceNumber = signal.ReferenceSequenceNumber
+            TargetClientId = signal.TargetClientId
+        }
 
     let systemSignalMessage (content: Json) (signalType: string) : Message.SignalMessage =
-        { ClientId = None
-          Content = content
-          SignalType = Some signalType
-          ClientConnectionNumber = None
-          ReferenceSequenceNumber = None
-          TargetClientId = None }
+        {
+            ClientId = None
+            Content = content
+            SignalType = Some signalType
+            ClientConnectionNumber = None
+            ReferenceSequenceNumber = None
+            TargetClientId = None
+        }
 
     // ── Version detection ───────────────────────────────────────────────────
 

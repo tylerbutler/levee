@@ -105,6 +105,7 @@ public sealed class PhoenixTransport(
     ChannelDispatcher dispatcher,
     SocketRegistry registry,
     OriginPolicyBox originPolicy,
+    TransportGuards guards,
     long maxFrameBytes,
     TimeProvider time)
 {
@@ -136,27 +137,46 @@ public sealed class PhoenixTransport(
             return;
         }
 
-        using var socket = await context.WebSockets.AcceptWebSocketAsync();
-        // The Fluid client id IS the socket id: 32 uppercase hex.
-        var socketId = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
-        var connection = new SocketConnection(socketId, socket, PhoenixFraming.Instance, time);
-        registry.Register(connection);
+        // The real socket peer address, deliberately not X-Forwarded-For (a
+        // client sets that freely). Acquired before the upgrade so rejection
+        // is a status code, not a close frame.
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        if (!guards.Connections.TryAcquire(ip))
+        {
+            context.Response.StatusCode = 429;
+            return;
+        }
 
         try
         {
-            await ReadLoopAsync(connection, socket, context.RequestAborted);
+            using var socket = await context.WebSockets.AcceptWebSocketAsync();
+            // The Fluid client id IS the socket id: 32 uppercase hex.
+            var socketId = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
+            var connection = new SocketConnection(socketId, socket, PhoenixFraming.Instance, time);
+            registry.Register(connection);
+
+            try
+            {
+                await ReadLoopAsync(connection, socket, context.RequestAborted);
+            }
+            finally
+            {
+                await dispatcher.TerminateAllAsync(connection, sendClose: false);
+                registry.Unregister(socketId);
+                await connection.DisposeAsync();
+            }
         }
         finally
         {
-            await dispatcher.TerminateAllAsync(connection, sendClose: false);
-            registry.Unregister(socketId);
-            await connection.DisposeAsync();
+            guards.Connections.Release(ip);
         }
     }
 
     private async Task ReadLoopAsync(SocketConnection connection, WebSocket socket, CancellationToken ct)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, connection.Closed);
+        var messageBucket = guards.NewMessageBucket();
+        var joinBucket = guards.NewJoinBucket();
         while (socket.State == WebSocketState.Open)
         {
             var frame = await FrameReader.ReadAsync(socket, maxFrameBytes, linked.Token);
@@ -171,15 +191,19 @@ public sealed class PhoenixTransport(
 
             connection.LastInboundTimestamp = time.GetTimestamp();
 
+            // Over-budget frames are dropped, matching the Gleam transport.
+            if (!messageBucket.TryTake())
+                continue;
+
             // Binary frames: accept and ignore (levee-driver never sends them).
             if (frame.Binary || frame.Text is null)
                 continue;
 
-            await DispatchAsync(connection, frame.Text);
+            await DispatchAsync(connection, frame.Text, joinBucket);
         }
     }
 
-    private async Task DispatchAsync(SocketConnection connection, byte[] text)
+    private async Task DispatchAsync(SocketConnection connection, byte[] text, TokenBucket joinBucket)
     {
         string? joinRef = null, @ref = null, topic = null, @event = null;
         JsonDocument? document = null;
@@ -204,6 +228,8 @@ public sealed class PhoenixTransport(
             switch (@event)
             {
                 case "phx_join":
+                    if (!joinBucket.TryTake())
+                        break;
                     var outcome = await dispatcher.JoinAsync(connection, joinRef ?? "", topic, payload);
                     var response = outcome.HasReply ? outcome.Reply : ReadOnlyMemory<byte>.Empty;
                     connection.TryEnqueue(PhoenixFraming.Instance.Reply(joinRef, @ref, topic, outcome.Ok, response));

@@ -16,15 +16,19 @@ module InitialSummary =
         | SummaryBlob of content: string * encoding: string
 
     and SummaryEntry =
-        { Path: string
-          Kind: string
-          Value: SummaryValue option
-          Id: string option }
+        {
+            Path: string
+            Kind: string
+            Value: SummaryValue option
+            Id: string option
+        }
 
     type Plan =
-        { Objects: (string * string) list
-          CommitSha: string
-          SequenceNumber: int64 }
+        {
+            Objects: (string * string) list
+            CommitSha: string
+            SequenceNumber: int64
+        }
 
     // ── Payload decoding (two wire shapes, ADR-008) ─────────────────────────
 
@@ -88,10 +92,12 @@ module InitialSummary =
                                 | SummaryTree _ -> "tree"
                                 | SummaryBlob _ -> "blob"
 
-                            { Path = path
-                              Kind = kind
-                              Value = Some value
-                              Id = None })
+                            {
+                                Path = path
+                                Kind = kind
+                                Value = Some value
+                                Id = None
+                            })
                         |> SummaryTree
                         |> Some
                     else
@@ -117,10 +123,12 @@ module InitialSummary =
                 None
             else
                 Some
-                    { Path = path
-                      Kind = kind
-                      Value = value
-                      Id = Dyn.stringField "id" el }
+                    {
+                        Path = path
+                        Kind = kind
+                        Value = value
+                        Id = Dyn.stringField "id" el
+                    }
         | _ -> None
 
     // ── Planning (pure content-addressed writes) ────────────────────────────
@@ -132,7 +140,10 @@ module InitialSummary =
         | "commit" -> Some "160000"
         | _ -> None
 
-    type private Builder = { mutable Objects: (string * string) list }
+    type private Builder =
+        {
+            mutable Objects: (string * string) list
+        }
 
     let private storeObject (b: Builder) (kind: string) (body: string) : string option =
         Silt.objectId kind body
@@ -148,13 +159,24 @@ module InitialSummary =
     let private storeTreeEntries (b: Builder) (entries: Json list) : string option =
         storeObject b "trees" (Json.toString (JObj [ "tree", JArr entries ]))
 
-    let rec private storeValue (b: Builder) (exists: string -> bool) (value: SummaryValue) : string option =
+    let rec private storeValue
+        (b: Builder)
+        (exists: string -> bool)
+        (value: SummaryValue)
+        : string option =
         match value with
         | SummaryTree entries -> storeTree b exists entries
         | SummaryBlob(content, encoding) ->
-            storeObject b "blobs" (Json.toString (JObj [ "content", JStr content; "encoding", JStr encoding ]))
+            storeObject
+                b
+                "blobs"
+                (Json.toString (JObj [ "content", JStr content; "encoding", JStr encoding ]))
 
-    and private storeEntry (b: Builder) (exists: string -> bool) (entry: SummaryEntry) : Json option =
+    and private storeEntry
+        (b: Builder)
+        (exists: string -> bool)
+        (entry: SummaryEntry)
+        : Json option =
         let sha =
             match entry.Value, entry.Id with
             | Some value, None -> storeValue b exists value
@@ -163,7 +185,11 @@ module InitialSummary =
 
         sha |> Option.bind (treeEntryJson entry.Path entry.Kind)
 
-    and private storeTree (b: Builder) (exists: string -> bool) (entries: SummaryEntry list) : string option =
+    and private storeTree
+        (b: Builder)
+        (exists: string -> bool)
+        (entries: SummaryEntry list)
+        : string option =
         let stored = entries |> List.map (storeEntry b exists)
 
         if List.forall Option.isSome stored then
@@ -171,12 +197,18 @@ module InitialSummary =
         else
             None
 
-    let private storeProtocol (b: Builder) (sequenceNumber: int64) (values: JsonElement option) : string option =
+    let private storeProtocol
+        (b: Builder)
+        (sequenceNumber: int64)
+        (values: JsonElement option)
+        : string option =
         let attributes =
             Json.toString (
                 JObj
-                    [ "minimumSequenceNumber", JInt sequenceNumber
-                      "sequenceNumber", JInt sequenceNumber ]
+                    [
+                        "minimumSequenceNumber", JInt sequenceNumber
+                        "sequenceNumber", JInt sequenceNumber
+                    ]
             )
 
         let valuesJson =
@@ -185,20 +217,27 @@ module InitialSummary =
             | None -> "[]"
 
         let blob content =
-            storeObject b "blobs" (Json.toString (JObj [ "content", JStr content; "encoding", JStr "utf-8" ]))
+            storeObject
+                b
+                "blobs"
+                (Json.toString (JObj [ "content", JStr content; "encoding", JStr "utf-8" ]))
 
         match blob attributes, blob valuesJson, blob "[]", blob "[]" with
         | Some attributesSha, Some quorumValuesSha, Some quorumMembersSha, Some quorumProposalsSha ->
-            [ treeEntryJson "attributes" "blob" attributesSha
-              treeEntryJson "quorumMembers" "blob" quorumMembersSha
-              treeEntryJson "quorumProposals" "blob" quorumProposalsSha
-              treeEntryJson "quorumValues" "blob" quorumValuesSha ]
+            [
+                treeEntryJson "attributes" "blob" attributesSha
+                treeEntryJson "quorumMembers" "blob" quorumMembersSha
+                treeEntryJson "quorumProposals" "blob" quorumProposalsSha
+                treeEntryJson "quorumValues" "blob" quorumValuesSha
+            ]
             |> List.choose id
             |> storeTreeEntries b
         | _ -> None
 
     let private findEntry (entries: SummaryEntry list) (path: string) : SummaryValue option =
-        entries |> List.tryFind (fun e -> e.Path = path) |> Option.bind (fun e -> e.Value)
+        entries
+        |> List.tryFind (fun e -> e.Path = path)
+        |> Option.bind (fun e -> e.Value)
 
     /// The official driver posts `.app` contents as `summary` plus quorum in
     /// `values` (protocol tree synthesized here, root = .app + .protocol);
@@ -232,15 +271,21 @@ module InitialSummary =
         | _ ->
             match storeTree b exists entries, storeProtocol b sequenceNumber values with
             | Some appTreeSha, Some protocolTreeSha ->
-                [ treeEntryJson ".app" "tree" appTreeSha
-                  treeEntryJson ".protocol" "tree" protocolTreeSha ]
+                [
+                    treeEntryJson ".app" "tree" appTreeSha
+                    treeEntryJson ".protocol" "tree" protocolTreeSha
+                ]
                 |> List.choose id
                 |> storeTreeEntries b
             | _ -> None
 
     /// Plan the Historian objects for a create payload. Ok None: no summary in
     /// the body. Error: the payload carried a summary that is invalid.
-    let plan (body: string) (timestamp: int64) (exists: string -> bool) : Result<Plan option, unit> =
+    let plan
+        (body: string)
+        (timestamp: int64)
+        (exists: string -> bool)
+        : Result<Plan option, unit> =
         if body.Trim() = "" then
             Ok None
         else
@@ -263,7 +308,9 @@ module InitialSummary =
                         | None
                         | Some(SummaryBlob _) -> Error()
                         | Some(SummaryTree entries) ->
-                            let sequenceNumber = Dyn.intField "sequenceNumber" root |> Option.defaultValue 0L
+                            let sequenceNumber =
+                                Dyn.intField "sequenceNumber" root |> Option.defaultValue 0L
+
                             let values = Dyn.tryField "values" root
                             let b = { Objects = [] }
 
@@ -272,18 +319,22 @@ module InitialSummary =
                             | Some treeSha ->
                                 let author =
                                     JObj
-                                        [ "name", JStr "Floodgate"
-                                          "email", JStr "server@floodgate.local"
-                                          "date", JStr(string timestamp) ]
+                                        [
+                                            "name", JStr "Floodgate"
+                                            "email", JStr "server@floodgate.local"
+                                            "date", JStr(string timestamp)
+                                        ]
 
                                 let commitBody =
                                     Json.toString (
                                         JObj
-                                            [ "tree", JStr treeSha
-                                              "parents", JArr []
-                                              "message", JStr "Initial summary"
-                                              "author", author
-                                              "committer", author ]
+                                            [
+                                                "tree", JStr treeSha
+                                                "parents", JArr []
+                                                "message", JStr "Initial summary"
+                                                "author", author
+                                                "committer", author
+                                            ]
                                     )
 
                                 match storeObject b "commits" commitBody with
@@ -291,7 +342,9 @@ module InitialSummary =
                                 | Some commitSha ->
                                     Ok(
                                         Some
-                                            { Objects = List.rev b.Objects
-                                              CommitSha = commitSha
-                                              SequenceNumber = sequenceNumber }
+                                            {
+                                                Objects = List.rev b.Objects
+                                                CommitSha = commitSha
+                                                SequenceNumber = sequenceNumber
+                                            }
                                     )

@@ -43,7 +43,8 @@ module Auth =
 
     let private verifyWith validate (authorization: string) (secret: string) =
         authorizationClaims authorization secret
-        |> Result.bind (fun claims -> validate claims |> Result.mapError BadClaims |> Result.map (fun () -> claims))
+        |> Result.bind (fun claims ->
+            validate claims |> Result.mapError BadClaims |> Result.map (fun () -> claims))
 
     let verifyWriteAuthorization authorization secret tenant doc now =
         verifyWith (fun c -> validateWriteAccess c tenant doc now) authorization secret

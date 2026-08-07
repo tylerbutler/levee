@@ -39,7 +39,10 @@ module Origin =
                 | -1 -> rest
                 | slash -> rest.Substring(0, slash)
 
-            if authority = "" then None else Some(authority.ToLowerInvariant())
+            if authority = "" then
+                None
+            else
+                Some(authority.ToLowerInvariant())
 
     /// Same-origin rule: strip the scheme, compare the authority (host plus
     /// any port) case-insensitively. Malformed/opaque origins never match.

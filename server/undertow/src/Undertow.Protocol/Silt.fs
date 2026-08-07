@@ -19,23 +19,29 @@ module Silt =
     type Fetch = string -> string option
 
     type Person =
-        { Name: string
-          Email: string
-          Date: string }
+        {
+            Name: string
+            Email: string
+            Date: string
+        }
 
     type TreeEntry =
-        { Path: string
-          Mode: string
-          Kind: string
-          Size: int64
-          Sha: string }
+        {
+            Path: string
+            Mode: string
+            Kind: string
+            Size: int64
+            Sha: string
+        }
 
     type Commit =
-        { Tree: string
-          Parents: string list
-          Message: string
-          Author: Person
-          Committer: Person }
+        {
+            Tree: string
+            Parents: string list
+            Message: string
+            Author: Person
+            Committer: Person
+        }
 
     // ── Hashing ─────────────────────────────────────────────────────────────
 
@@ -89,9 +95,11 @@ module Silt =
                 | _ -> ""
             | _ -> ""
 
-        { Name = Dyn.stringField "name" el |> Option.defaultValue ""
-          Email = Dyn.stringField "email" el |> Option.defaultValue ""
-          Date = date }
+        {
+            Name = Dyn.stringField "name" el |> Option.defaultValue ""
+            Email = Dyn.stringField "email" el |> Option.defaultValue ""
+            Date = date
+        }
 
     /// Decode a tree body into its entries.
     let decodeTree (body: string) : TreeEntry list option =
@@ -109,14 +117,19 @@ module Silt =
                         match Dyn.stringField "path" e, Dyn.stringField "sha" e with
                         | Some path, Some sha ->
                             Some
-                                { Path = path
-                                  Mode = Dyn.stringField "mode" e |> Option.defaultValue "100644"
-                                  Kind = Dyn.stringField "type" e |> Option.defaultValue "blob"
-                                  Size = Dyn.intField "size" e |> Option.defaultValue 0L
-                                  Sha = sha }
+                                {
+                                    Path = path
+                                    Mode = Dyn.stringField "mode" e |> Option.defaultValue "100644"
+                                    Kind = Dyn.stringField "type" e |> Option.defaultValue "blob"
+                                    Size = Dyn.intField "size" e |> Option.defaultValue 0L
+                                    Sha = sha
+                                }
                         | _ -> None)
 
-                if List.length decoded = List.length entries then Some decoded else None
+                if List.length decoded = List.length entries then
+                    Some decoded
+                else
+                    None
 
     /// Decode a commit body.
     let decodeCommit (body: string) : Commit option =
@@ -148,11 +161,13 @@ module Silt =
                     |> Option.defaultValue []
 
                 Some
-                    { Tree = tree
-                      Parents = parents
-                      Message = Dyn.stringField "message" el |> Option.defaultValue ""
-                      Author = author
-                      Committer = committer }
+                    {
+                        Tree = tree
+                        Parents = parents
+                        Message = Dyn.stringField "message" el |> Option.defaultValue ""
+                        Author = author
+                        Committer = committer
+                    }
             | _ -> None
 
     /// Decode a ref-update body into (ref, sha).
@@ -192,7 +207,12 @@ module Silt =
         $"{baseUrl}/repos/{tenant}/git/{kind}/{sha}"
 
     let private personJson (person: Person) =
-        JObj [ "name", JStr person.Name; "email", JStr person.Email; "date", JStr person.Date ]
+        JObj
+            [
+                "name", JStr person.Name
+                "email", JStr person.Email
+                "date", JStr person.Date
+            ]
 
     let private commitHashJson baseUrl tenant kind sha =
         JObj [ "sha", JStr sha; "url", JStr(objectUrl baseUrl tenant kind sha) ]
@@ -203,14 +223,21 @@ module Silt =
             blobContent content encoding
             |> Option.map (fun bytes ->
                 JObj
-                    [ "sha", JStr sha
-                      "size", JInt(int64 bytes.Length)
-                      "content", JStr content
-                      "encoding", JStr encoding
-                      "url", JStr(objectUrl baseUrl tenant "blobs" sha) ]))
+                    [
+                        "sha", JStr sha
+                        "size", JInt(int64 bytes.Length)
+                        "content", JStr content
+                        "encoding", JStr encoding
+                        "url", JStr(objectUrl baseUrl tenant "blobs" sha)
+                    ]))
 
     /// Flatten nested trees depth-first, capped at `depth` levels.
-    let rec private flattenTree (fetch: Fetch) (prefix: string) (entries: TreeEntry list) (depth: int) =
+    let rec private flattenTree
+        (fetch: Fetch)
+        (prefix: string)
+        (entries: TreeEntry list)
+        (depth: int)
+        =
         entries
         |> List.collect (fun entry ->
             let path = if prefix = "" then entry.Path else $"{prefix}/{entry.Path}"
@@ -229,35 +256,47 @@ module Silt =
     let private treeResponse baseUrl tenant sha body recursive fetch =
         decodeTree body
         |> Option.map (fun entries ->
-            let entries = if recursive then flattenTree fetch "" entries 64 else entries
+            let entries =
+                if recursive then
+                    flattenTree fetch "" entries 64
+                else
+                    entries
 
             JObj
-                [ "sha", JStr sha
-                  "url", JStr(objectUrl baseUrl tenant "trees" sha)
-                  "tree",
-                  JArr(
-                      entries
-                      |> List.map (fun entry ->
-                          JObj
-                              [ "path", JStr entry.Path
-                                "mode", JStr entry.Mode
-                                "type", JStr entry.Kind
-                                "size", JInt entry.Size
-                                "sha", JStr entry.Sha
-                                "url", JStr(objectUrl baseUrl tenant (entry.Kind + "s") entry.Sha) ])
-                  ) ])
+                [
+                    "sha", JStr sha
+                    "url", JStr(objectUrl baseUrl tenant "trees" sha)
+                    "tree",
+                    JArr(
+                        entries
+                        |> List.map (fun entry ->
+                            JObj
+                                [
+                                    "path", JStr entry.Path
+                                    "mode", JStr entry.Mode
+                                    "type", JStr entry.Kind
+                                    "size", JInt entry.Size
+                                    "sha", JStr entry.Sha
+                                    "url",
+                                    JStr(objectUrl baseUrl tenant (entry.Kind + "s") entry.Sha)
+                                ])
+                    )
+                ])
 
     let private commitResponse baseUrl tenant sha body =
         decodeCommit body
         |> Option.map (fun commit ->
             JObj
-                [ "sha", JStr sha
-                  "url", JStr(objectUrl baseUrl tenant "commits" sha)
-                  "author", personJson commit.Author
-                  "committer", personJson commit.Committer
-                  "message", JStr commit.Message
-                  "tree", commitHashJson baseUrl tenant "trees" commit.Tree
-                  "parents", JArr(commit.Parents |> List.map (commitHashJson baseUrl tenant "commits")) ])
+                [
+                    "sha", JStr sha
+                    "url", JStr(objectUrl baseUrl tenant "commits" sha)
+                    "author", personJson commit.Author
+                    "committer", personJson commit.Committer
+                    "message", JStr commit.Message
+                    "tree", commitHashJson baseUrl tenant "trees" commit.Tree
+                    "parents",
+                    JArr(commit.Parents |> List.map (commitHashJson baseUrl tenant "commits"))
+                ])
 
     /// Build the REST response for a stored object of `kind`.
     let objectResponse baseUrl tenant kind sha body recursive (fetch: Fetch) : Json option =
@@ -271,16 +310,21 @@ module Silt =
         let commitUrl = objectUrl baseUrl tenant "commits" sha
 
         JObj
-            [ "sha", JStr sha
-              "url", JStr commitUrl
-              "commit",
-              JObj
-                  [ "url", JStr commitUrl
-                    "author", personJson commit.Author
-                    "committer", personJson commit.Committer
-                    "message", JStr commit.Message
-                    "tree", commitHashJson baseUrl tenant "trees" commit.Tree ]
-              "parents", JArr(commit.Parents |> List.map (commitHashJson baseUrl tenant "commits")) ]
+            [
+                "sha", JStr sha
+                "url", JStr commitUrl
+                "commit",
+                JObj
+                    [
+                        "url", JStr commitUrl
+                        "author", personJson commit.Author
+                        "committer", personJson commit.Committer
+                        "message", JStr commit.Message
+                        "tree", commitHashJson baseUrl tenant "trees" commit.Tree
+                    ]
+                "parents",
+                JArr(commit.Parents |> List.map (commitHashJson baseUrl tenant "commits"))
+            ]
 
     /// Build the detailed commit response for a single commit body.
     let commitDetailsResponse baseUrl tenant sha body : Json option =
@@ -299,7 +343,8 @@ module Silt =
                 | Some commit ->
                     commitDetailsJson baseUrl tenant sha commit
                     :: (match commit.Parents with
-                        | parent :: _ -> commitHistoryResponse baseUrl tenant parent (count - 1) fetch
+                        | parent :: _ ->
+                            commitHistoryResponse baseUrl tenant parent (count - 1) fetch
                         | [] -> [])
 
     /// Build a ref response for `ref` pointing at commit `sha`.
@@ -307,10 +352,14 @@ module Silt =
         let ref = normalizeRef ref
 
         JObj
-            [ "ref", JStr ref
-              "url", JStr $"{baseUrl}/repos/{tenant}/git/refs/{ref.Substring 5}"
-              "object",
-              JObj
-                  [ "type", JStr "commit"
-                    "sha", JStr sha
-                    "url", JStr(objectUrl baseUrl tenant "commits" sha) ] ]
+            [
+                "ref", JStr ref
+                "url", JStr $"{baseUrl}/repos/{tenant}/git/refs/{ref.Substring 5}"
+                "object",
+                JObj
+                    [
+                        "type", JStr "commit"
+                        "sha", JStr sha
+                        "url", JStr(objectUrl baseUrl tenant "commits" sha)
+                    ]
+            ]

@@ -69,7 +69,10 @@ module Json =
     let private compareUtf8 (a: string) (b: string) : int =
         let ba = Text.Encoding.UTF8.GetBytes a
         let bb = Text.Encoding.UTF8.GetBytes b
-        let s = System.MemoryExtensions.SequenceCompareTo(ReadOnlySpan<byte> ba, ReadOnlySpan<byte> bb)
+
+        let s =
+            System.MemoryExtensions.SequenceCompareTo(ReadOnlySpan<byte> ba, ReadOnlySpan<byte> bb)
+
         s
 
     /// Equivalent of floodgate's normalize_client_json: recursively sort JObj
@@ -128,7 +131,10 @@ module Dyn =
         | _ -> None
 
     let tryObject (el: JsonElement) : JsonElement option =
-        if el.ValueKind = JsonValueKind.Object then Some el else None
+        if el.ValueKind = JsonValueKind.Object then
+            Some el
+        else
+            None
 
     let tryArray (el: JsonElement) : JsonElement list option =
         if el.ValueKind = JsonValueKind.Array then
@@ -150,9 +156,5 @@ module Dyn =
             | _ -> JFloat(el.GetDouble())
         | JsonValueKind.Array -> JArr(el.EnumerateArray() |> Seq.map toJson |> Seq.toList)
         | JsonValueKind.Object ->
-            JObj(
-                el.EnumerateObject()
-                |> Seq.map (fun p -> p.Name, toJson p.Value)
-                |> Seq.toList
-            )
+            JObj(el.EnumerateObject() |> Seq.map (fun p -> p.Name, toJson p.Value) |> Seq.toList)
         | _ -> JNull

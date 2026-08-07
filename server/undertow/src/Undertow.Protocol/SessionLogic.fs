@@ -30,7 +30,9 @@ module SessionLogic =
     /// Validate that summarize contents carry all required fields.
     let validateSummarizeContents (contents: Map<string, Json>) : Result<unit, string> =
         let required = [ "handle"; "message"; "parents"; "head" ]
-        let missing = required |> List.filter (fun field -> not (Map.containsKey field contents))
+
+        let missing =
+            required |> List.filter (fun field -> not (Map.containsKey field contents))
 
         match missing with
         | [] -> Ok()
@@ -68,42 +70,55 @@ module SessionLogic =
         op :: history |> List.truncate maxSize
 
     type SequencedOpParams =
-        { ClientId: string
-          SequenceNumber: int64
-          MinimumSequenceNumber: int64
-          ClientSequenceNumber: int64
-          ReferenceSequenceNumber: int64
-          OpType: string
-          Contents: Json
-          Metadata: Json
-          Timestamp: int64 }
+        {
+            ClientId: string
+            SequenceNumber: int64
+            MinimumSequenceNumber: int64
+            ClientSequenceNumber: int64
+            ReferenceSequenceNumber: int64
+            OpType: string
+            Contents: Json
+            Metadata: Json
+            Timestamp: int64
+        }
 
     /// Build a sequenced op as an ordered field list (the wire order).
     let buildSequencedOp (p: SequencedOpParams) : (string * Json) list =
-        [ "clientId", JStr p.ClientId
-          "sequenceNumber", JInt p.SequenceNumber
-          "minimumSequenceNumber", JInt p.MinimumSequenceNumber
-          "clientSequenceNumber", JInt p.ClientSequenceNumber
-          "referenceSequenceNumber", JInt p.ReferenceSequenceNumber
-          "type", JStr p.OpType
-          "contents", p.Contents
-          "metadata", p.Metadata
-          "timestamp", JInt p.Timestamp ]
+        [
+            "clientId", JStr p.ClientId
+            "sequenceNumber", JInt p.SequenceNumber
+            "minimumSequenceNumber", JInt p.MinimumSequenceNumber
+            "clientSequenceNumber", JInt p.ClientSequenceNumber
+            "referenceSequenceNumber", JInt p.ReferenceSequenceNumber
+            "type", JStr p.OpType
+            "contents", p.Contents
+            "metadata", p.Metadata
+            "timestamp", JInt p.Timestamp
+        ]
 
     /// Build a summaryAck as an ordered field list. The ack consumes SN sn+1
     /// and references the summarize op's SN.
-    let buildSummaryAck (handle: string) (sn: int64) (msn: int64) (timestamp: int64) : (string * Json) list =
+    let buildSummaryAck
+        (handle: string)
+        (sn: int64)
+        (msn: int64)
+        (timestamp: int64)
+        : (string * Json) list =
         let contents =
             JObj
-                [ "handle", JStr handle
-                  "summaryProposal", JObj [ "summarySequenceNumber", JInt sn ] ]
+                [
+                    "handle", JStr handle
+                    "summaryProposal", JObj [ "summarySequenceNumber", JInt sn ]
+                ]
 
-        [ "clientId", JNull
-          "sequenceNumber", JInt(sn + 1L)
-          "minimumSequenceNumber", JInt msn
-          "clientSequenceNumber", JInt -1L
-          "referenceSequenceNumber", JInt sn
-          "type", JStr "summaryAck"
-          "contents", contents
-          "metadata", JNull
-          "timestamp", JInt timestamp ]
+        [
+            "clientId", JNull
+            "sequenceNumber", JInt(sn + 1L)
+            "minimumSequenceNumber", JInt msn
+            "clientSequenceNumber", JInt -1L
+            "referenceSequenceNumber", JInt sn
+            "type", JStr "summaryAck"
+            "contents", contents
+            "metadata", JNull
+            "timestamp", JInt timestamp
+        ]

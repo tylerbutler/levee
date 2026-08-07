@@ -61,6 +61,7 @@ public sealed class SocketIoTransport(
     ChannelDispatcher dispatcher,
     SocketRegistry registry,
     OriginPolicyBox originPolicy,
+    TransportGuards guards,
     long maxFrameBytes,
     TimeProvider time)
 {
@@ -89,31 +90,58 @@ public sealed class SocketIoTransport(
             return;
         }
 
-        using var socket = await context.WebSockets.AcceptWebSocketAsync();
-        // The Fluid clientId IS the Engine.IO sid: 32 uppercase hex.
-        var socketId = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
-        var connection = new SocketConnection(socketId, socket, SocketIoFraming.Instance, time);
-        registry.Register(connection);
-
-        connection.TryEnqueue(EncodeOpen(socketId));
-        var pinger = Task.Run(() => PingLoopAsync(connection));
+        // Slot acquired before the upgrade — rejection is a 429 status, not a
+        // close frame. The real peer address, never X-Forwarded-For.
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        if (!guards.Connections.TryAcquire(ip))
+        {
+            context.Response.StatusCode = 429;
+            return;
+        }
 
         try
         {
-            await ReadLoopAsync(connection, socket, context.RequestAborted);
+            using var socket = await context.WebSockets.AcceptWebSocketAsync();
+            // The Fluid clientId IS the Engine.IO sid: 32 uppercase hex.
+            var socketId = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
+            var connection = new SocketConnection(socketId, socket, SocketIoFraming.Instance, time);
+            registry.Register(connection);
+
+            connection.TryEnqueue(EncodeOpen(socketId));
+            var pinger = Task.Run(() => PingLoopAsync(connection));
+
+            try
+            {
+                await ReadLoopAsync(connection, socket, context.RequestAborted);
+            }
+            finally
+            {
+                await dispatcher.TerminateAllAsync(connection, sendClose: false);
+                registry.Unregister(socketId);
+                await connection.DisposeAsync();
+                await pinger;
+            }
         }
         finally
         {
-            await dispatcher.TerminateAllAsync(connection, sendClose: false);
-            registry.Unregister(socketId);
-            await connection.DisposeAsync();
-            await pinger;
+            guards.Connections.Release(ip);
         }
     }
 
-    private byte[] EncodeOpen(string sid) =>
+    private byte[] EncodeOpen(string sid) => EncodeOpenFrame(sid, maxFrameBytes);
+
+    /// <summary>The Engine.IO open packet. maxPayload is the configured frame
+    /// cap — the same value enforced per frame and advertised in IConnected.</summary>
+    public static byte[] EncodeOpenFrame(string sid, long maxPayload) =>
         Encoding.UTF8.GetBytes(
-            $$"""0{"sid":"{{sid}}","upgrades":[],"pingInterval":{{PingIntervalMs}},"pingTimeout":{{PingTimeoutMs}},"maxPayload":{{maxFrameBytes}}}""");
+            $$"""0{"sid":"{{sid}}","upgrades":[],"pingInterval":{{PingIntervalMs}},"pingTimeout":{{PingTimeoutMs}},"maxPayload":{{maxPayload}}}""");
+
+    /// <summary>Whether the peer has gone silent past the advertised
+    /// pingTimeout. The allowance is interval + timeout because the deadline
+    /// is evaluated on the interval tick — a pong arriving just before one
+    /// tick must not be judged stale at the next.</summary>
+    public static bool PongOverdue(TimeProvider time, long lastInboundTimestamp) =>
+        time.GetElapsedTime(lastInboundTimestamp).TotalMilliseconds > PingIntervalMs + PingTimeoutMs;
 
     /// <summary>
     /// One timer serves both jobs: send the ping, and enforce the pingTimeout
@@ -128,9 +156,7 @@ public sealed class SocketIoTransport(
             while (!connection.Closed.IsCancellationRequested)
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(PingIntervalMs), time, connection.Closed);
-                var silentMs = time.GetElapsedTime(
-                    Volatile.Read(ref connection.LastInboundTimestamp)).TotalMilliseconds;
-                if (silentMs > PingIntervalMs + PingTimeoutMs)
+                if (PongOverdue(time, Volatile.Read(ref connection.LastInboundTimestamp)))
                 {
                     connection.Abort(WebSocketCloseStatus.EndpointUnavailable, "ping timeout");
                     return;
@@ -148,6 +174,8 @@ public sealed class SocketIoTransport(
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, connection.Closed);
         var stickyTopic = "";
+        var messageBucket = guards.NewMessageBucket();
+        var joinBucket = guards.NewJoinBucket();
         while (socket.State == WebSocketState.Open)
         {
             var frame = await FrameReader.ReadAsync(socket, maxFrameBytes, linked.Token);
@@ -170,17 +198,22 @@ public sealed class SocketIoTransport(
 
             Volatile.Write(ref connection.LastInboundTimestamp, time.GetTimestamp());
 
+            // Over-budget frames are dropped, matching the Gleam transport.
+            if (!messageBucket.TryTake())
+                continue;
+
             // Binary frames have no Engine.IO meaning here; ignore.
             if (frame.Binary || frame.Text is null)
                 continue;
 
-            stickyTopic = await DispatchAsync(connection, frame.Text, stickyTopic);
+            stickyTopic = await DispatchAsync(connection, frame.Text, stickyTopic, joinBucket);
         }
     }
 
     /// <summary>Classify and dispatch one text frame; returns the (possibly
     /// updated) sticky topic. Unrecognized frames are ignored silently.</summary>
-    private async Task<string> DispatchAsync(SocketConnection connection, byte[] text, string stickyTopic)
+    private async Task<string> DispatchAsync(
+        SocketConnection connection, byte[] text, string stickyTopic, TokenBucket joinBucket)
     {
         if (text.Length == 1 && text[0] == (byte)'2')
         {
@@ -222,6 +255,9 @@ public sealed class SocketIoTransport(
                 var tenant = StringField(payload, "tenantId");
                 var documentId = StringField(payload, "id");
                 if (tenant.Length == 0 || documentId.Length == 0)
+                    return stickyTopic;
+
+                if (!joinBucket.TryTake())
                     return stickyTopic;
 
                 var topic = $"document:{tenant}:{documentId}";
