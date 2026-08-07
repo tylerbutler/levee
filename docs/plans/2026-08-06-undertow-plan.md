@@ -97,13 +97,14 @@ details of that landing are worth carrying over rather than rediscovering:
   `exists`/`clients`/`roster` answer from the registry plus storage with no process at all.
   Undertow's `DocumentRegistry` needs the same split — a `TryGet` that does not run the
   `Lazy` factory, alongside the get-or-create used by writes.
-- **Acks precede durability in the Gleam handlers.** `Submit` sends `Assigned` and only
-  *then* calls `store.put_op`; `SubmitSummary` acks before `store.put_summary`. The old
-  shared mailbox concealed this, because a subsequent read queued behind the write. It does
-  not survive per-document actors, and it is why Gleam's `since`/`summary` still route
-  through the document's actor rather than reading storage directly. **Undertow does not
-  inherit this problem** — its critical section commits storage at step 3 and replies after
-  — which is one place the .NET design is genuinely better, not merely different.
+- **Write before you ack.** Two of Gleam's four submit handlers used to reply *before*
+  calling `store.put_op`, so a caller could wake on the ack and read storage back before the
+  write ran — and a crash in that window acked a sequence number that was never persisted.
+  `2e59238` aligned all four on write-then-ack, which is what this plan's critical section
+  already does (storage at step 3, reply after). Called out because the mis-ordered pair
+  looked deliberate rather than accidental, and because it is invisible to the conformance
+  suites: it only shows up as a race between an ack and a direct storage read, and the
+  single-write case usually wins that race even when the order is wrong.
 
 So there is no distributed reference behaviour to port. Five things genuinely must be
 replicated:
