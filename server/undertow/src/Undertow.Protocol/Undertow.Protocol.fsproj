@@ -12,5 +12,6 @@
     <Compile Include="Summary.fs" />
     <Compile Include="SessionLogic.fs" />
     <Compile Include="Signals.fs" />
+    <Compile Include="Silt.fs" />
   </ItemGroup>
 </Project>
