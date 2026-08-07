@@ -29,7 +29,8 @@ public sealed record UndertowConfig(
     int HeartbeatIntervalMs,
     int HeartbeatTimeoutMs,
     long DocIdleMs,
-    bool CompatRestoreMsnFromSummary)
+    bool CompatRestoreMsnFromSummary,
+    bool OpPruneBelowSummary)
 {
     public const long DefaultMaxFrameBytes = 16_777_216;
 
@@ -96,7 +97,8 @@ public sealed record UndertowConfig(
             HeartbeatIntervalMs: (int)Positive("HEARTBEAT_INTERVAL_MS", 30_000),
             HeartbeatTimeoutMs: (int)Positive("HEARTBEAT_TIMEOUT_MS", 60_000),
             DocIdleMs: Positive("DOC_IDLE_MS", 300_000),
-            CompatRestoreMsnFromSummary: Get("COMPAT_RESTORE_MSN_FROM_SUMMARY", "") == "1");
+            CompatRestoreMsnFromSummary: Get("COMPAT_RESTORE_MSN_FROM_SUMMARY", "") == "1",
+            OpPruneBelowSummary: Get("OP_PRUNE_BELOW_SUMMARY", "") == "1");
     }
 
     public static string Topic(string tenant, string doc) => $"document:{tenant}:{doc}";

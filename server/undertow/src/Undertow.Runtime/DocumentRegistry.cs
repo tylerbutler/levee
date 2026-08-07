@@ -10,13 +10,15 @@ namespace Undertow.Runtime;
 /// not allocate a session for an unknown id.
 /// </summary>
 public sealed class DocumentRegistry(
-    IDocumentStore store, IGitObjectStore gitObjects, TimeProvider time, bool compatRestoreMsnFromSummary)
+    IDocumentStore store, IGitObjectStore gitObjects, TimeProvider time, bool compatRestoreMsnFromSummary,
+    bool pruneOpsBelowSummary = false)
 {
     private readonly ConcurrentDictionary<string, Lazy<Task<DocumentSession>>> _sessions = new();
 
     public Task<DocumentSession> GetOrCreateAsync(string topic) =>
         _sessions.GetOrAdd(topic, t => new Lazy<Task<DocumentSession>>(() =>
-            DocumentSession.RehydrateAsync(store, gitObjects, t, time, compatRestoreMsnFromSummary))).Value;
+            DocumentSession.RehydrateAsync(
+                store, gitObjects, t, time, compatRestoreMsnFromSummary, pruneOpsBelowSummary))).Value;
 
     /// <summary>Allocation-free lookup: null when no live session exists.</summary>
     public DocumentSession? TryGet(string topic) =>
