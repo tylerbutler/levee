@@ -73,16 +73,34 @@ builder.Services.AddSingleton(sp => new Undertow.Runtime.ChannelDispatcher(
     sp.GetRequiredService<Undertow.Runtime.IChannelBroadcaster>(),
     sp.GetRequiredService<Undertow.Runtime.IChannelHandler>()));
 builder.Services.AddSingleton(Undertow.Protocol.OriginPolicyBox.FromEnv(config.AllowedOrigins));
+builder.Services.AddSingleton(sp => new Undertow.Runtime.TransportGuards(
+    new Undertow.Runtime.ConnectionLimiter(config.MaxConnectionsPerIp, config.MaxConnections),
+    config.MessageRate, config.MessageBurst, config.JoinRate, config.JoinBurst,
+    sp.GetRequiredService<TimeProvider>()));
 builder.Services.AddSingleton(sp => new Undertow.Transports.PhoenixTransport(
     sp.GetRequiredService<Undertow.Runtime.ChannelDispatcher>(),
     sp.GetRequiredService<Undertow.Runtime.SocketRegistry>(),
     sp.GetRequiredService<Undertow.Protocol.OriginPolicyBox>(),
+    sp.GetRequiredService<Undertow.Runtime.TransportGuards>(),
     config.MaxFrameBytes, sp.GetRequiredService<TimeProvider>()));
 builder.Services.AddSingleton(sp => new Undertow.Transports.SocketIoTransport(
     sp.GetRequiredService<Undertow.Runtime.ChannelDispatcher>(),
     sp.GetRequiredService<Undertow.Runtime.SocketRegistry>(),
     sp.GetRequiredService<Undertow.Protocol.OriginPolicyBox>(),
+    sp.GetRequiredService<Undertow.Runtime.TransportGuards>(),
     config.MaxFrameBytes, sp.GetRequiredService<TimeProvider>()));
+
+// The two reapers: the coordinator liveness sweep (stale RSNs must not pin
+// MSN) and idle-document eviction.
+builder.Services.AddSingleton(sp => new Undertow.Runtime.SocketSweeper(
+    sp.GetRequiredService<Undertow.Runtime.SocketRegistry>(),
+    sp.GetRequiredService<Undertow.Runtime.ChannelDispatcher>(),
+    sp.GetRequiredService<TimeProvider>(), config.HeartbeatTimeoutMs));
+builder.Services.AddSingleton(sp => new Undertow.Runtime.DocumentIdleSweeper(
+    sp.GetRequiredService<Undertow.Runtime.DocumentRegistry>(),
+    sp.GetRequiredService<TimeProvider>(), config.DocIdleMs));
+builder.Services.AddHostedService<SocketSweeperService>();
+builder.Services.AddHostedService<DocumentIdleSweeperService>();
 
 builder.WebHost.UseUrls($"http://{config.Bind}:{config.Port}");
 

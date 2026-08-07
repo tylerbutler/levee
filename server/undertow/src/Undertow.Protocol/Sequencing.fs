@@ -8,14 +8,14 @@ namespace Undertow.Protocol
 /// - MSN: min(RSN of all connected clients), never decreases
 module Sequencing =
 
-    type ClientSequenceState =
-        { LastCsn: int64
-          LastRsn: int64 }
+    type ClientSequenceState = { LastCsn: int64; LastRsn: int64 }
 
     type SequenceState =
-        { SequenceNumber: int64
-          MinimumSequenceNumber: int64
-          ClientStates: Map<string, ClientSequenceState> }
+        {
+            SequenceNumber: int64
+            MinimumSequenceNumber: int64
+            ClientStates: Map<string, ClientSequenceState>
+        }
 
     type SequenceError =
         | InvalidCsn of expectedGreaterThan: int64 * received: int64
@@ -27,14 +27,18 @@ module Sequencing =
         | SequenceError of SequenceError
 
     let create () =
-        { SequenceNumber = 0L
-          MinimumSequenceNumber = 0L
-          ClientStates = Map.empty }
+        {
+            SequenceNumber = 0L
+            MinimumSequenceNumber = 0L
+            ClientStates = Map.empty
+        }
 
     let fromCheckpoint (sn: int64) (msn: int64) =
-        { SequenceNumber = sn
-          MinimumSequenceNumber = msn
-          ClientStates = Map.empty }
+        {
+            SequenceNumber = sn
+            MinimumSequenceNumber = msn
+            ClientStates = Map.empty
+        }
 
     /// MSN = min(last RSN of all connected clients); with no clients it stays
     /// put, and it can never decrease.
@@ -52,14 +56,16 @@ module Sequencing =
 
         { state with
             ClientStates = clients
-            MinimumSequenceNumber = calculateMsn clients state.MinimumSequenceNumber }
+            MinimumSequenceNumber = calculateMsn clients state.MinimumSequenceNumber
+        }
 
     let clientLeave (state: SequenceState) (clientId: string) =
         let clients = Map.remove clientId state.ClientStates
 
         { state with
             ClientStates = clients
-            MinimumSequenceNumber = calculateMsn clients state.MinimumSequenceNumber }
+            MinimumSequenceNumber = calculateMsn clients state.MinimumSequenceNumber
+        }
 
     /// Assign a sequence number to an incoming op. Validation order is part of
     /// the contract: UnknownClient -> InvalidCsn -> InvalidRsn.
@@ -76,9 +82,11 @@ module Sequencing =
             let newMsn = calculateMsn clients state.MinimumSequenceNumber
 
             let newState =
-                { SequenceNumber = newSn
-                  MinimumSequenceNumber = newMsn
-                  ClientStates = clients }
+                {
+                    SequenceNumber = newSn
+                    MinimumSequenceNumber = newMsn
+                    ClientStates = clients
+                }
 
             SequenceOk(newState, newSn, newMsn)
 
@@ -89,14 +97,17 @@ module Sequencing =
         | None -> Error(UnknownClient clientId)
         | Some clientState ->
             let updated =
-                { clientState with LastRsn = max clientState.LastRsn newRsn }
+                { clientState with
+                    LastRsn = max clientState.LastRsn newRsn
+                }
 
             let clients = Map.add clientId updated state.ClientStates
 
             Ok
                 { state with
                     ClientStates = clients
-                    MinimumSequenceNumber = calculateMsn clients state.MinimumSequenceNumber }
+                    MinimumSequenceNumber = calculateMsn clients state.MinimumSequenceNumber
+                }
 
     /// Reserve a sequence number for a server-minted system message (e.g. a
     /// summaryAck): advances SN by one so the next client op can't collide.
@@ -106,13 +117,16 @@ module Sequencing =
 
         { state with
             SequenceNumber = reservedSn
-            MinimumSequenceNumber = newMsn },
+            MinimumSequenceNumber = newMsn
+        },
         reservedSn
 
     let currentSn (state: SequenceState) = state.SequenceNumber
     let currentMsn (state: SequenceState) = state.MinimumSequenceNumber
     let clientCount (state: SequenceState) = Map.count state.ClientStates
-    let isClientConnected (state: SequenceState) clientId = Map.containsKey clientId state.ClientStates
+
+    let isClientConnected (state: SequenceState) clientId =
+        Map.containsKey clientId state.ClientStates
 
     /// All connected client IDs (sorted, matching Erlang dict key order).
     let connectedClients (state: SequenceState) =

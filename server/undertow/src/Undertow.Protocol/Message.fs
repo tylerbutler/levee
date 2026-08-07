@@ -7,67 +7,79 @@ module Message =
 
     /// IConnect — sent by client to initiate document collaboration.
     type ConnectMessage =
-        { TenantId: string
-          DocumentId: string
-          Token: string option
-          Client: Client
-          Versions: string list
-          DriverVersion: string option
-          Mode: ConnectionMode
-          Nonce: string option
-          Epoch: string option
-          SupportedFeatures: Map<string, Json> option
-          RelayUserAgent: string option }
+        {
+            TenantId: string
+            DocumentId: string
+            Token: string option
+            Client: Client
+            Versions: string list
+            DriverVersion: string option
+            Mode: ConnectionMode
+            Nonce: string option
+            Epoch: string option
+            SupportedFeatures: Map<string, Json> option
+            RelayUserAgent: string option
+        }
 
     /// Summary checkpoint metadata in a connect_document_success response.
     type SummaryContext =
-        { Handle: string
-          SequenceNumber: int64 }
+        {
+            Handle: string
+            SequenceNumber: int64
+        }
 
     /// Signal message (v2 format).
     type SignalMessage =
-        { ClientId: string option
-          Content: Json
-          SignalType: string option
-          ClientConnectionNumber: int64 option
-          ReferenceSequenceNumber: int64 option
-          TargetClientId: string option }
+        {
+            ClientId: string option
+            Content: Json
+            SignalType: string option
+            ClientConnectionNumber: int64 option
+            ReferenceSequenceNumber: int64 option
+            TargetClientId: string option
+        }
 
     /// IConnected — sent by server when connection succeeds.
     type ConnectedMessage =
-        { Claims: TokenClaims
-          ClientId: string
-          Existing: bool
-          MaxMessageSize: int64
-          Mode: ConnectionMode
-          ServiceConfiguration: ServiceConfiguration
-          InitialClients: SignalClient list
-          InitialMessages: SequencedDocumentMessage list
-          InitialSignals: SignalMessage list
-          SupportedVersions: string list
-          SupportedFeatures: Map<string, Json>
-          Version: string
-          Timestamp: int64 option
-          CheckpointSequenceNumber: int64 option
-          Epoch: string option
-          RelayServiceAgent: string option
-          SummaryContext: SummaryContext option }
+        {
+            Claims: TokenClaims
+            ClientId: string
+            Existing: bool
+            MaxMessageSize: int64
+            Mode: ConnectionMode
+            ServiceConfiguration: ServiceConfiguration
+            InitialClients: SignalClient list
+            InitialMessages: SequencedDocumentMessage list
+            InitialSignals: SignalMessage list
+            SupportedVersions: string list
+            SupportedFeatures: Map<string, Json>
+            Version: string
+            Timestamp: int64 option
+            CheckpointSequenceNumber: int64 option
+            Epoch: string option
+            RelayServiceAgent: string option
+            SummaryContext: SummaryContext option
+        }
 
     /// Connection error response.
     type ConnectError = { Code: int; Message: string }
 
     /// Sent signal message (client -> server, v2).
     type SentSignalMessage =
-        { Content: Json
-          SignalType: string option
-          ClientConnectionNumber: int64 option
-          ReferenceSequenceNumber: int64 option
-          TargetClientId: string option }
+        {
+            Content: Json
+            SignalType: string option
+            ClientConnectionNumber: int64 option
+            ReferenceSequenceNumber: int64 option
+            TargetClientId: string option
+        }
 
     /// Op broadcast message (server -> clients).
     type OpMessage =
-        { DocumentId: string
-          Ops: SequencedDocumentMessage list }
+        {
+            DocumentId: string
+            Ops: SequencedDocumentMessage list
+        }
 
     type MessageType =
         | NoOp

@@ -85,4 +85,5 @@ module Validation =
             $"Invalid reference sequence number: current SN is %d{currentSn}, received RSN %d{received}"
         | TokenExpired(expiredAt, _) -> $"Token expired at %d{expiredAt}"
         | MissingScope(required, _) -> $"Missing required scope: %s{required}"
-        | OperationNotAllowed(_, operation) -> $"Operation '%s{operation}' not allowed in read-only mode"
+        | OperationNotAllowed(_, operation) ->
+            $"Operation '%s{operation}' not allowed in read-only mode"

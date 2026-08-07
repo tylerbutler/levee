@@ -822,6 +822,103 @@ test-floodgate-presence-sync:
     FLOODGATE_MINT_CREDENTIAL=floodgate-example-mint-secret \
     pnpm test:vitest:integration
 
+# === UNDERTOW (.NET) ===
+
+# Build the Undertow .NET solution
+build-undertow:
+    cd server/undertow && dotnet build Undertow.slnx
+
+# Run the Undertow unit/integration test suites (F# Expecto + C# xunit)
+test-undertow:
+    cd server/undertow && dotnet test Undertow.slnx
+
+# Format check (CI parity): dotnet format for C#, fantomas for F#
+lint-undertow:
+    cd server/undertow && dotnet format Undertow.slnx --verify-no-changes
+    cd server/undertow && dotnet fantomas --check src tests
+
+# Start standalone Undertow server on :3000 with development credentials.
+# Never use these in production.
+undertow-server port="3000":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export UNDERTOW_JWT_SECRET="${UNDERTOW_JWT_SECRET:-dev-tenant-secret-key}"
+    export UNDERTOW_TOKEN_MINT_SECRET="${UNDERTOW_TOKEN_MINT_SECRET:-dev-token-mint-secret}"
+    export PORT={{port}}
+    cd server/undertow && dotnet run --project src/Undertow.Server
+
+# Run both wire protocols against ONE Undertow process — the .NET variant of
+# test-floodgate-dual-mode: the Routerlicious driver over Socket.IO and the
+# full levee-driver over the Phoenix endpoint, including cross-mode
+# collaboration on a shared document.
+test-undertow-dual-mode:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    export FLOODGATE_JWT_SECRET=floodgate-routerlicious-compat-secret
+    export FLOODGATE_TOKEN_MINT_SECRET=floodgate-routerlicious-mint-secret
+    export UNDERTOW_JWT_SECRET=$FLOODGATE_JWT_SECRET
+    export UNDERTOW_TOKEN_MINT_SECRET=$FLOODGATE_TOKEN_MINT_SECRET
+    export UNDERTOW_STORAGE_BACKEND=memory
+    export PORT=3000
+
+    server_pid=""
+    cleanup() {
+        [ -n "$server_pid" ] && kill -- "-$server_pid" 2>/dev/null || true
+    }
+    trap cleanup EXIT INT TERM
+
+    (cd server/undertow && dotnet build src/Undertow.Server >/dev/null)
+    scripts/setsid-portable bash -c 'cd server/undertow && exec dotnet src/Undertow.Server/bin/Debug/net10.0/Undertow.Server.dll' &
+    server_pid=$!
+
+    sleep 0.5
+    if ! kill -0 "$server_pid" 2>/dev/null; then
+        echo "ERROR: Undertow server process exited immediately." >&2
+        exit 1
+    fi
+
+    echo "Waiting for Undertow server to be ready..."
+    ready=false
+    for i in $(seq 1 30); do
+        code=$(curl --max-time 1 -s -o /dev/null -w "%{http_code}" \
+            -X POST http://localhost:3000/api/tenants/fluid/token-mint \
+            -H "Authorization: Bearer $FLOODGATE_TOKEN_MINT_SECRET" \
+            -H "Content-Type: application/json" \
+            -d '{"documentId":""}' \
+            2>/dev/null) || code="000"
+        if [ "$code" = "200" ]; then
+            echo "Undertow server ready (HTTP 200)."
+            ready=true
+            break
+        fi
+        echo "  waiting... ($i/30)"
+        sleep 1
+    done
+    if [ "$ready" = "false" ]; then
+        echo "ERROR: Undertow server not ready after 30s." >&2
+        exit 1
+    fi
+
+    cd client
+    echo "=== Socket.IO endpoint (Routerlicious driver) ==="
+    pnpm test:floodgate-routerlicious
+    echo "=== Phoenix endpoint (levee-driver) + cross-mode ==="
+    pnpm test:floodgate-phoenix
+
+# Drop-in parity: run Levee's unmodified integration suites against a
+# containerised Undertow, repointed only via LEVEE_* env. Nothing in the
+# suites is Undertow-aware, so a failure is a real behavioural difference.
+test-levee-suite-vs-undertow:
+    cd server/undertow && docker compose up -d --wait --build
+    cd client && LEVEE_HTTP_URL=http://localhost:3000 \
+        LEVEE_SOCKET_URL=ws://localhost:3000/socket \
+        LEVEE_TENANT_KEY=dev-tenant-secret-key \
+        pnpm vitest run integration; \
+        result=$?; \
+        cd ../server/undertow && docker compose down -v; \
+        exit $result
+
 # === DOCKER ===
 
 # Docker image name

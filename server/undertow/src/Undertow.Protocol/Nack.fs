@@ -28,26 +28,35 @@ module Nack =
         | _ -> None
 
     type NackContent =
-        { Code: int
-          ErrorType: NackErrorType
-          Message: string
-          RetryAfter: int64 option }
+        {
+            Code: int
+            ErrorType: NackErrorType
+            Message: string
+            RetryAfter: int64 option
+        }
 
     type Nack =
-        { Operation: DocumentMessage option
-          SequenceNumber: int64
-          Content: NackContent }
+        {
+            Operation: DocumentMessage option
+            SequenceNumber: int64
+            Content: NackContent
+        }
 
     let private make code errorType message retryAfter op =
-        { Operation = op
-          SequenceNumber = -1L
-          Content =
-            { Code = code
-              ErrorType = errorType
-              Message = message
-              RetryAfter = retryAfter } }
+        {
+            Operation = op
+            SequenceNumber = -1L
+            Content =
+                {
+                    Code = code
+                    ErrorType = errorType
+                    Message = message
+                    RetryAfter = retryAfter
+                }
+        }
 
-    let badRequest message op = make 400 BadRequestError message None op
+    let badRequest message op =
+        make 400 BadRequestError message None op
 
     let invalidScope requiredScope op =
         make 403 InvalidScopeError $"Missing required scope: %s{requiredScope}" None op
@@ -55,7 +64,8 @@ module Nack =
     let throttled (retryAfterSeconds: int64) op =
         make 429 ThrottlingError "Rate limit exceeded" (Some retryAfterSeconds) op
 
-    let limitExceeded message op = make 429 LimitExceededError message None op
+    let limitExceeded message op =
+        make 429 LimitExceededError message None op
 
     let readOnlyClient op =
         make 400 BadRequestError "Client is in read-only mode" None op
@@ -72,7 +82,12 @@ module Nack =
         make 413 BadRequestError $"Message size %d{actualSize} exceeds limit %d{maxSize}" None op
 
     let invalidRsn (currentSn: int64) (receivedRsn: int64) op =
-        make 400 BadRequestError $"Invalid RSN: current SN is %d{currentSn}, received %d{receivedRsn}" None op
+        make
+            400
+            BadRequestError
+            $"Invalid RSN: current SN is %d{currentSn}, received %d{receivedRsn}"
+            None
+            op
 
     let unknownClient (clientId: string) =
         make 400 BadRequestError $"Unknown client: %s{clientId}" None None

@@ -9,6 +9,7 @@
     <Compile Include="SpillwayTests.fs" />
     <Compile Include="SequencingProperties.fs" />
     <Compile Include="SiltTests.fs" />
+    <Compile Include="OriginTests.fs" />
     <Compile Include="Main.fs" />
   </ItemGroup>
   <ItemGroup>

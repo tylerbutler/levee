@@ -20,18 +20,22 @@ module Signet =
     /// A Fluid user identity as carried in a token's `user` claim. Properties
     /// carry anything beyond `id` (signet keeps `name` here).
     type User =
-        { Id: string
-          Properties: Map<string, Json> }
+        {
+            Id: string
+            Properties: Map<string, Json>
+        }
 
     type TokenClaims =
-        { DocumentId: string
-          Scopes: Scope list
-          TenantId: string
-          User: User
-          IssuedAt: int64
-          Expiration: int64
-          Version: string
-          Jti: string option }
+        {
+            DocumentId: string
+            Scopes: Scope list
+            TenantId: string
+            User: User
+            IssuedAt: int64
+            Expiration: int64
+            Version: string
+            Jti: string option
+        }
 
     let scopeToString scope =
         match scope with
@@ -225,8 +229,10 @@ module Signet =
                             // like the Gleam decoder does.
                             let name = Dyn.stringField "name" u |> Option.defaultValue id
 
-                            { Id = id
-                              Properties = Map.ofList [ "name", JStr name ] }))
+                            {
+                                Id = id
+                                Properties = Map.ofList [ "name", JStr name ]
+                            }))
 
                 match
                     Dyn.stringField "documentId" el,
@@ -239,14 +245,16 @@ module Signet =
                 with
                 | Some doc', Some tenant, Some exp, Some scopeStrings, Some user, Some iat, Some ver ->
                     let claims =
-                        { DocumentId = doc'
-                          Scopes = scopesFromStrings scopeStrings
-                          TenantId = tenant
-                          User = user
-                          IssuedAt = iat
-                          Expiration = exp
-                          Version = ver
-                          Jti = Dyn.stringField "jti" el }
+                        {
+                            DocumentId = doc'
+                            Scopes = scopesFromStrings scopeStrings
+                            TenantId = tenant
+                            User = user
+                            IssuedAt = iat
+                            Expiration = exp
+                            Version = ver
+                            Jti = Dyn.stringField "jti" el
+                        }
 
                     if claims.Version = "1.0" && claims.User.Id <> "" then
                         Ok claims
@@ -287,22 +295,22 @@ module Signet =
         (jti: string)
         : string =
         let header =
-            b64UrlEncode (
-                Json.toUtf8 (JObj [ "alg", JStr "HS256"; "typ", JStr "JWT" ])
-            )
+            b64UrlEncode (Json.toUtf8 (JObj [ "alg", JStr "HS256"; "typ", JStr "JWT" ]))
 
         let payload =
             b64UrlEncode (
                 Json.toUtf8 (
                     JObj
-                        [ "documentId", JStr documentId
-                          "tenantId", JStr tenant
-                          "scopes", JArr(scopes |> List.map (scopeToString >> JStr))
-                          "user", JObj [ "id", JStr userId ]
-                          "ver", JStr "1.0"
-                          "iat", JInt now
-                          "exp", JInt(now + expiresIn)
-                          "jti", JStr jti ]
+                        [
+                            "documentId", JStr documentId
+                            "tenantId", JStr tenant
+                            "scopes", JArr(scopes |> List.map (scopeToString >> JStr))
+                            "user", JObj [ "id", JStr userId ]
+                            "ver", JStr "1.0"
+                            "iat", JInt now
+                            "exp", JInt(now + expiresIn)
+                            "jti", JStr jti
+                        ]
                 )
             )
 
