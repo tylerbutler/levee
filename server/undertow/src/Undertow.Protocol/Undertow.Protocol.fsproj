@@ -13,5 +13,8 @@
     <Compile Include="SessionLogic.fs" />
     <Compile Include="Signals.fs" />
     <Compile Include="Silt.fs" />
+    <Compile Include="InitialSummary.fs" />
+    <Compile Include="Auth.fs" />
+    <Compile Include="Boundary.fs" />
   </ItemGroup>
 </Project>

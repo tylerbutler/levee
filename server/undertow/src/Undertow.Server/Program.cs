@@ -1,10 +1,70 @@
-// Phase 3 fills this in: env config, RestLess middleware, authorize_* helpers,
-// full REST router. Until then a /health stub proves the host wiring.
+using Undertow.Abstractions;
+using Undertow.Server;
+using Undertow.Storage.Memory;
+using Undertow.Storage.Sqlite;
+
+// --healthcheck argv mode: the chiseled runtime image has no shell or wget, so
+// the container HEALTHCHECK re-runs this binary. 127.0.0.1 rather than
+// localhost for the same IPv4 reason the Gleam Dockerfile documents.
+if (args.Contains("--healthcheck"))
+{
+    var healthPort = Environment.GetEnvironmentVariable("PORT") ?? "3000";
+    using var healthClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+    try
+    {
+        var response = await healthClient.GetAsync($"http://127.0.0.1:{healthPort}/health");
+        return response.IsSuccessStatusCode ? 0 : 1;
+    }
+    catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+    {
+        return 1;
+    }
+}
+
 var builder = WebApplication.CreateSlimBuilder(args);
+builder.Logging.AddSimpleConsole();
+
+var config = UndertowConfig.FromEnvironment(
+    Environment.GetEnvironmentVariable,
+    line => Console.WriteLine(line));
+
+if (config.JwtSecret.Length == 0)
+{
+    Console.Error.WriteLine("UNDERTOW_JWT_SECRET is required");
+    return 1;
+}
+
+builder.Services.AddSingleton(config);
+builder.Services.AddSingleton(TimeProvider.System);
+
+switch (config.StorageBackend)
+{
+    case "ets" or "shelf":
+        Directory.CreateDirectory(config.DataDir);
+        var sqlite = SqliteStorage.OpenFile(Path.Combine(config.DataDir, "undertow.db"));
+        builder.Services.AddSingleton<IDocumentStore>(sqlite);
+        builder.Services.AddSingleton<IGitObjectStore>(sqlite);
+        break;
+    case "memory":
+        builder.Services.AddSingleton<IDocumentStore>(new MemoryDocumentStore());
+        builder.Services.AddSingleton<IGitObjectStore>(new MemoryGitObjectStore());
+        break;
+    default:
+        Console.Error.WriteLine($"unsupported storage backend: {config.StorageBackend}");
+        return 1;
+}
+
+builder.Services.AddSingleton<DocumentService>();
+
+builder.WebHost.UseUrls($"http://{config.Bind}:{config.Port}");
+
 var app = builder.Build();
 
-app.MapGet("/health", () => Results.Text("{\"status\":\"ok\"}", "application/json"));
+// RestLess rewrites the request method, so it must run before routing.
+app.UseRestLess();
+app.MapUndertowRoutes();
 
 app.Run();
+return 0;
 
 public partial class Program;
