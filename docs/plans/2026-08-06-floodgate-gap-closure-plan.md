@@ -63,18 +63,44 @@ targeting, so the new three-client tests are what pin it.
 - **The `message_too_large` nack** — see the first landing's note below; the
   reasoning is unchanged.
 
-### Also still open
+### The two limitations recorded above, revisited
 
-- **Cross-table atomicity.** A `submitSummary` is still five independent DETS
-  inserts with no transaction; a crash mid-sequence leaves inconsistent state.
-  Rehydration tolerates a missing summary, so this is a known limitation rather
-  than a live fault.
-- **shelf table ownership.** `shelf_store`'s ETS tables are owned by whichever
-  process calls `new` — `main`, via `floodgate.serve` — and the `Backend` closures
-  capture the table handles, so a restart of that process would leave them stale.
-  `store.Backend` now has a `supervise` hook (used by `memory_store`), but fixing
-  this needs the *handles* to become late-bound, not just the owner. Recorded in
-  `shelf_store.new`.
+Both were followed up. One was a real fault and is fixed; the other was
+overstated.
+
+- **Cross-table atomicity — was a real fault, now fixed.** A summary is five
+  independent DETS writes with no transaction, and the ref was written *first*, in
+  `persist_summary` / `initial_summary.persist`, before the session committed its
+  own summary pointer. A crash in between left the ref at version N while the
+  session still advertised summary N-1 — so a loading client resolved the newer
+  snapshot through `GET /commits` and then replayed ops from the older sequence
+  number, re-applying ops already inside the snapshot.
+
+  Fixed by ordering pointer writes last: objects, then ops, then the session's
+  summary pointer, then the ref. Commits are content-addressed, so a crash-orphaned
+  one is garbage rather than a wrong answer, and the worst remaining prefix is a
+  *lagging* ref, which only costs a loading client extra op replay. The one prefix
+  that is still not benign — a summary pointer with no ref at all, which makes the
+  document unloadable — is repaired on rehydration; an existing ref is never
+  overwritten, since a lagging one is safe and clients may move refs through the
+  Historian API.
+
+  No write-ahead log or repair journal was needed: crash-prefix ordering plus one
+  idempotent repair covers it.
+
+- **shelf table ownership — overstated; note corrected, no code change.** The
+  original claim was that a restart of the table-owning process would leave the
+  captured handles stale. It cannot arise in the shipped server: the owner is the
+  process running `main`, which the generated entrypoint `spawn_link`s under a
+  trapping parent that calls `init:stop(1)`, so its death halts the node rather
+  than leaving a running system with dead tables. The container restarts it, the
+  tables reopen from DETS, and nothing is lost — `WriteThrough` has already flushed
+  every write and shelf's guardian process closes DETS cleanly on owner death.
+
+  What is genuinely unsupported is surviving that *in place*, which needs the
+  handles to be late-bound (named ETS tables plus a supervised owner), not just the
+  owner supervised. Only matters if floodgate is embedded and `shelf_store.new` is
+  called from a process that can die independently. Recorded in `shelf_store.new`.
 
 ## Implementation status — first landing (2026-08-06)
 
