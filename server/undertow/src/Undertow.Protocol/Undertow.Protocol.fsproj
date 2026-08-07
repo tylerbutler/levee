@@ -3,5 +3,14 @@
        mirrors the Gleam module DAG and is the dependency documentation. -->
   <ItemGroup>
     <Compile Include="Json.fs" />
+    <Compile Include="Signet.fs" />
+    <Compile Include="SpillwayTypes.fs" />
+    <Compile Include="Sequencing.fs" />
+    <Compile Include="Message.fs" />
+    <Compile Include="Nack.fs" />
+    <Compile Include="Validation.fs" />
+    <Compile Include="Summary.fs" />
+    <Compile Include="SessionLogic.fs" />
+    <Compile Include="Signals.fs" />
   </ItemGroup>
 </Project>
