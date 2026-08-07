@@ -324,6 +324,7 @@ Floodgate (Gleam server) reads its own set:
 | `FLOODGATE_MAX_FRAME_BYTES` | Inbound frame ceiling (default 16 MiB). Also the `maxMessageSize` advertised in IConnected and the Engine.IO handshake's `maxPayload` — one value, so the three cannot drift |
 | `FLOODGATE_MAX_CONNECTIONS_PER_IP` / `FLOODGATE_MAX_CONNECTIONS` | Concurrent socket ceilings, per peer address (default 256) and node-wide (default 4096) |
 | `FLOODGATE_MESSAGE_RATE` / `_BURST`, `FLOODGATE_JOIN_RATE` / `_BURST` | Per-socket inbound frame and join rate limits (defaults 1000/2000, 100/200) |
+| `FLOODGATE_HEARTBEAT_INTERVAL_MS` / `FLOODGATE_HEARTBEAT_TIMEOUT_MS` | Suggested client ping cadence and the server-side staleness window (defaults 30000 / 60000). The timeout drives the coordinator sweep that evicts a socket which stopped heartbeating — and, via the registered closer, actually closes it, so its stale RSN stops pinning the document's MSN. beryl derives its check interval as `timeout / 2`, so the timeout must be at least 2 |
 
 Set any limit to `0` to disable it. Both socket endpoints now share the same guards —
 origin policy, connection ceilings, rate limits, frame cap, and coordinator-initiated
