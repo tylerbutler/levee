@@ -186,6 +186,22 @@ so Floodgate is a drop-in replacement for the Elixir server for existing
 Verify with `just test-floodgate-dual-mode`, which runs both conformance suites
 plus cross-mode tests against a single server process.
 
+**Floodgate is multi-tenant**, dynamically, not just via the one
+`FLOODGATE_TENANT_ID`/`FLOODGATE_JWT_SECRET` pair: tenants are created,
+listed, shown, and deleted through an admin API
+(`GET/POST /api/tenants`, `GET/DELETE /api/tenants/:id`,
+`POST /api/tenants/:id/secrets/:slot`) gated by a Floodgate admin session or
+`FLOODGATE_ADMIN_KEY`, with response shapes matching what
+`server/levee_admin`'s Lustre UI already expects.
+Each tenant has two rotating JWT secret slots — verification tries both, minting
+uses slot 1 — and tenants persist on whichever storage backend documents use
+(`FLOODGATE_STORAGE_BACKEND`). `FLOODGATE_TENANT_ID`/`FLOODGATE_JWT_SECRET`
+still seed/ensure that one tenant at boot, so existing single-tenant
+deployments, clients, tests, docker, and parity suites are unaffected. See
+`server/floodgate/README.md`'s Multi-tenancy section for the full contract.
+Floodgate serves the shared Lustre UI itself and uses Vestibule for GitHub
+OAuth; the implementation and container remain Gleam/BEAM-only.
+
 **Drop-in parity check:** `just test-levee-suite-vs-floodgate` runs Levee's
 *unmodified* integration suites (`levee-driver`, `levee-client`,
 `levee-example`) against a containerised Floodgate, repointed only via
@@ -312,12 +328,15 @@ Floodgate (Gleam server) reads its own set:
 
 | Variable | Purpose |
 |----------|---------|
-| `FLOODGATE_TENANT_ID` | Configured tenant (default: `fluid`) |
-| `FLOODGATE_JWT_SECRET` | Required; verifies every REST and socket JWT |
+| `FLOODGATE_TENANT_ID` | Id of the startup tenant, seeded from `FLOODGATE_JWT_SECRET` at boot if not already registered (default: `fluid`) |
+| `FLOODGATE_JWT_SECRET` | Required; the startup tenant's first secret slot |
+| `FLOODGATE_GITHUB_CLIENT_ID` / `FLOODGATE_GITHUB_CLIENT_SECRET` | GitHub OAuth App credentials for the admin UI |
+| `FLOODGATE_ADMIN_GITHUB_USERS` | Comma-separated GitHub usernames allowed to administer Floodgate; unset denies OAuth login |
+| `FLOODGATE_ADMIN_KEY` | Bearer key for the tenant management API (`GET/POST /api/tenants`, etc.); unset disables that API |
 | `PORT` / `FLOODGATE_PORT` | Listen port (default: `3000`; `PORT` wins) |
 | `FLOODGATE_BIND` | Listen interface (default: `localhost`); containers need `0.0.0.0` |
 | `FLOODGATE_TOKEN_MINT_SECRET` | Enables the token-mint endpoint |
-| `FLOODGATE_STORAGE_BACKEND` | `ets`/`shelf` (persistent, default) or `memory` |
+| `FLOODGATE_STORAGE_BACKEND` | `ets`/`shelf` (persistent, default) or `memory` — also where tenants persist |
 | `FLOODGATE_DATA_DIR` | Shelf DETS directory (default: `priv/floodgate_data`) |
 | `FLOODGATE_PUBLIC_URL` | Externally reachable base URL |
 | `FLOODGATE_ALLOWED_ORIGINS` | Origin allow-list for **both** socket endpoints (comma-separated, or `*` to disable checking). Defaults to same-origin, which rejects cross-origin browser upgrades; clients sending no `Origin`, including the official Fluid drivers, are always admitted |

@@ -33,6 +33,9 @@ build-admin: build-gleam
     mkdir -p server/priv/static/admin
     cp -r server/levee_admin/build/dev/javascript/* server/priv/static/admin/
     cp server/levee_admin/index.html server/priv/static/admin/
+    mkdir -p server/floodgate/priv/static/admin
+    cp -r server/levee_admin/build/dev/javascript/* server/floodgate/priv/static/admin/
+    cp server/levee_admin/index.html server/floodgate/priv/static/admin/
 
 # Build Elixir application
 build-elixir: build-gleam
