@@ -172,6 +172,46 @@ defmodule LeveeWeb.GitController do
     end
   end
 
+  @doc """
+  List commit history, newest first, following first parents.
+
+  GET /repos/:tenant_id/commits?sha=<ref-or-sha>&count=<n>
+
+  This is Historian's commit-history endpoint, which the official Routerlicious
+  driver calls from `getVersions`. It is not under `/git` because the driver's
+  `storageUrl` is `/repos/:tenant_id`.
+
+  `sha` is resolved as `refs/heads/<sha>` first (Fluid passes the document id),
+  falling back to treating it as a literal commit SHA. An unresolvable or
+  missing commit yields `[]`, matching Floodgate — a brand-new document has no
+  history, and that is not an error.
+  """
+  def list_commits(conn, %{"tenant_id" => tenant_id, "sha" => requested} = params) do
+    case parse_count(params) do
+      {:ok, count} ->
+        start_sha =
+          case Storage.get_ref(tenant_id, "refs/heads/" <> requested) do
+            {:ok, ref} -> ref.sha
+            {:error, :not_found} -> requested
+          end
+
+        conn
+        |> put_status(:ok)
+        |> json(commit_history(conn, tenant_id, start_sha, count))
+
+      :error ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: "count must be a positive integer"})
+    end
+  end
+
+  def list_commits(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "Missing required query parameter: sha"})
+  end
+
   # Reference operations
 
   @doc """
@@ -325,5 +365,53 @@ defmodule LeveeWeb.GitController do
 
   defp format_ref_response(conn, tenant_id, ref) do
     Floodgate.format_ref_response(base_url(conn), tenant_id, ref.ref, ref.sha)
+  end
+
+  defp parse_count(%{"count" => count}) when is_binary(count) do
+    case Integer.parse(count) do
+      {n, ""} when n > 0 -> {:ok, n}
+      _ -> :error
+    end
+  end
+
+  defp parse_count(%{"count" => _}), do: :error
+  defp parse_count(_), do: {:ok, 1}
+
+  defp commit_history(_conn, _tenant_id, _sha, 0), do: []
+
+  defp commit_history(conn, tenant_id, sha, count) do
+    case Storage.get_commit(tenant_id, sha) do
+      {:error, :not_found} ->
+        []
+
+      {:ok, commit} ->
+        rest =
+          case commit.parents do
+            [parent | _] -> commit_history(conn, tenant_id, parent, count - 1)
+            [] -> []
+          end
+
+        [commit_details(conn, tenant_id, commit) | rest]
+    end
+  end
+
+  # ICommitDetails is a rearrangement of the ICommit fields Floodgate already
+  # formats, so the URL shapes stay Floodgate-owned and only the nesting is
+  # built here.
+  defp commit_details(conn, tenant_id, commit) do
+    formatted = format_commit_response(conn, tenant_id, commit)
+
+    %{
+      "sha" => formatted["sha"],
+      "url" => formatted["url"],
+      "commit" => %{
+        "url" => formatted["url"],
+        "author" => formatted["author"],
+        "committer" => formatted["committer"],
+        "message" => formatted["message"],
+        "tree" => formatted["tree"]
+      },
+      "parents" => formatted["parents"]
+    }
   end
 end

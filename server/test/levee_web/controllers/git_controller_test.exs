@@ -171,6 +171,240 @@ defmodule LeveeWeb.GitControllerTest do
 
       assert json_response(show_conn, 200) == body
     end
+
+    test "defaults committer to the author, as gitrest does", %{conn: conn} do
+      # ICreateCommitParams has no committer field, so clients never send one and
+      # the server must synthesize it. gitrest uses the author verbatim
+      # (isomorphicgitManager.ts createCommitCore, isomorphicgitConversions.ts),
+      # including the author's date — not a fresh server timestamp.
+      tree_conn =
+        conn
+        |> authed(write_token())
+        |> put_req_header("content-type", "application/json")
+        |> post("/repos/#{@tenant_id}/git/trees", %{"tree" => []})
+
+      %{"sha" => tree_sha} = json_response(tree_conn, 201)
+
+      author = %{
+        "name" => "Test",
+        "email" => "test@example.com",
+        "date" => "2024-01-01T00:00:00Z"
+      }
+
+      body =
+        build_conn()
+        |> authed(write_token())
+        |> put_req_header("content-type", "application/json")
+        |> post("/repos/#{@tenant_id}/git/commits", %{
+          "tree" => tree_sha,
+          "parents" => [],
+          "message" => "authored",
+          "author" => author
+        })
+        |> json_response(201)
+
+      assert body["author"] == author
+      assert body["committer"] == author
+
+      # ...and it round-trips, rather than only being right on the create response.
+      fetched =
+        build_conn()
+        |> authed(read_token())
+        |> get("/repos/#{@tenant_id}/git/commits/#{body["sha"]}")
+        |> json_response(200)
+
+      assert fetched["committer"] == author
+    end
+
+    test "still honours an explicit committer when one is sent", %{conn: conn} do
+      tree_conn =
+        conn
+        |> authed(write_token())
+        |> put_req_header("content-type", "application/json")
+        |> post("/repos/#{@tenant_id}/git/trees", %{"tree" => []})
+
+      %{"sha" => tree_sha} = json_response(tree_conn, 201)
+
+      committer = %{
+        "name" => "Committer",
+        "email" => "committer@example.com",
+        "date" => "2024-02-02T00:00:00Z"
+      }
+
+      body =
+        build_conn()
+        |> authed(write_token())
+        |> put_req_header("content-type", "application/json")
+        |> post("/repos/#{@tenant_id}/git/commits", %{
+          "tree" => tree_sha,
+          "parents" => [],
+          "message" => "explicitly committed",
+          "author" => %{
+            "name" => "Test",
+            "email" => "test@example.com",
+            "date" => "2024-01-01T00:00:00Z"
+          },
+          "committer" => committer
+        })
+        |> json_response(201)
+
+      assert body["committer"] == committer
+    end
+  end
+
+  describe "GET /repos/:tenant_id/commits" do
+    # Historian's commit-history endpoint, which the official Routerlicious
+    # driver calls from getVersions (services-client/src/historian.ts).
+    # Note: not under /git — the driver's storageUrl is `/repos/:tenant_id`.
+
+    defp create_commit!(conn, tree_sha, parents, message) do
+      commit_conn =
+        conn
+        |> authed(write_token())
+        |> put_req_header("content-type", "application/json")
+        |> post("/repos/#{@tenant_id}/git/commits", %{
+          "tree" => tree_sha,
+          "parents" => parents,
+          "message" => message,
+          "author" => %{
+            "name" => "Test",
+            "email" => "test@example.com",
+            "date" => "2024-01-01T00:00:00Z"
+          }
+        })
+
+      json_response(commit_conn, 201)["sha"]
+    end
+
+    defp seed_history!(conn) do
+      tree_conn =
+        conn
+        |> authed(write_token())
+        |> put_req_header("content-type", "application/json")
+        |> post("/repos/#{@tenant_id}/git/trees", %{"tree" => []})
+
+      %{"sha" => tree_sha} = json_response(tree_conn, 201)
+
+      first = create_commit!(conn, tree_sha, [], "first")
+      second = create_commit!(conn, tree_sha, [first], "second")
+      third = create_commit!(conn, tree_sha, [second], "third")
+
+      {tree_sha, [third, second, first]}
+    end
+
+    test "walks first parents newest-first and shapes them as ICommitDetails",
+         %{conn: conn} do
+      {tree_sha, [third, second, _first] = all} = seed_history!(conn)
+
+      body =
+        conn
+        |> authed(read_token())
+        |> get("/repos/#{@tenant_id}/commits", %{"sha" => third, "count" => "10"})
+        |> json_response(200)
+
+      assert Enum.map(body, & &1["sha"]) == all
+
+      [newest | _] = body
+      assert Map.keys(newest) |> Enum.sort() == ["commit", "parents", "sha", "url"]
+      assert String.ends_with?(newest["url"], "/repos/#{@tenant_id}/git/commits/#{third}")
+      assert newest["commit"]["url"] == newest["url"]
+      assert newest["commit"]["message"] == "third"
+      assert newest["commit"]["author"]["name"] == "Test"
+      assert newest["commit"]["tree"]["sha"] == tree_sha
+
+      # The details view must agree with the object view for the same commit.
+      object =
+        build_conn()
+        |> authed(read_token())
+        |> get("/repos/#{@tenant_id}/git/commits/#{third}")
+        |> json_response(200)
+
+      assert newest["commit"]["committer"] == object["committer"]
+      assert newest["commit"]["author"] == object["author"]
+      assert newest["commit"]["tree"] == object["tree"]
+      assert newest["parents"] == object["parents"]
+
+      assert String.ends_with?(
+               newest["commit"]["tree"]["url"],
+               "/repos/#{@tenant_id}/git/trees/#{tree_sha}"
+             )
+
+      assert [%{"sha" => ^second, "url" => parent_url}] = newest["parents"]
+      assert String.ends_with?(parent_url, "/repos/#{@tenant_id}/git/commits/#{second}")
+    end
+
+    test "honours count and defaults to 1", %{conn: conn} do
+      {_tree_sha, [third, second, _first]} = seed_history!(conn)
+
+      limited =
+        conn
+        |> authed(read_token())
+        |> get("/repos/#{@tenant_id}/commits", %{"sha" => third, "count" => "2"})
+        |> json_response(200)
+
+      assert Enum.map(limited, & &1["sha"]) == [third, second]
+
+      defaulted =
+        conn
+        |> authed(read_token())
+        |> get("/repos/#{@tenant_id}/commits", %{"sha" => third})
+        |> json_response(200)
+
+      assert Enum.map(defaulted, & &1["sha"]) == [third]
+    end
+
+    test "resolves a branch name through refs/heads before trying it as a sha",
+         %{conn: conn} do
+      {_tree_sha, [third | _]} = seed_history!(conn)
+      branch = "doc-#{System.unique_integer([:positive])}"
+
+      conn
+      |> authed(write_token())
+      |> put_req_header("content-type", "application/json")
+      |> post("/repos/#{@tenant_id}/git/refs", %{
+        "ref" => "refs/heads/#{branch}",
+        "sha" => third
+      })
+      |> json_response(201)
+
+      body =
+        conn
+        |> authed(read_token())
+        |> get("/repos/#{@tenant_id}/commits", %{"sha" => branch, "count" => "1"})
+        |> json_response(200)
+
+      assert [%{"sha" => ^third}] = body
+    end
+
+    test "returns [] for an unknown sha rather than 404", %{conn: conn} do
+      body =
+        conn
+        |> authed(read_token())
+        |> get("/repos/#{@tenant_id}/commits", %{"sha" => "no-such-sha"})
+        |> json_response(200)
+
+      assert body == []
+    end
+
+    test "rejects a missing sha and a non-positive count", %{conn: conn} do
+      assert %{"error" => _} =
+               conn
+               |> authed(read_token())
+               |> get("/repos/#{@tenant_id}/commits")
+               |> json_response(400)
+
+      assert %{"error" => _} =
+               conn
+               |> authed(read_token())
+               |> get("/repos/#{@tenant_id}/commits", %{"sha" => "x", "count" => "0"})
+               |> json_response(400)
+    end
+
+    test "requires doc:read", %{conn: conn} do
+      assert conn
+             |> get("/repos/#{@tenant_id}/commits", %{"sha" => "x"})
+             |> json_response(401)
+    end
   end
 
   describe "POST/GET/PATCH /repos/:tenant_id/git/refs" do

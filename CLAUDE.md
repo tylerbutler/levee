@@ -279,6 +279,8 @@ GET    /repos/:tenant_id/git/trees/:sha   Get tree
 POST   /repos/:tenant_id/git/trees        Create tree
 GET    /repos/:tenant_id/git/commits/:sha Get commit
 POST   /repos/:tenant_id/git/commits      Create commit
+GET    /repos/:tenant_id/commits          Commit history (?sha=&count=), for
+                                          the Routerlicious driver's getVersions
 GET    /refs/:tenant_id                   List refs
 GET    /refs/:tenant_id/*path             Get ref
 PATCH  /refs/:tenant_id/*path             Update ref
