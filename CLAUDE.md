@@ -339,7 +339,9 @@ Floodgate (Gleam server) reads its own set:
 | `FLOODGATE_BIND` | Listen interface (default: `localhost`); containers need `0.0.0.0` |
 | `FLOODGATE_TOKEN_MINT_SECRET` | Enables the token-mint endpoint |
 | `FLOODGATE_STORAGE_BACKEND` | `ets`/`shelf` (persistent, default) or `memory` — also where tenants persist |
-| `FLOODGATE_DATA_DIR` | Shelf DETS directory (default: `priv/floodgate_data`) |
+| `FLOODGATE_DATA_DIR` | Shelf DETS directory (default: `priv/floodgate_data`). **One DETS file per document** under `documents/t<hex tenant>/d<hex document id>.dets` — see [ADR-010](docs/adr/010-per-document-storage.md); refs, tenants and admin data stay in shared files |
+| `FLOODGATE_DOC_IDLE_MS` | How long an untouched document stays in memory (default 300000). Drops *both* its cached sequence state and its open DETS file; only ever a cache drop, since writes are already on disk. `0` disables |
+| `FLOODGATE_MAX_OPEN_DOCUMENTS` | Document files open at once (default 1024); at the cap the least recently used is closed. `0` disables |
 | `FLOODGATE_PUBLIC_URL` | Externally reachable base URL |
 | `FLOODGATE_ALLOWED_ORIGINS` | Origin allow-list for **both** socket endpoints (comma-separated, or `*` to disable checking). Defaults to same-origin, which rejects cross-origin browser upgrades; clients sending no `Origin`, including the official Fluid drivers, are always admitted |
 | `FLOODGATE_MAX_FRAME_BYTES` | Inbound frame ceiling (default 16 MiB). Also the `maxMessageSize` advertised in IConnected and the Engine.IO handshake's `maxPayload` — one value, so the three cannot drift |
