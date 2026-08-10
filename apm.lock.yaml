@@ -1,5 +1,5 @@
 lockfile_version: '1'
-generated_at: '2026-08-07T18:50:00.059742+00:00'
+generated_at: '2026-08-10T20:08:13.426887+00:00'
 apm_version: 0.28.0
 dependencies:
 - repo_url: dietrichgebert/ponytail
@@ -107,6 +107,27 @@ dependencies:
     .claude/skills/caveman-commit/README.md: sha256:a2e82924b487fc1845114c247b47c2d3c2d1bd60f90bbfa60e9831319eb964fa
     .claude/skills/caveman-commit/SKILL.md: sha256:58db7b8efab911a629c26e7132517d9076e4e3645009eb604cb8c25663477841
   content_hash: sha256:790a4eeace0be35c6691faf923518ba5bd50f1f1305d1101d09dd4971be94e00
+- repo_url: tylerbutler/vestibule
+  name: gleam-review
+  host: github.com
+  resolved_commit: a59833c8f1ec24ce1322db6298539645a224d030
+  version: unknown
+  virtual_path: .claude/skills/gleam-review
+  is_virtual: true
+  package_type: claude_skill
+  deployed_files:
+  - .agents/skills/gleam-review
+  - .agents/skills/gleam-review/SKILL.md
+  - .agents/skills/gleam-review/references/conventions.md
+  - .claude/skills/gleam-review
+  - .claude/skills/gleam-review/SKILL.md
+  - .claude/skills/gleam-review/references/conventions.md
+  deployed_file_hashes:
+    .agents/skills/gleam-review/SKILL.md: sha256:285a54a75346349ff12f6579c184847a6b35bbcecd2842b5065117a5d91ff071
+    .agents/skills/gleam-review/references/conventions.md: sha256:cd0b6dee401eff48c7afcb83db73ee5971e2563989f266dfd58bd93b997fe6ed
+    .claude/skills/gleam-review/SKILL.md: sha256:285a54a75346349ff12f6579c184847a6b35bbcecd2842b5065117a5d91ff071
+    .claude/skills/gleam-review/references/conventions.md: sha256:cd0b6dee401eff48c7afcb83db73ee5971e2563989f266dfd58bd93b997fe6ed
+  content_hash: sha256:5a86818a2312055b63558f5a9b208766b7e8266823d215bbfa8438d157491958
 deployments:
 - kind: project-relative
   target: claude
@@ -216,6 +237,33 @@ deployments:
   - juliusbrussee/caveman/skills/caveman-commit
   active_owner: juliusbrussee/caveman/skills/caveman-commit
   content_hash: sha256:58db7b8efab911a629c26e7132517d9076e4e3645009eb604cb8c25663477841
+- kind: project-relative
+  target: claude
+  value: .claude/skills/gleam-review
+  runtime: null
+  scope: project
+  owners:
+  - tylerbutler/vestibule/.claude/skills/gleam-review
+  active_owner: tylerbutler/vestibule/.claude/skills/gleam-review
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/gleam-review/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - tylerbutler/vestibule/.claude/skills/gleam-review
+  active_owner: tylerbutler/vestibule/.claude/skills/gleam-review
+  content_hash: sha256:285a54a75346349ff12f6579c184847a6b35bbcecd2842b5065117a5d91ff071
+- kind: project-relative
+  target: claude
+  value: .claude/skills/gleam-review/references/conventions.md
+  runtime: null
+  scope: project
+  owners:
+  - tylerbutler/vestibule/.claude/skills/gleam-review
+  active_owner: tylerbutler/vestibule/.claude/skills/gleam-review
+  content_hash: sha256:cd0b6dee401eff48c7afcb83db73ee5971e2563989f266dfd58bd93b997fe6ed
 - kind: project-relative
   target: claude
   value: .claude/skills/ponytail
@@ -351,6 +399,33 @@ deployments:
   - juliusbrussee/caveman/skills/caveman-commit
   active_owner: juliusbrussee/caveman/skills/caveman-commit
   content_hash: sha256:58db7b8efab911a629c26e7132517d9076e4e3645009eb604cb8c25663477841
+- kind: project-relative
+  target: copilot
+  value: .agents/skills/gleam-review
+  runtime: null
+  scope: project
+  owners:
+  - tylerbutler/vestibule/.claude/skills/gleam-review
+  active_owner: tylerbutler/vestibule/.claude/skills/gleam-review
+  content_hash: null
+- kind: project-relative
+  target: copilot
+  value: .agents/skills/gleam-review/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - tylerbutler/vestibule/.claude/skills/gleam-review
+  active_owner: tylerbutler/vestibule/.claude/skills/gleam-review
+  content_hash: sha256:285a54a75346349ff12f6579c184847a6b35bbcecd2842b5065117a5d91ff071
+- kind: project-relative
+  target: copilot
+  value: .agents/skills/gleam-review/references/conventions.md
+  runtime: null
+  scope: project
+  owners:
+  - tylerbutler/vestibule/.claude/skills/gleam-review
+  active_owner: tylerbutler/vestibule/.claude/skills/gleam-review
+  content_hash: sha256:cd0b6dee401eff48c7afcb83db73ee5971e2563989f266dfd58bd93b997fe6ed
 - kind: project-relative
   target: copilot
   value: .agents/skills/ponytail
