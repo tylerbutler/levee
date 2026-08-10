@@ -186,6 +186,19 @@ so Floodgate is a drop-in replacement for the Elixir server for existing
 Verify with `just test-floodgate-dual-mode`, which runs both conformance suites
 plus cross-mode tests against a single server process.
 
+**Floodgate speaks server-backed presence** (`presence_v1`), on both socket
+endpoints, on top of beryl's presence registry — advertised as
+`supportedFeatures: {presence_v1: true}` in `connect_document_success`, driven by
+`joinPresence`/`updatePresence`/`leavePresence`, and answered with Phoenix-shaped
+`presence_state`/`presence_diff`/`presence_error`. `src/floodgate/presence_worker.gleam`
+owns the beryl handle: beryl's presence calls are 5-second `process.call`s that
+panic, and channel callbacks run inside the coordinator, so they cannot be made
+there. Identity (`key` from the token's user id, `client_id` from the
+server-assigned client id) is derived server-side and a client naming one is
+rejected. Cross-node replication enables itself only on a distributed node. See
+`server/floodgate/README.md`'s Presence section for the wire contract. Levee
+(Elixir) does not advertise the capability, and clients fall back cleanly.
+
 **Floodgate is multi-tenant**, dynamically, not just via the one
 `FLOODGATE_TENANT_ID`/`FLOODGATE_JWT_SECRET` pair: tenants are created,
 listed, shown, and deleted through an admin API
