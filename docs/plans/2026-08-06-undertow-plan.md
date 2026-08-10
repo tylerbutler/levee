@@ -1020,12 +1020,12 @@ of this plan are stale for that file specifically.
   Read `:183`'s `heartbeat_check_interval_ms: 0` as the *directly constructed* default only —
   the live values come from `beryl.gleam:239-240` via `beryl.gleam:650`
 - `docs/plans/2026-08-06-floodgate-gap-closure-plan.md` — its "Implementation status"
-  sections are authoritative for what the Gleam server currently does. As of `22cf469` the
-  only items still open are **op pruning below the last summary**, **telemetry and a metrics
-  endpoint**, **the ADR-009 extraction blocker**, **the `message_too_large` nack**, and
-  **shelf's late-bound table handles** — that short list, not the much longer one earlier
-  revisions of this plan worked from, is what Undertow should design out rather than
-  reproduce. Everything else it once listed as a gap has landed and is now parity
+  sections are authoritative for what the Gleam server currently does. The only items still
+  open are **op pruning below the last summary**, **telemetry and a metrics endpoint**, **the
+  ADR-009 extraction blocker**, and **the `message_too_large` nack**. Shelf's handles are now
+  late-bound through a supervised owner and registry. That short list, not the much longer
+  one earlier revisions of this plan worked from, is what Undertow should design out rather
+  than reproduce. Everything else it once listed as a gap has landed and is now parity
 - `docs/adr/009-floodgate-standalone-repo.md` — the nine divergences as a checklist, and the
   deliberate 401 decision
 - `justfile:100-170` — the conformance recipes to mirror

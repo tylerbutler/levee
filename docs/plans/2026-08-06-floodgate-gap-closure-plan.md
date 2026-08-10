@@ -1,5 +1,26 @@
 # Closing the Floodgate Gaps
 
+## Implementation status — fourth landing (2026-08-10)
+
+**Shelf table handles are now late-bound.** The supported shelf backend opens
+its tables in a supervised lifecycle owner and publishes the current handles
+through a stable named ETS registry. Storage operations still run directly in
+the calling session or REST process, so this adds restart recovery without
+putting a global mailbox back on the hot path. A call during restart retries for
+five seconds and then fails loudly rather than returning empty data.
+
+`shelf_store.new/1` is internal and test-only; standalone and embedded runtimes
+use `shelf_store.supervised/1`. The restart test kills the owner while a live
+session holds the same `store.Backend`, then verifies persisted ops, summaries,
+objects, refs, index-backed reads, and subsequent writes through the restarted
+tables.
+
+### Still not done
+
+Op pruning below the last summary, telemetry and a metrics endpoint, the
+ADR-009 extraction blocker, and the deliberately deferred `message_too_large`
+nack.
+
 ## Implementation status — third landing (2026-08-06)
 
 **3.3 (per-document sequencing) is done.** It had been deferred twice as
@@ -79,7 +100,8 @@ parity **53 passed / 1 failed** (the intentional 401), both unchanged. Elixir
 
 Unchanged from the second landing minus 3.3: op pruning below the last summary,
 telemetry and a metrics endpoint, the ADR-009 extraction blocker, the
-`message_too_large` nack, and shelf's late-bound table handles.
+`message_too_large` nack, and shelf's late-bound table handles. The shelf item
+was completed in the fourth landing above.
 
 ## Implementation status — second landing (2026-08-06)
 
@@ -178,10 +200,8 @@ overstated.
   tables reopen from DETS, and nothing is lost — `WriteThrough` has already flushed
   every write and shelf's guardian process closes DETS cleanly on owner death.
 
-  What is genuinely unsupported is surviving that *in place*, which needs the
-  handles to be late-bound (named ETS tables plus a supervised owner), not just the
-  owner supervised. Only matters if floodgate is embedded and `shelf_store.new` is
-  called from a process that can die independently. Recorded in `shelf_store.new`.
+  Surviving that *in place* was completed in the fourth landing: supported
+  runtimes use a supervised owner and late-bound handle registry.
 
 ## Implementation status — first landing (2026-08-06)
 
