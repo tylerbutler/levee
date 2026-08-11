@@ -38,7 +38,7 @@ levee/
 │   ├── levee_auth/             # Gleam auth library
 │   └── levee_admin/            # Lustre admin UI
 │   # Fluid protocol logic lives in the external `spillway` package
-│   # (a dependency of floodgate), not an in-repo Gleam package
+│   # (declared by the `levee_bridge` package), not an in-repo Gleam package
 ├── client/                     # TypeScript client packages
 │   ├── package.json            # pnpm workspace root
 │   ├── pnpm-workspace.yaml     # Workspace config
@@ -127,10 +127,11 @@ floodgate-presence-tracker → floodgate-client → @fluidframework/routerliciou
 - **levee_admin/** - Lustre SPA for admin UI
 
 The Fluid protocol logic (message types, sequencing, validation, signals,
-nacks, schema generation) lives in the external **spillway** package, shared by
-both the classic Levee path (`Levee.Protocol.Bridge`) and floodgate. It is
-pulled in as a dependency of `floodgate`, so it compiles under
-`floodgate/build/`.
+nacks, Socket.IO framing, connect_document decisions, REST response shapes,
+schema generation) lives in the external **spillway** package, shared by both
+the classic Levee path (`Levee.Protocol.Bridge` / `Levee.Spillway`) and
+floodgate. Levee pulls it in through the `levee_bridge` Gleam package, so it
+compiles under `levee_bridge/build/`; floodgate declares it directly.
 
 ### Gleam Testing (startest)
 
@@ -261,9 +262,12 @@ just generate-schema-ts
 
 ### Modifying Gleam Protocol
 1. Edit protocol logic in the external `spillway` package (repo:
-   tylerbutler/spillway); bump the ref in `server/floodgate/gleam.toml`
+   tylerbutler/spillway); bump the pinned commit in **both**
+   `server/levee_bridge/manifest.toml` and `server/floodgate/manifest.toml`
+   so the two servers run the same protocol logic
 2. Run `just build-gleam` to compile
-3. Update `server/lib/levee/protocol/bridge.ex` if Elixir interop changes
+3. Update `server/lib/levee/protocol/bridge.ex` or `server/lib/levee/spillway.ex`
+   if Elixir interop changes
 4. Run `just test` to verify both Gleam and Elixir tests
 5. If schema types changed, run `just generate-schema-ts`
 
