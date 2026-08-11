@@ -7,7 +7,7 @@ packages = [
   { name = "gleam_stdlib", version = "1.0.3", build_tools = ["gleam"], requirements = [], otp_app = "gleam_stdlib", source = "hex", outer_checksum = "1F543AFBA5D33DA493E6087F4E4C4F20D899411343512686C98A8ABB2963CF22" },
   { name = "gleeunit", version = "1.11.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleeunit", source = "hex", outer_checksum = "EC31ABA74256AEA531EDF8169931D775BBB384FED0A8A1BDC4DD9354E3E21826" },
   { name = "signet", version = "0.1.0", build_tools = ["gleam"], requirements = ["gleam_crypto", "gleam_json", "gleam_stdlib"], source = "git", repo = "https://github.com/tylerbutler/signet", commit = "51843ffe6f38a57c295e1a139fd926dc947eca6d" },
-  { name = "spillway", version = "0.1.0", build_tools = ["gleam"], requirements = ["gleam_json", "gleam_stdlib", "signet", "windsock"], source = "git", repo = "https://github.com/tylerbutler/spillway", commit = "4a7246aeac67e73c7197be6ddc533ae6da85f39f" },
+  { name = "spillway", version = "0.1.0", build_tools = ["gleam"], requirements = ["gleam_json", "gleam_stdlib", "signet", "windsock"], source = "git", repo = "https://github.com/tylerbutler/spillway", commit = "d5e119dbf1dc694593c530c67861a934eacd13be" },
   { name = "windsock", version = "0.1.0", build_tools = ["gleam"], requirements = ["gleam_json", "gleam_stdlib"], source = "git", repo = "https://github.com/tylerbutler/windsock", commit = "a0745584f6291ac00e7f59dbd47ad90b25774bd6" },
 ]
 
