@@ -1,10 +1,10 @@
-defmodule Levee.FloodgateTest do
+defmodule Levee.SpillwayTest do
   @moduledoc """
-  Unit tests for `Levee.Floodgate`, the Elixir bridge to Floodgate's Gleam-owned
-  Engine.IO/Socket.IO framing (`floodgate/socketio`), `connect_document`
-  protocol decision helpers (`floodgate/connect_document`), the pure
-  document-session decision logic (`floodgate/session_logic`, `floodgate/nack`),
-  and the REST response-shape decisions (`floodgate/rest`) used by
+  Unit tests for `Levee.Spillway`, the Elixir bridge to spillway's
+  Engine.IO/Socket.IO framing (`spillway/socketio`), `connect_document`
+  protocol decision helpers (`spillway/connect_document`), the pure
+  document-session decision logic (`spillway/session_logic`, `spillway/nack`),
+  and the REST response-shape decisions (`spillway/rest`) used by
   `LeveeWeb.GitController`, `LeveeWeb.DocumentController`, and
   `LeveeWeb.DeltaController`.
 
@@ -18,11 +18,11 @@ defmodule Levee.FloodgateTest do
 
   use ExUnit.Case, async: true
 
-  alias Levee.Floodgate
+  alias Levee.Spillway
 
   describe "Engine.IO / Socket.IO framing" do
     test "encode_open builds the Engine.IO opening handshake packet" do
-      packet = Floodgate.encode_open("sid-123", 25_000, 20_000, 1_000_000)
+      packet = Spillway.encode_open("sid-123", 25_000, 20_000, 1_000_000)
 
       assert "0" <> json = packet
       assert {:ok, decoded} = Jason.decode(json)
@@ -37,57 +37,57 @@ defmodule Levee.FloodgateTest do
     end
 
     test "encode_connect_ack builds the Socket.IO namespace-connect ack" do
-      assert Floodgate.encode_connect_ack("sid-123") == "40{\"sid\":\"sid-123\"}"
+      assert Spillway.encode_connect_ack("sid-123") == "40{\"sid\":\"sid-123\"}"
     end
 
     test "encode_pong returns the Engine.IO pong byte" do
-      assert Floodgate.encode_pong() == "3"
+      assert Spillway.encode_pong() == "3"
     end
 
     test "classify_frame recognizes Engine.IO ping/pong and Socket.IO connect" do
-      assert Floodgate.classify_frame("2") == :engine_ping
-      assert Floodgate.classify_frame("3") == :engine_pong
-      assert Floodgate.classify_frame("40") == :socket_connect
+      assert Spillway.classify_frame("2") == :engine_ping
+      assert Spillway.classify_frame("3") == :engine_pong
+      assert Spillway.classify_frame("40") == :socket_connect
     end
 
     test "classify_frame decodes a Fluid event frame" do
       assert {:fluid_event, "connect_document", [payload]} =
-               Floodgate.classify_frame(~s(42["connect_document",{"id":"doc-1"}]))
+               Spillway.classify_frame(~s(42["connect_document",{"id":"doc-1"}]))
 
       assert payload["id"] == "doc-1"
     end
 
     test "classify_frame reports unrecognized frames" do
-      assert {:unrecognized, _reason} = Floodgate.classify_frame("garbage")
+      assert {:unrecognized, _reason} = Spillway.classify_frame("garbage")
     end
 
     test "encode_op enforces the Routerlicious-required two-argument shape" do
-      frame = Floodgate.encode_op("doc-1", [%{"sequenceNumber" => 1}])
+      frame = Spillway.encode_op("doc-1", [%{"sequenceNumber" => 1}])
 
-      assert {:fluid_event, "op", [document_id, messages]} = Floodgate.classify_frame(frame)
+      assert {:fluid_event, "op", [document_id, messages]} = Spillway.classify_frame(frame)
       assert document_id == "doc-1"
       assert messages == [%{"sequenceNumber" => 1}]
     end
 
     test "encode_signal round-trips a signal payload" do
-      frame = Floodgate.encode_signal(%{"clientId" => "c1"})
+      frame = Spillway.encode_signal(%{"clientId" => "c1"})
 
-      assert {:fluid_event, "signal", [signal]} = Floodgate.classify_frame(frame)
+      assert {:fluid_event, "signal", [signal]} = Spillway.classify_frame(frame)
       assert signal == %{"clientId" => "c1"}
     end
 
     test "encode_connect_document_success/error round-trip payloads" do
-      success_frame = Floodgate.encode_connect_document_success(%{"clientId" => "c1"})
+      success_frame = Spillway.encode_connect_document_success(%{"clientId" => "c1"})
 
       assert {:fluid_event, "connect_document_success", [payload]} =
-               Floodgate.classify_frame(success_frame)
+               Spillway.classify_frame(success_frame)
 
       assert payload == %{"clientId" => "c1"}
 
-      error_frame = Floodgate.encode_connect_document_error(%{"code" => 400})
+      error_frame = Spillway.encode_connect_document_error(%{"code" => 400})
 
       assert {:fluid_event, "connect_document_error", [payload]} =
-               Floodgate.classify_frame(error_frame)
+               Spillway.classify_frame(error_frame)
 
       assert payload == %{"code" => 400}
     end
@@ -97,58 +97,58 @@ defmodule Levee.FloodgateTest do
     test "parse_connect_request extracts tenant/document/token" do
       payload = %{"tenantId" => "tenant-a", "id" => "doc-a", "token" => "token-a"}
 
-      assert {:ok, {"tenant-a", "doc-a", "token-a"}} = Floodgate.parse_connect_request(payload)
+      assert {:ok, {"tenant-a", "doc-a", "token-a"}} = Spillway.parse_connect_request(payload)
     end
 
     test "parse_connect_request reports the first missing field" do
       payload = %{"tenantId" => "tenant-a", "token" => "token-a"}
 
-      assert {:error, {:missing_field, "id"}} = Floodgate.parse_connect_request(payload)
+      assert {:error, {:missing_field, "id"}} = Spillway.parse_connect_request(payload)
     end
 
     test "parse_connect_request rejects an empty string field" do
       payload = %{"tenantId" => "", "id" => "doc-a", "token" => "token-a"}
 
-      assert {:error, {:missing_field, "tenantId"}} = Floodgate.parse_connect_request(payload)
+      assert {:error, {:missing_field, "tenantId"}} = Spillway.parse_connect_request(payload)
     end
 
     test "validate_mode_scope requires doc:write only for write mode" do
-      assert :ok = Floodgate.validate_mode_scope(%{"mode" => "write"}, ["doc:read", "doc:write"])
+      assert :ok = Spillway.validate_mode_scope(%{"mode" => "write"}, ["doc:read", "doc:write"])
 
       assert {:error, :write_mode_without_write_scope} =
-               Floodgate.validate_mode_scope(%{"mode" => "write"}, ["doc:read"])
+               Spillway.validate_mode_scope(%{"mode" => "write"}, ["doc:read"])
     end
 
     test "validate_mode_scope allows any scopes when mode is absent or not write" do
-      assert :ok = Floodgate.validate_mode_scope(%{}, [])
-      assert :ok = Floodgate.validate_mode_scope(%{"mode" => "read"}, [])
+      assert :ok = Spillway.validate_mode_scope(%{}, [])
+      assert :ok = Spillway.validate_mode_scope(%{"mode" => "read"}, [])
     end
 
     test "read_scope/write_scope expose spillway's Scope vocabulary" do
-      assert Floodgate.read_scope() == "doc:read"
-      assert Floodgate.write_scope() == "doc:write"
+      assert Spillway.read_scope() == "doc:read"
+      assert Spillway.write_scope() == "doc:write"
     end
   end
 
   describe "negotiate_features/2" do
     test "server true + client absent advertises true" do
-      assert Floodgate.negotiate_features(%{"submitSignals" => true}, %{}) == %{
+      assert Spillway.negotiate_features(%{"submitSignals" => true}, %{}) == %{
                "submitSignals" => true
              }
     end
 
     test "server true + client explicitly declines yields false" do
-      assert Floodgate.negotiate_features(%{"submitSignals" => true}, %{"submitSignals" => false}) ==
+      assert Spillway.negotiate_features(%{"submitSignals" => true}, %{"submitSignals" => false}) ==
                %{"submitSignals" => false}
     end
 
     test "server true + client agrees stays true" do
-      assert Floodgate.negotiate_features(%{"submitSignals" => true}, %{"submitSignals" => true}) ==
+      assert Spillway.negotiate_features(%{"submitSignals" => true}, %{"submitSignals" => true}) ==
                %{"submitSignals" => true}
     end
 
     test "server false always yields server value regardless of client" do
-      assert Floodgate.negotiate_features(%{"submitSignals" => false}, %{"submitSignals" => true}) ==
+      assert Spillway.negotiate_features(%{"submitSignals" => false}, %{"submitSignals" => true}) ==
                %{"submitSignals" => false}
     end
 
@@ -156,7 +156,7 @@ defmodule Levee.FloodgateTest do
       server = %{"a" => true, "b" => true, "c" => false}
       client = %{"a" => false, "c" => true}
 
-      assert Floodgate.negotiate_features(server, client) == %{
+      assert Spillway.negotiate_features(server, client) == %{
                "a" => false,
                "b" => true,
                "c" => false
@@ -166,7 +166,7 @@ defmodule Levee.FloodgateTest do
 
   describe "determine_signal_recipients/5" do
     test "targeted_clients takes priority, excluding sender and unknown ids" do
-      assert Floodgate.determine_signal_recipients(
+      assert Spillway.determine_signal_recipients(
                "sender",
                ["sender", "c1", "c2", "unknown"],
                ["c1"],
@@ -176,7 +176,7 @@ defmodule Levee.FloodgateTest do
     end
 
     test "ignored_clients excludes ignored ids and the sender" do
-      assert Floodgate.determine_signal_recipients(
+      assert Spillway.determine_signal_recipients(
                "sender",
                nil,
                ["c1"],
@@ -186,7 +186,7 @@ defmodule Levee.FloodgateTest do
     end
 
     test "single_target sends only to that target when valid" do
-      assert Floodgate.determine_signal_recipients(
+      assert Spillway.determine_signal_recipients(
                "sender",
                nil,
                nil,
@@ -196,7 +196,7 @@ defmodule Levee.FloodgateTest do
     end
 
     test "single_target returns empty list when target is the sender" do
-      assert Floodgate.determine_signal_recipients(
+      assert Spillway.determine_signal_recipients(
                "sender",
                nil,
                nil,
@@ -206,7 +206,7 @@ defmodule Levee.FloodgateTest do
     end
 
     test "single_target returns empty list when target is unknown" do
-      assert Floodgate.determine_signal_recipients(
+      assert Spillway.determine_signal_recipients(
                "sender",
                nil,
                nil,
@@ -216,7 +216,7 @@ defmodule Levee.FloodgateTest do
     end
 
     test "broadcasts to all except sender when no targeting options given" do
-      assert Floodgate.determine_signal_recipients(
+      assert Spillway.determine_signal_recipients(
                "sender",
                nil,
                nil,
@@ -226,7 +226,7 @@ defmodule Levee.FloodgateTest do
     end
 
     test "treats empty list/string targeting options as absent (broadcast)" do
-      assert Floodgate.determine_signal_recipients(
+      assert Spillway.determine_signal_recipients(
                "sender",
                [],
                [],
@@ -242,7 +242,7 @@ defmodule Levee.FloodgateTest do
         {:sequenced_op_params, "client-1", 42, 40, 7, 41, "op", %{"foo" => "bar"}, nil,
          1_700_000_000}
 
-      op = Floodgate.build_sequenced_op(params)
+      op = Spillway.build_sequenced_op(params)
 
       assert op == %{
                "clientId" => "client-1",
@@ -262,46 +262,46 @@ defmodule Levee.FloodgateTest do
     test "builds a nack tuple with no operation, sequence -1, and a bad-request content" do
       assert {:nack, :none, -1,
               {:nack_content, 400, :bad_request_error, "Unknown client: client-1", :none}} =
-               Floodgate.nack_unknown_client("client-1")
+               Spillway.nack_unknown_client("client-1")
     end
 
     test "embeds the given client id in the message" do
       assert {:nack, :none, -1, {:nack_content, 400, :bad_request_error, message, :none}} =
-               Floodgate.nack_unknown_client("abc-123")
+               Spillway.nack_unknown_client("abc-123")
 
       assert message == "Unknown client: abc-123"
     end
   end
 
-  describe "REST response-shape decisions (floodgate/rest)" do
+  describe "REST response-shape decisions (spillway/rest)" do
     test "base_url omits the default port for http/https" do
-      assert Floodgate.base_url("http", "example.test", 80) == "http://example.test"
-      assert Floodgate.base_url("https", "example.test", 443) == "https://example.test"
-      assert Floodgate.base_url("http", "localhost", 4000) == "http://localhost:4000"
+      assert Spillway.base_url("http", "example.test", 80) == "http://example.test"
+      assert Spillway.base_url("https", "example.test", 443) == "https://example.test"
+      assert Spillway.base_url("http", "localhost", 4000) == "http://localhost:4000"
     end
 
     test "blob_url/tree_url/commit_url build git object urls" do
-      assert Floodgate.blob_url("http://localhost:4000", "tenant1", "sha1") ==
+      assert Spillway.blob_url("http://localhost:4000", "tenant1", "sha1") ==
                "http://localhost:4000/repos/tenant1/git/blobs/sha1"
 
-      assert Floodgate.tree_url("http://localhost:4000", "tenant1", "sha1") ==
+      assert Spillway.tree_url("http://localhost:4000", "tenant1", "sha1") ==
                "http://localhost:4000/repos/tenant1/git/trees/sha1"
 
-      assert Floodgate.commit_url("http://localhost:4000", "tenant1", "sha1") ==
+      assert Spillway.commit_url("http://localhost:4000", "tenant1", "sha1") ==
                "http://localhost:4000/repos/tenant1/git/commits/sha1"
     end
 
     test "ref_url strips the refs/ prefix" do
-      assert Floodgate.ref_url("http://localhost:4000", "tenant1", "refs/heads/main") ==
+      assert Spillway.ref_url("http://localhost:4000", "tenant1", "refs/heads/main") ==
                "http://localhost:4000/repos/tenant1/git/refs/heads/main"
     end
 
     test "build_ref_path joins wildcard segments" do
-      assert Floodgate.build_ref_path(["heads", "main"]) == "refs/heads/main"
+      assert Spillway.build_ref_path(["heads", "main"]) == "refs/heads/main"
     end
 
     test "format_blob_response builds the full blob wire shape" do
-      assert Floodgate.format_blob_response(
+      assert Spillway.format_blob_response(
                "http://localhost:4000",
                "tenant1",
                "sha1",
@@ -325,7 +325,7 @@ defmodule Levee.FloodgateTest do
       ]
 
       response =
-        Floodgate.format_tree_response("http://localhost:4000", "tenant1", "roottree", entries)
+        Spillway.format_tree_response("http://localhost:4000", "tenant1", "roottree", entries)
 
       assert response["sha"] == "roottree"
       assert response["url"] == "http://localhost:4000/repos/tenant1/git/trees/roottree"
@@ -357,7 +357,7 @@ defmodule Levee.FloodgateTest do
 
     test "format_commit_response builds tree/parent object shapes" do
       response =
-        Floodgate.format_commit_response(
+        Spillway.format_commit_response(
           "http://localhost:4000",
           "tenant1",
           "commitsha",
@@ -392,7 +392,7 @@ defmodule Levee.FloodgateTest do
 
     test "format_ref_response builds the ref wire shape" do
       response =
-        Floodgate.format_ref_response(
+        Spillway.format_ref_response(
           "http://localhost:4000",
           "tenant1",
           "refs/heads/main",
@@ -411,7 +411,7 @@ defmodule Levee.FloodgateTest do
     end
 
     test "format_document_response builds the document metadata wire shape" do
-      assert Floodgate.format_document_response("doc-1", "tenant1", 5) == %{
+      assert Spillway.format_document_response("doc-1", "tenant1", 5) == %{
                "id" => "doc-1",
                "tenantId" => "tenant1",
                "sequenceNumber" => 5
@@ -419,7 +419,7 @@ defmodule Levee.FloodgateTest do
     end
 
     test "session_info builds the session-discovery wire shape" do
-      assert Floodgate.session_info("http://localhost:4000", "tenant1", "doc-1", true) == %{
+      assert Spillway.session_info("http://localhost:4000", "tenant1", "doc-1", true) == %{
                "ordererUrl" => "http://localhost:4000/socket",
                "historianUrl" => "http://localhost:4000/repos/tenant1",
                "deltaStreamUrl" => "http://localhost:4000/deltas/tenant1/doc-1",
@@ -427,21 +427,21 @@ defmodule Levee.FloodgateTest do
                "isSessionActive" => true
              }
 
-      assert Floodgate.session_info("http://localhost:4000", "tenant1", "doc-1", false)[
+      assert Spillway.session_info("http://localhost:4000", "tenant1", "doc-1", false)[
                "isSessionAlive"
              ] == false
     end
 
     test "requires_data_field?/1 is true only for join/leave" do
-      assert Floodgate.requires_data_field?("join")
-      assert Floodgate.requires_data_field?("leave")
-      refute Floodgate.requires_data_field?("op")
-      refute Floodgate.requires_data_field?("summarize")
+      assert Spillway.requires_data_field?("join")
+      assert Spillway.requires_data_field?("leave")
+      refute Spillway.requires_data_field?("op")
+      refute Spillway.requires_data_field?("summarize")
     end
 
     test "format_delta_message omits data for regular ops" do
       message =
-        Floodgate.format_delta_message(
+        Spillway.format_delta_message(
           1,
           1,
           0,
@@ -461,7 +461,7 @@ defmodule Levee.FloodgateTest do
 
     test "format_delta_message includes data for join/leave" do
       message =
-        Floodgate.format_delta_message(
+        Spillway.format_delta_message(
           2,
           -1,
           0,

@@ -3,7 +3,7 @@ defmodule LeveeWeb.SocketIOWebSockTest do
   Exercises `LeveeWeb.SocketIOWebSock`'s `WebSock` callbacks directly (no
   live socket needed — `init/1`, `handle_in/2`, `handle_info/2` are plain
   functions), covering both the Engine.IO/Socket.IO transport framing it
-  delegates to `Levee.Floodgate` and the `connect_document` auth/session flow
+  delegates to `Levee.Spillway` and the `connect_document` auth/session flow
   it still owns against the real `Levee.Documents` runtime.
   """
 

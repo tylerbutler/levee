@@ -8,9 +8,9 @@ defmodule Levee.Protocol.Bridge do
   `Levee.Documents.Session`) and JWT claim validation run on `spillway`; nack
   construction, session decision logic (feature/version negotiation, signal
   recipients, wire builders, history trimming), and signal v1/v2 normalization
-  delegate to `Levee.Floodgate` (`floodgate/nack`, `floodgate/session_logic`,
-  `floodgate/signals`), also built on `spillway`. Both paths now share the one
-  `spillway` protocol implementation.
+  delegate to `Levee.Spillway` (`spillway/nack`, `spillway/session_logic`,
+  `spillway/signals`). Both paths share the one `spillway` protocol
+  implementation.
 
   The Gleam modules compile to BEAM bytecode, so we can call
   them directly using the Erlang module naming convention.
@@ -148,22 +148,22 @@ defmodule Levee.Protocol.Bridge do
   # ─────────────────────────────────────────────────────────────────────────────
   # Nack generation helpers
   #
-  # Nack construction delegates to Levee.Floodgate (floodgate/nack.gleam, built on
-  # spillway/nack), the shared protocol implementation.
+  # Nack construction delegates to Levee.Spillway (spillway/nack.gleam), the
+  # shared protocol implementation.
   # ─────────────────────────────────────────────────────────────────────────────
 
   @doc """
   Build a nack for an unknown client error.
   """
   def build_nack_unknown_client(client_id) do
-    Levee.Floodgate.nack_unknown_client(client_id) |> nack_to_wire_map()
+    Levee.Spillway.nack_unknown_client(client_id) |> nack_to_wire_map()
   end
 
   @doc """
   Build a nack for a read-only client trying to write.
   """
   def build_nack_read_only do
-    Levee.Floodgate.nack_read_only_client() |> nack_to_wire_map()
+    Levee.Spillway.nack_read_only_client() |> nack_to_wire_map()
   end
 
   @doc """
@@ -174,19 +174,19 @@ defmodule Levee.Protocol.Bridge do
     nack =
       case reason do
         {:invalid_csn, expected, received} ->
-          Levee.Floodgate.nack_invalid_csn(expected, received)
+          Levee.Spillway.nack_invalid_csn(expected, received)
 
         {:invalid_rsn, current_sn, received_rsn} ->
-          Levee.Floodgate.nack_invalid_rsn(current_sn, received_rsn)
+          Levee.Spillway.nack_invalid_rsn(current_sn, received_rsn)
 
         {:unknown_client, client_id} ->
-          Levee.Floodgate.nack_unknown_client(client_id)
+          Levee.Spillway.nack_unknown_client(client_id)
 
         {:invalid_summarize, msg} ->
-          Levee.Floodgate.nack_bad_request("Invalid summarize op: #{msg}")
+          Levee.Spillway.nack_bad_request("Invalid summarize op: #{msg}")
 
         _ ->
-          Levee.Floodgate.nack_bad_request("Sequencing error: #{inspect(reason)}")
+          Levee.Spillway.nack_bad_request("Sequencing error: #{inspect(reason)}")
       end
 
     # The nack wire map uses nil for operation, but we want to include the original op
@@ -199,7 +199,7 @@ defmodule Levee.Protocol.Bridge do
 
     content = %{
       "code" => code,
-      "type" => Levee.Floodgate.nack_error_type_to_string(error_type),
+      "type" => Levee.Spillway.nack_error_type_to_string(error_type),
       "message" => message
     }
 
@@ -255,15 +255,15 @@ defmodule Levee.Protocol.Bridge do
   # ─────────────────────────────────────────────────────────────────────────────
   # Session logic helpers
   #
-  # Delegates to Levee.Floodgate (floodgate/session_logic.gleam, built on
-  # spillway/session_logic), the shared protocol implementation.
+  # Delegates to Levee.Spillway (spillway/session_logic.gleam), the shared
+  # protocol implementation.
   # ─────────────────────────────────────────────────────────────────────────────
 
   @doc """
   Negotiate features between server and client capabilities.
   """
   def negotiate_features(server_features, client_features) when is_map(client_features) do
-    Levee.Floodgate.negotiate_features(server_features, client_features)
+    Levee.Spillway.negotiate_features(server_features, client_features)
   end
 
   def negotiate_features(server_features, _), do: server_features
@@ -272,7 +272,7 @@ defmodule Levee.Protocol.Bridge do
   Negotiate protocol version.
   """
   def negotiate_version(supported_versions, client_versions) when is_list(client_versions) do
-    Levee.Floodgate.negotiate_version(supported_versions, client_versions)
+    Levee.Spillway.negotiate_version(supported_versions, client_versions)
   end
 
   def negotiate_version(_supported_versions, _), do: "0.1.0"
@@ -281,7 +281,7 @@ defmodule Levee.Protocol.Bridge do
   Validate summarize operation contents.
   """
   def validate_summarize_contents(contents) when is_map(contents) do
-    Levee.Floodgate.validate_summarize_contents(contents)
+    Levee.Spillway.validate_summarize_contents(contents)
   end
 
   @doc """
@@ -292,7 +292,7 @@ defmodule Levee.Protocol.Bridge do
     ignored = validated(signal["ignoredClients"], &is_list/1)
     single_target = validated(signal["targetClientId"], &is_binary/1)
 
-    Levee.Floodgate.determine_signal_recipients(
+    Levee.Spillway.determine_signal_recipients(
       sender_client_id,
       targeted,
       ignored,
@@ -310,28 +310,28 @@ defmodule Levee.Protocol.Bridge do
        op["referenceSequenceNumber"] || 0, op["type"] || "op", op["contents"], op["metadata"],
        System.system_time(:millisecond)}
 
-    Levee.Floodgate.build_sequenced_op(params)
+    Levee.Spillway.build_sequenced_op(params)
   end
 
   @doc """
   Build a summary ack for the wire format.
   """
   def build_summary_ack(handle, sn, msn) do
-    Levee.Floodgate.build_summary_ack(handle, sn, msn, System.system_time(:millisecond))
+    Levee.Spillway.build_summary_ack(handle, sn, msn, System.system_time(:millisecond))
   end
 
   @doc """
   Add an operation to history (newest first) and trim to max size.
   """
   def add_to_history(op, history, max_size) do
-    Levee.Floodgate.add_to_history(op, history, max_size)
+    Levee.Spillway.add_to_history(op, history, max_size)
   end
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Signal normalization helpers
   #
-  # Delegates to Levee.Floodgate (floodgate/signals.gleam, built on
-  # spillway/signals), the shared protocol implementation.
+  # Delegates to Levee.Spillway (spillway/signals.gleam), the shared
+  # protocol implementation.
   # ─────────────────────────────────────────────────────────────────────────────
 
   @doc """
@@ -339,7 +339,7 @@ defmodule Levee.Protocol.Bridge do
   Returns an Elixir map with consistent keys.
   """
   def normalize_signal(signal) when is_map(signal) do
-    Levee.Floodgate.normalize_signal(signal)
+    Levee.Spillway.normalize_signal(signal)
   end
 
   @doc """
@@ -456,7 +456,7 @@ defmodule Levee.Protocol.Bridge do
   end
 
   # Validate a signal targeting field's shape, returning nil (rather than a
-  # malformed value) when absent/empty/wrong-typed. Levee.Floodgate wraps the
+  # malformed value) when absent/empty/wrong-typed. Levee.Spillway wraps the
   # nil-or-value result into a Gleam Option for spillway's targeting logic.
   defp validated(nil, _check_fn), do: nil
   defp validated([], _check_fn), do: nil

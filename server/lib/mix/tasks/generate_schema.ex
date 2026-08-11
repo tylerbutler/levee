@@ -17,8 +17,8 @@ defmodule Mix.Tasks.GenerateSchema do
 
     # Ensure Gleam is built (stderr goes to console).
     # The schema CLI lives in the `spillway` dependency, which is pulled in via
-    # the `floodgate` package, so build and run from there.
-    {_, 0} = System.cmd("gleam", ["build"], cd: "floodgate", into: IO.stream(:stdio, :line))
+    # the `levee_bridge` package, so build and run from there.
+    {_, 0} = System.cmd("gleam", ["build"], cd: "levee_bridge", into: IO.stream(:stdio, :line))
 
     # Run the schema CLI - use a port to separate stdout and stderr
     port =
@@ -29,7 +29,7 @@ defmodule Mix.Tasks.GenerateSchema do
           :exit_status,
           :stderr_to_stdout,
           args: ["run", "-m", "schema_cli"],
-          cd: ~c"floodgate"
+          cd: ~c"levee_bridge"
         ]
       )
 

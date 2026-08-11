@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git build-essential curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Gleam (required for levee_auth, levee_oauth, levee_storage, levee_admin, floodgate)
+# Install Gleam (required for levee_auth, levee_oauth, levee_storage, levee_admin, levee_bridge)
 ARG GLEAM_VERSION=1.14.0
 RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "aarch64" ]; then \
@@ -46,7 +46,7 @@ COPY mix.exs mix.lock ./
 COPY levee_auth/gleam.toml levee_auth/manifest.toml levee_auth/
 COPY levee_storage/gleam.toml levee_storage/manifest.toml levee_storage/
 COPY levee_oauth/gleam.toml levee_oauth/manifest.toml levee_oauth/
-COPY floodgate/gleam.toml floodgate/manifest.toml floodgate/
+COPY levee_bridge/gleam.toml levee_bridge/manifest.toml levee_bridge/
 
 # Install Elixir dependencies
 RUN mix deps.get --only prod
@@ -55,7 +55,7 @@ RUN mix deps.get --only prod
 COPY levee_auth levee_auth
 COPY levee_storage levee_storage
 COPY levee_oauth levee_oauth
-COPY floodgate floodgate
+COPY levee_bridge levee_bridge
 COPY levee_admin levee_admin
 COPY config config
 COPY lib lib
@@ -86,7 +86,7 @@ COPY --from=builder /build/_build/prod/rel/levee ./
 COPY --from=builder /build/levee_auth/build/dev/erlang/ ./levee_auth/build/dev/erlang/
 COPY --from=builder /build/levee_storage/build/dev/erlang/ ./levee_storage/build/dev/erlang/
 COPY --from=builder /build/levee_oauth/build/dev/erlang/ ./levee_oauth/build/dev/erlang/
-COPY --from=builder /build/floodgate/build/dev/erlang/ ./floodgate/build/dev/erlang/
+COPY --from=builder /build/levee_bridge/build/dev/erlang/ ./levee_bridge/build/dev/erlang/
 
 # Set runtime environment
 ENV MIX_ENV=prod

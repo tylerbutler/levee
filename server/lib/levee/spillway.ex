@@ -1,25 +1,24 @@
-defmodule Levee.Floodgate do
+defmodule Levee.Spillway do
   @moduledoc """
-  Elixir bridge to Floodgate's Gleam-owned Engine.IO/Socket.IO framing and
+  Elixir bridge to spillway's Engine.IO/Socket.IO framing and
   `connect_document` protocol decision helpers.
 
-  Floodgate (`server/floodgate/`) owns the Fluid Socket.IO wire-protocol pieces
-  that don't need Levee's tenant-secret storage or document Session/Registry
-  runtime: Engine.IO/Socket.IO frame classification and encoding (delegating
-  to `windsock`/`dewdrop` for the actual protocol vocabulary and framing
-  constants), the `connect_document` payload-shape and mode/scope decisions,
+  `spillway` — the single shared Fluid protocol implementation, which the
+  classic Levee path (`Levee.Protocol.Bridge`) also uses — owns the Fluid
+  Socket.IO wire-protocol pieces that don't need Levee's tenant-secret
+  storage or document Session/Registry runtime: Engine.IO/Socket.IO frame
+  classification and encoding (delegating to `windsock` for the actual
+  framing), the `connect_document` payload-shape and mode/scope decisions,
   and the pure document-session decision logic (feature/version negotiation,
   signal v1/v2 normalization and recipient targeting, sequenced-op/
-  summary-ack wire builders, nack construction, op-history trimming) — all
-  built on `spillway`, the single shared Fluid protocol implementation that the
-  classic Levee path (`Levee.Protocol.Bridge`) now also uses. Levee still owns
-  JWT verification
-  (tenant secrets) and the document Session/Registry runtime (connected
-  client PIDs, storage, op history storage); it calls through this module
-  for the protocol decisions so `LeveeWeb.SocketIOWebSock` and
-  `Levee.Documents.Session` stay thin over the actual Fluid protocol logic.
+  summary-ack wire builders, nack construction, op-history trimming). Levee
+  still owns JWT verification (tenant secrets) and the document
+  Session/Registry runtime (connected client PIDs, storage, op history
+  storage); it calls through this module for the protocol decisions so
+  `LeveeWeb.SocketIOWebSock` and `Levee.Documents.Session` stay thin over
+  the actual Fluid protocol logic.
 
-  It also owns the REST response-*shape* decisions (`floodgate/rest`) for the
+  It also owns the REST response-*shape* decisions (`spillway/rest`) for the
   Storage/Historian-style HTTP surface: git object/ref URL construction and
   blob/tree/commit/ref response bodies, `GET .../session/:id` session-info
   shape, `GET .../:id` document metadata shape, and the `GET /deltas/...`
@@ -27,22 +26,23 @@ defmodule Levee.Floodgate do
   `LeveeWeb.GitController`, `LeveeWeb.DocumentController`, and
   `LeveeWeb.DeltaController` still own the actual storage calls, Plug/Conn
   handling, and JSON encoding — they call through this module to decide the
-  response body shape so the wire format lives in one (Floodgate-owned) place.
+  response body shape so the wire format lives in one (spillway-owned) place.
 
-  Floodgate's compiled Gleam modules are loaded onto the code path by
-  `Levee.Application.load_gleam_modules/0` alongside the other Gleam
-  packages, so these are ordinary BEAM calls once compiled — no ports,
-  NIFs, or RPC involved. Calls go through `apply/3` (rather than a direct
-  module alias) because the Gleam build is a separate compilation step from
-  `mix compile`; see `AGENTS.md`/the gleam-bridge guide for the build order.
+  spillway's compiled Gleam modules are loaded onto the code path by
+  `Levee.Application.load_gleam_modules/0` (via the `levee_bridge` Gleam
+  package, which declares spillway as a direct dependency), so these are
+  ordinary BEAM calls once compiled — no ports, NIFs, or RPC involved. Calls
+  go through `apply/3` (rather than a direct module alias) because the Gleam
+  build is a separate compilation step from `mix compile`; see `AGENTS.md`/
+  the gleam-bridge guide for the build order.
   """
 
-  @socketio :floodgate@socketio
-  @connect_document :floodgate@connect_document
-  @session_logic :floodgate@session_logic
-  @signals :floodgate@signals
-  @nack :floodgate@nack
-  @rest :floodgate@rest
+  @socketio :spillway@socketio
+  @connect_document :spillway@connect_document
+  @session_logic :spillway@session_logic
+  @signals :spillway@signals
+  @nack :spillway@nack
+  @rest :spillway@rest
 
   # ── Engine.IO / Socket.IO framing ──────────────────────────────────────
 
@@ -292,7 +292,7 @@ defmodule Levee.Floodgate do
     apply(@nack, :error_type_to_string, [error_type])
   end
 
-  # ── REST response-shape decisions (floodgate/rest) ────────────────────────
+  # ── REST response-shape decisions (spillway/rest) ─────────────────────────
 
   @doc """
   Build the `scheme://host[:port]` prefix used by git object/ref URLs,

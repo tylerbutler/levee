@@ -5,10 +5,10 @@ defmodule LeveeWeb.SocketIOWebSock do
   This Levee-owned compatibility transport terminates the
   WebSocket connection and drives Levee's own JWT verification and document
   Session/Registry runtime, but delegates the Engine.IO/Socket.IO framing and
-  `connect_document` payload/scope decisions to Floodgate (`Levee.Floodgate`,
-  backed by the Gleam `floodgate/socketio` and `floodgate/connect_document`
-  modules, which build on `windsock`/`dewdrop`/`spillway`). Protocol-neutral
-  behavior can remain shared through `Levee.Floodgate`, while Levee keeps its
+  `connect_document` payload/scope decisions to `Levee.Spillway` (backed by
+  the Gleam `spillway/socketio` and `spillway/connect_document` modules,
+  which build on `windsock`). Protocol-neutral
+  behavior can remain shared through `Levee.Spillway`, while Levee keeps its
   own Session/Registry runtime. Per ADR-004, Levee and standalone Floodgate
   coexist; this endpoint is not coupled to replacing the Phoenix Channels
   stack.
@@ -18,7 +18,7 @@ defmodule LeveeWeb.SocketIOWebSock do
 
   alias Levee.Auth.JWT
   alias Levee.Documents.Session
-  alias Levee.Floodgate
+  alias Levee.Spillway
 
   require Logger
 
@@ -26,22 +26,22 @@ defmodule LeveeWeb.SocketIOWebSock do
   def init(_state) do
     sid = Base.url_encode64(:crypto.strong_rand_bytes(16), padding: false)
 
-    open_packet = Floodgate.encode_open(sid, 25_000, 20_000, 1_000_000)
+    open_packet = Spillway.encode_open(sid, 25_000, 20_000, 1_000_000)
 
     {:push, {:text, open_packet}, %{sid: sid, client_id: nil, session_pid: nil}}
   end
 
   @impl true
   def handle_in({frame, [opcode: :text]}, state) do
-    case Floodgate.classify_frame(frame) do
+    case Spillway.classify_frame(frame) do
       :engine_ping ->
-        {:push, {:text, Floodgate.encode_pong()}, state}
+        {:push, {:text, Spillway.encode_pong()}, state}
 
       :engine_pong ->
         {:ok, state}
 
       :socket_connect ->
-        {:push, {:text, Floodgate.encode_connect_ack(state.sid)}, state}
+        {:push, {:text, Spillway.encode_connect_ack(state.sid)}, state}
 
       {:fluid_event, "connect_document", [payload | _]} when is_map(payload) ->
         connect_document(payload, state)
@@ -61,11 +61,11 @@ defmodule LeveeWeb.SocketIOWebSock do
     document_id = op_message["documentId"]
     messages = op_message["op"] || []
 
-    {:push, {:text, Floodgate.encode_op(document_id, messages)}, state}
+    {:push, {:text, Spillway.encode_op(document_id, messages)}, state}
   end
 
   def handle_info({:signal, signal_message}, state) do
-    {:push, {:text, Floodgate.encode_signal(signal_message)}, state}
+    {:push, {:text, Spillway.encode_signal(signal_message)}, state}
   end
 
   def handle_info(_message, state), do: {:ok, state}
@@ -80,7 +80,7 @@ defmodule LeveeWeb.SocketIOWebSock do
   def terminate(_reason, _state), do: :ok
 
   defp connect_document(payload, state) do
-    with {:ok, {tenant_id, document_id, token}} <- Floodgate.parse_connect_request(payload),
+    with {:ok, {tenant_id, document_id, token}} <- Spillway.parse_connect_request(payload),
          {:ok, claims} <- verify_token(token, tenant_id, document_id),
          :ok <- validate_mode(payload, claims),
          {:ok, session_pid} <-
@@ -97,13 +97,13 @@ defmodule LeveeWeb.SocketIOWebSock do
           "ver" => claims.ver
         })
 
-      {:push, {:text, Floodgate.encode_connect_document_success(response)},
+      {:push, {:text, Spillway.encode_connect_document_success(response)},
        %{state | client_id: client_id, session_pid: session_pid}}
     else
       {:error, reason} ->
         {:push,
          {:text,
-          Floodgate.encode_connect_document_error(%{"code" => 400, "message" => inspect(reason)})},
+          Spillway.encode_connect_document_error(%{"code" => 400, "message" => inspect(reason)})},
          state}
     end
   end
@@ -113,7 +113,7 @@ defmodule LeveeWeb.SocketIOWebSock do
          false <- JWT.expired?(claims),
          true <- claims.tenantId == tenant_id,
          true <- claims.documentId == document_id,
-         true <- JWT.has_scope?(claims, Floodgate.read_scope()) do
+         true <- JWT.has_scope?(claims, Spillway.read_scope()) do
       {:ok, claims}
     else
       true -> {:error, :token_expired}
@@ -123,6 +123,6 @@ defmodule LeveeWeb.SocketIOWebSock do
   end
 
   defp validate_mode(payload, claims) do
-    Floodgate.validate_mode_scope(payload, claims.scopes)
+    Spillway.validate_mode_scope(payload, claims.scopes)
   end
 end
