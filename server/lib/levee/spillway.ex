@@ -289,7 +289,7 @@ defmodule Levee.Spillway do
   @doc "Convert a nack error type atom to its wire-format string."
   @spec nack_error_type_to_string(atom()) :: String.t()
   def nack_error_type_to_string(error_type) do
-    apply(@nack, :error_type_to_string, [error_type])
+    apply(@nack, :nack_error_type_to_string, [error_type])
   end
 
   # ── REST response-shape decisions (spillway/rest) ─────────────────────────
