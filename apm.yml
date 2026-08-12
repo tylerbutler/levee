@@ -1,19 +1,29 @@
 name: levee
-version: 1.0.0
+version: 0.0.1
 description: APM project for levee
 author: Tyler Butler
 targets:
   - copilot
   - claude
 
-dependencies:
+devDependencies:
   apm:
+    - tylerbutler/apm-base
+    # - tylerbutler/agent-marketplace/plugins/repo-tools/skills/astro-tinylytics
+    - tylerbutler/vestibule/.claude/skills/gleam-review
+
     # - tylerbutler/agent-marketplace/plugins/repo-tools
     # - tylerbutler/agent-marketplace/plugins/specialists
-    - tylerbutler/vestibule/.claude/skills/gleam-review
-    - JuliusBrussee/caveman/skills/caveman-commit
-    # - git: https://github.com/obra/superpowers
-    - DietrichGebert/ponytail
+    # - tylerbutler/trellis
+    # - tylerbutler/agent-marketplace/plugins/repo-tools/skills/api-release-review
+    # - tylerbutler/agent-marketplace/plugins/repo-tools/skills/ast-grep
+    # - tylerbutler/agent-marketplace/plugins/repo-tools/skills/ccl-test-data-just
+    # - tylerbutler/agent-marketplace/plugins/repo-tools/skills/changie-changelog
+    # - tylerbutler/agent-marketplace/plugins/repo-tools/skills/effection-integration
+    # - tylerbutler/agent-marketplace/plugins/repo-tools/skills/find-skills
+    # - tylerbutler/agent-marketplace/plugins/repo-tools/skills/justfile-creator
+    # - tylerbutler/agent-marketplace/plugins/repo-tools/skills/release-skills
+    # - tylerbutler/agent-marketplace/plugins/repo-tools/skills/repopo-setup
   mcp: []
   lsp:
     - name: gleam

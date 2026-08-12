@@ -1,13 +1,51 @@
 lockfile_version: '1'
-generated_at: '2026-08-10T20:08:13.426887+00:00'
+generated_at: '2026-08-11T23:59:19.780306+00:00'
 apm_version: 0.28.0
 dependencies:
+- repo_url: tylerbutler/apm-base
+  name: apm-base
+  host: github.com
+  resolved_commit: b7df627a7c15adbd6f22b967385f2f48eebd875a
+  version: 0.0.1
+  package_type: apm_package
+  deployed_files:
+  - .claude/rules/no-laziness.md
+  - .github/instructions/no-laziness.instructions.md
+  deployed_file_hashes:
+    .claude/rules/no-laziness.md: sha256:7bfa0b61b27e7f8aa782881e243ff010a542615ce14f0ce917615b23dcea1cd4
+    .github/instructions/no-laziness.instructions.md: sha256:d0f928dfdf98b1ddee5e676e212cff34c866c65cf839952c9d62c730068d7c1e
+  content_hash: sha256:0744d55c36e4a60856362dd55df542e58c3d9868cd6c0d6add6115175beb9927
+  is_dev: true
+- repo_url: tylerbutler/vestibule
+  name: gleam-review
+  host: github.com
+  resolved_commit: a59833c8f1ec24ce1322db6298539645a224d030
+  version: unknown
+  virtual_path: .claude/skills/gleam-review
+  is_virtual: true
+  package_type: claude_skill
+  deployed_files:
+  - .agents/skills/gleam-review
+  - .agents/skills/gleam-review/SKILL.md
+  - .agents/skills/gleam-review/references/conventions.md
+  - .claude/skills/gleam-review
+  - .claude/skills/gleam-review/SKILL.md
+  - .claude/skills/gleam-review/references/conventions.md
+  deployed_file_hashes:
+    .agents/skills/gleam-review/SKILL.md: sha256:285a54a75346349ff12f6579c184847a6b35bbcecd2842b5065117a5d91ff071
+    .agents/skills/gleam-review/references/conventions.md: sha256:cd0b6dee401eff48c7afcb83db73ee5971e2563989f266dfd58bd93b997fe6ed
+    .claude/skills/gleam-review/SKILL.md: sha256:285a54a75346349ff12f6579c184847a6b35bbcecd2842b5065117a5d91ff071
+    .claude/skills/gleam-review/references/conventions.md: sha256:cd0b6dee401eff48c7afcb83db73ee5971e2563989f266dfd58bd93b997fe6ed
+  content_hash: sha256:5a86818a2312055b63558f5a9b208766b7e8266823d215bbfa8438d157491958
+  is_dev: true
 - repo_url: dietrichgebert/ponytail
   materialization_repo_url: DietrichGebert/ponytail
   name: ponytail
   host: github.com
   resolved_commit: 16f29800fd2681bdf24f3eb4ccffe38be3baec6b
   version: 4.8.4
+  depth: 2
+  resolved_by: tylerbutler/apm-base
   package_type: marketplace_plugin
   deployed_files:
   - .agents/skills/ponytail
@@ -84,6 +122,7 @@ dependencies:
     .github/hooks/scripts/ponytail/hooks/ponytail-statusline.sh: sha256:f1dbfa5997a5d4b5339619709053eff557ab16d71af75eb3041c3d3e3dca42ec
     .github/hooks/scripts/ponytail/hooks/ponytail-subagent.js: sha256:7f6bee86702a488d29ef0dcaabf424bbe2aca345a6a642319d43a1fe0276792e
   content_hash: sha256:44264185d4a65991e96fe785ab209f9c447f5878f675d294fe2e85ca61e711c3
+  is_dev: true
   declared_license: MIT
 - repo_url: juliusbrussee/caveman
   materialization_repo_url: JuliusBrussee/caveman
@@ -93,6 +132,8 @@ dependencies:
   version: unknown
   virtual_path: skills/caveman-commit
   is_virtual: true
+  depth: 2
+  resolved_by: tylerbutler/apm-base
   package_type: claude_skill
   deployed_files:
   - .agents/skills/caveman-commit
@@ -107,27 +148,7 @@ dependencies:
     .claude/skills/caveman-commit/README.md: sha256:a2e82924b487fc1845114c247b47c2d3c2d1bd60f90bbfa60e9831319eb964fa
     .claude/skills/caveman-commit/SKILL.md: sha256:58db7b8efab911a629c26e7132517d9076e4e3645009eb604cb8c25663477841
   content_hash: sha256:790a4eeace0be35c6691faf923518ba5bd50f1f1305d1101d09dd4971be94e00
-- repo_url: tylerbutler/vestibule
-  name: gleam-review
-  host: github.com
-  resolved_commit: a59833c8f1ec24ce1322db6298539645a224d030
-  version: unknown
-  virtual_path: .claude/skills/gleam-review
-  is_virtual: true
-  package_type: claude_skill
-  deployed_files:
-  - .agents/skills/gleam-review
-  - .agents/skills/gleam-review/SKILL.md
-  - .agents/skills/gleam-review/references/conventions.md
-  - .claude/skills/gleam-review
-  - .claude/skills/gleam-review/SKILL.md
-  - .claude/skills/gleam-review/references/conventions.md
-  deployed_file_hashes:
-    .agents/skills/gleam-review/SKILL.md: sha256:285a54a75346349ff12f6579c184847a6b35bbcecd2842b5065117a5d91ff071
-    .agents/skills/gleam-review/references/conventions.md: sha256:cd0b6dee401eff48c7afcb83db73ee5971e2563989f266dfd58bd93b997fe6ed
-    .claude/skills/gleam-review/SKILL.md: sha256:285a54a75346349ff12f6579c184847a6b35bbcecd2842b5065117a5d91ff071
-    .claude/skills/gleam-review/references/conventions.md: sha256:cd0b6dee401eff48c7afcb83db73ee5971e2563989f266dfd58bd93b997fe6ed
-  content_hash: sha256:5a86818a2312055b63558f5a9b208766b7e8266823d215bbfa8438d157491958
+  is_dev: true
 deployments:
 - kind: project-relative
   target: claude
@@ -210,6 +231,15 @@ deployments:
   - dietrichgebert/ponytail
   active_owner: dietrichgebert/ponytail
   content_hash: sha256:7f6bee86702a488d29ef0dcaabf424bbe2aca345a6a642319d43a1fe0276792e
+- kind: project-relative
+  target: claude
+  value: .claude/rules/no-laziness.md
+  runtime: null
+  scope: project
+  owners:
+  - tylerbutler/apm-base
+  active_owner: tylerbutler/apm-base
+  content_hash: sha256:7bfa0b61b27e7f8aa782881e243ff010a542615ce14f0ce917615b23dcea1cd4
 - kind: project-relative
   target: claude
   value: .claude/skills/caveman-commit
@@ -615,13 +645,12 @@ deployments:
   - dietrichgebert/ponytail
   active_owner: dietrichgebert/ponytail
   content_hash: sha256:7f6bee86702a488d29ef0dcaabf424bbe2aca345a6a642319d43a1fe0276792e
-lsp_servers:
-- gleam
-lsp_configs:
-  gleam:
-    name: gleam
-    command: gleam
-    args:
-    - lsp
-    extensionToLanguage:
-      .gleam: gleam
+- kind: project-relative
+  target: copilot
+  value: .github/instructions/no-laziness.instructions.md
+  runtime: null
+  scope: project
+  owners:
+  - tylerbutler/apm-base
+  active_owner: tylerbutler/apm-base
+  content_hash: sha256:d0f928dfdf98b1ddee5e676e212cff34c866c65cf839952c9d62c730068d7c1e
