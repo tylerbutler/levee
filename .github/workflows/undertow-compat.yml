@@ -1,0 +1,47 @@
+name: Undertow Compatibility
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "client/**"
+      - "justfile"
+      - ".github/workflows/undertow-compat.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "client/**"
+      - "justfile"
+      - ".github/workflows/undertow-compat.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: undertow-compat-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: tylerbutler/undertow
+          ref: 3d711071f678f3f84f2c91a59d6c232890769505
+          path: undertow
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.24.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: client/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: client
+      - uses: extractions/setup-just@v2
+      - run: just test-levee-suite-vs-undertow
+        env:
+          UNDERTOW_REPO: undertow
+      - if: failure()
+        run: cat client/_temp/junit.xml

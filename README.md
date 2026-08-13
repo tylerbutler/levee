@@ -59,6 +59,12 @@ The standalone Gleam server, Routerlicious client, examples, and conformance
 suites live in [tylerbutler/floodgate](https://github.com/tylerbutler/floodgate).
 Levee retains the Phoenix Channels server and client stack.
 
+### Undertow
+
+The standalone .NET implementation and its conformance tooling live in
+[tylerbutler/undertow](https://github.com/tylerbutler/undertow). Levee retains
+only its unmodified client compatibility gate against an external checkout.
+
 ### Client
 
 ```bash
