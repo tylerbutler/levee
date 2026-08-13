@@ -223,6 +223,12 @@ into its own repository.
 Floodgate lives at https://github.com/tylerbutler/floodgate with its container,
 client, examples, admin UI, conformance suites, and release workflow.
 
+**Undertow is standalone.** The .NET implementation, Docker image source, unit
+tests, and dual-mode conformance runner live at
+https://github.com/tylerbutler/undertow. Levee keeps only
+`just test-levee-suite-vs-undertow`, which runs the unmodified Levee client
+integration suites against an external checkout selected by `UNDERTOW_REPO`.
+
 ### Client Commands
 
 ```bash
