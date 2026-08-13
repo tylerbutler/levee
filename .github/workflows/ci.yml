@@ -180,7 +180,7 @@ jobs:
 
       - name: Test
         working-directory: client
-        run: pnpm vitest run --reporter=verbose --reporter=junit
+        run: pnpm test
 
   client-integration-test:
     name: Client Integration Tests

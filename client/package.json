@@ -16,7 +16,7 @@
 		"format": "biome check . --linter-enabled=false --write",
 		"lint": "biome lint .",
 		"lint:fix": "biome lint . --write",
-		"test": "vitest run",
+		"test": "pnpm --filter @tylerbu/sandbag exec svelte-kit sync && vitest run",
 		"test:integration": "start-server-and-test 'docker compose -f packages/levee-driver/docker-compose.yml up' http://localhost:4000/health 'vitest run integration'",
 		"test:integration:up": "docker compose -f packages/levee-driver/docker-compose.yml up -d --wait",
 		"test:integration:down": "docker compose -f packages/levee-driver/docker-compose.yml down -v",
