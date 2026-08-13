@@ -43,3 +43,5 @@ jobs:
       - run: just test-levee-suite-vs-undertow
         env:
           UNDERTOW_REPO: undertow
+      - if: failure()
+        run: cat client/_temp/junit.xml
