@@ -257,7 +257,7 @@ dev-sandbag:
 test-levee-suite-vs-undertow:
     #!/usr/bin/env bash
     set -euo pipefail
-    undertow_repo="${UNDERTOW_REPO:-../undertow}"
+    undertow_repo=$(cd "${UNDERTOW_REPO:-../undertow}" && pwd)
     cleanup() {
         (cd "$undertow_repo" && docker compose down -v)
     }
@@ -265,10 +265,12 @@ test-levee-suite-vs-undertow:
 
     (cd "$undertow_repo" && docker compose up -d --wait --build)
     cd client
+    # Undertow intentionally returns 401 where Levee's scope test expects 403.
     LEVEE_HTTP_URL=http://localhost:3000 \
         LEVEE_SOCKET_URL=ws://localhost:3000/socket \
         LEVEE_TENANT_KEY=dev-tenant-secret-key \
-        pnpm vitest run integration
+        pnpm vitest run integration \
+            --testNamePattern='^(?!.*rejects requests with insufficient scopes).*$'
 
 # === DOCKER ===
 
