@@ -265,6 +265,7 @@ test-levee-suite-vs-undertow:
 
     (cd "$undertow_repo" && docker compose up -d --wait --build)
     cd client
+    pnpm build
     # Undertow intentionally returns 401 where Levee's scope test expects 403.
     LEVEE_HTTP_URL=http://localhost:3000 \
         LEVEE_SOCKET_URL=ws://localhost:3000/socket \
