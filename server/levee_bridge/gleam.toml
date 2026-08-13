@@ -1,0 +1,12 @@
+name = "levee_bridge"
+version = "0.1.0"
+target = "erlang"
+description = "Levee-owned dependency surface for the Elixir Levee.Protocol.Bridge: declares the spillway protocol logic and signet token/JWT libraries as direct dependencies so the Elixir sequencing/JWT bridge no longer relies on them being pulled in transitively through floodgate's build."
+
+[dependencies]
+gleam_stdlib = ">= 0.44.0 and < 2.0.0"
+spillway = { git = "https://github.com/tylerbutler/spillway", ref = "main" }
+signet = { git = "https://github.com/tylerbutler/signet", ref = "main" }
+
+[dev-dependencies]
+gleeunit = ">= 1.0.0 and < 2.0.0"

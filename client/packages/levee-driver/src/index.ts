@@ -35,6 +35,7 @@ export {
 	NackErrorType,
 	normalizeConnectedResponse,
 	normalizeKeys,
+	normalizeNackPayload,
 	normalizeOpPayload,
 } from "./contracts.js";
 // Git storage manager

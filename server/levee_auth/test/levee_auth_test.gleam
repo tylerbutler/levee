@@ -3,6 +3,7 @@ import gleeunit/should
 import levee_auth
 import password
 import scopes
+import signet/types.{DocRead, DocWrite, SummaryRead, SummaryWrite}
 import token
 
 pub fn main() {
@@ -47,24 +48,24 @@ pub fn matches_wrong_password_test() {
 // Scopes tests
 
 pub fn scope_to_string_test() {
-  should.equal(scopes.to_string(scopes.DocRead), "doc:read")
-  should.equal(scopes.to_string(scopes.DocWrite), "doc:write")
-  should.equal(scopes.to_string(scopes.SummaryRead), "summary:read")
-  should.equal(scopes.to_string(scopes.SummaryWrite), "summary:write")
+  should.equal(scopes.to_string(DocRead), "doc:read")
+  should.equal(scopes.to_string(DocWrite), "doc:write")
+  should.equal(scopes.to_string(SummaryRead), "summary:read")
+  should.equal(scopes.to_string(SummaryWrite), "summary:write")
 }
 
 pub fn scope_from_string_test() {
-  should.equal(scopes.from_string("doc:read"), Ok(scopes.DocRead))
-  should.equal(scopes.from_string("doc:write"), Ok(scopes.DocWrite))
+  should.equal(scopes.from_string("doc:read"), Ok(DocRead))
+  should.equal(scopes.from_string("doc:write"), Ok(DocWrite))
   should.equal(scopes.from_string("invalid"), Error(Nil))
 }
 
 pub fn has_scope_test() {
-  let user_scopes = [scopes.DocRead, scopes.DocWrite]
+  let user_scopes = [DocRead, DocWrite]
 
-  should.be_true(scopes.has_scope(user_scopes, scopes.DocRead))
-  should.be_true(scopes.has_scope(user_scopes, scopes.DocWrite))
-  should.be_false(scopes.has_scope(user_scopes, scopes.SummaryRead))
+  should.be_true(scopes.has_scope(user_scopes, DocRead))
+  should.be_true(scopes.has_scope(user_scopes, DocWrite))
+  should.be_false(scopes.has_scope(user_scopes, SummaryRead))
 }
 
 pub fn filter_for_role_test() {
@@ -116,9 +117,9 @@ pub fn token_has_scope_test() {
   let config = token.default_config("secret")
   let claims = token.read_write_claims("user-1", "tenant-1", "doc-1", config)
 
-  should.be_true(token.has_scope(claims, scopes.DocRead))
-  should.be_true(token.has_scope(claims, scopes.DocWrite))
-  should.be_false(token.has_scope(claims, scopes.SummaryRead))
+  should.be_true(token.has_scope(claims, DocRead))
+  should.be_true(token.has_scope(claims, DocWrite))
+  should.be_false(token.has_scope(claims, SummaryRead))
 }
 
 // Top-level API tests

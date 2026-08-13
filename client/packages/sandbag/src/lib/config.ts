@@ -1,35 +1,31 @@
 export interface LeveeConfig {
-	httpUrl: string;
-	socketUrl: string;
-	tenantId: string;
+	/** HTTP URL of the service. */
+	httpUrl?: string;
+	/**
+	 * WebSocket URL of the service. When absent, the mounted app applies its
+	 * own default.
+	 */
+	socketUrl?: string;
+	/**
+	 * Tenant ID. When absent, the mounted app applies its own default.
+	 */
+	tenantId?: string;
 	authToken?: string;
 	documentId?: string;
 }
 
-function getDefaults() {
-	if (typeof window === "undefined") {
-		return {
-			httpUrl: "http://localhost:4000",
-			socketUrl: "ws://localhost:4000/socket",
-		};
-	}
-	const origin = window.location.origin;
-	const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-	return {
-		httpUrl: origin,
-		socketUrl: `${wsProtocol}//${window.location.host}/socket`,
-	};
-}
-
 /**
- * Parse Levee connection config from URL search params, falling back to defaults.
+ * Parse service connection config from URL search params.
+ *
+ * All fields are optional: values absent from params are returned as
+ * `undefined` so that each app's mount function can apply its own defaults
+ * rather than inheriting Levee-specific or origin-derived fallbacks.
  */
 export function parseConfigFromParams(params: URLSearchParams): LeveeConfig {
-	const defaults = getDefaults();
 	return {
-		httpUrl: params.get("httpUrl") ?? defaults.httpUrl,
-		socketUrl: params.get("socketUrl") ?? defaults.socketUrl,
-		tenantId: params.get("tenantId") ?? "sandbag",
+		httpUrl: params.get("httpUrl") ?? undefined,
+		socketUrl: params.get("socketUrl") ?? undefined,
+		tenantId: params.get("tenantId") ?? undefined,
 		authToken: params.get("authToken") ?? undefined,
 		documentId: params.get("documentId") ?? undefined,
 	};

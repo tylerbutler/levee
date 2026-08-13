@@ -4,11 +4,17 @@ defmodule LeveeWeb.DeltaController do
 
   Implements the Storage Service HTTP API:
   - GET /deltas/:tenant_id/:id - Get operations with pagination
+
+  Storage calls and Plug/Conn handling stay here; the wire *shape* for each
+  sequenced message (field names, and whether a JSON-stringified `data`
+  sidecar is attached for join/leave system messages) is delegated to
+  the `spillway/rest` module via `Levee.Spillway`.
   """
 
   use LeveeWeb, :controller
 
   alias Levee.Storage
+  alias Levee.Spillway
   require Logger
 
   @max_ops_per_request 2000
@@ -67,23 +73,22 @@ defmodule LeveeWeb.DeltaController do
   defp parse_int_param(value, _default) when is_integer(value), do: value
 
   defp format_sequenced_message(delta) do
-    msg = %{
-      sequenceNumber: delta.sequence_number,
-      clientSequenceNumber: delta.client_sequence_number,
-      minimumSequenceNumber: delta.minimum_sequence_number,
-      clientId: delta.client_id,
-      referenceSequenceNumber: delta.reference_sequence_number,
-      type: delta.type,
-      contents: delta.contents,
-      metadata: delta.metadata,
-      timestamp: delta.timestamp
-    }
+    data =
+      if Spillway.requires_data_field?(delta.type) do
+        Jason.encode!(delta.contents)
+      end
 
-    # System messages (join/leave) need a `data` field with JSON-stringified contents
-    if delta.type in ["join", "leave"] do
-      Map.put(msg, :data, Jason.encode!(delta.contents))
-    else
-      msg
-    end
+    Spillway.format_delta_message(
+      delta.sequence_number,
+      delta.client_sequence_number,
+      delta.minimum_sequence_number,
+      delta.client_id,
+      delta.reference_sequence_number,
+      delta.type,
+      delta.contents,
+      delta.metadata,
+      delta.timestamp,
+      data
+    )
   end
 end

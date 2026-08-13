@@ -206,15 +206,12 @@ defmodule Levee.Storage.GleamETS do
     parents = params["parents"] || []
     message = if params["message"], do: {:some, params["message"]}, else: :none
     author = params["author"]
-    now = DateTime.utc_now() |> DateTime.to_iso8601()
 
-    committer =
-      params["committer"] ||
-        %{
-          "name" => "Levee",
-          "email" => "server@fluid.local",
-          "date" => now
-        }
+    # ICreateCommitParams carries no committer, so the server synthesizes one.
+    # gitrest uses the author verbatim (isomorphicgitManager.createCommitCore),
+    # and silt decodes a missing committer the same way, so default to the author
+    # rather than inventing a server identity with a fresh timestamp.
+    committer = params["committer"] || author
 
     case @gleam_ets.create_commit(
            tables(),

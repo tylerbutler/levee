@@ -94,6 +94,15 @@ defmodule LeveeWeb.Router do
     get "/:tenant_id/:id", DeltaController, :index
   end
 
+  # Historian commit history. Deliberately *not* under /git: the Routerlicious
+  # driver's storageUrl is `/repos/:tenant_id`, and its getVersions calls
+  # `GET {storageUrl}/commits?sha=&count=`.
+  scope "/repos/:tenant_id", LeveeWeb do
+    pipe_through :read_access
+
+    get "/commits", GitController, :list_commits
+  end
+
   # Git Storage Operations (Historian Service) - read operations
   scope "/repos/:tenant_id/git", LeveeWeb do
     pipe_through :read_access

@@ -91,3 +91,20 @@ export function buildAppUrl(
 	const query = params.toString();
 	return `${base}/apps/${appType}${query ? `?${query}` : ""}`;
 }
+
+/**
+ * Build the iframe URL for the `sandbag/[id]` caller.
+ *
+ * @param sandbag - The sandbag record being viewed.
+ * @param authToken - Levee session token.
+ */
+export function buildIframeSrc(
+	sandbag: SandbagRecord,
+	authToken: string | undefined,
+): string {
+	return buildAppUrl(
+		sandbag.appType,
+		sandbag.documentId || undefined,
+		authToken,
+	);
+}

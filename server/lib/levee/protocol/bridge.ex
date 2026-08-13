@@ -1,28 +1,36 @@
 defmodule Levee.Protocol.Bridge do
   @moduledoc """
-  Elixir bridge to Gleam protocol module.
+  Elixir bridge to Gleam protocol modules.
 
-  Provides idiomatic Elixir wrappers around the Gleam functions
-  for sequence number management, nack generation, and protocol validation.
+  Provides idiomatic Elixir wrappers around the Gleam functions for sequence
+  number management and protocol validation. Sequence-state management
+  (`spillway`'s `SequenceState`, threaded as opaque state through
+  `Levee.Documents.Session`) and JWT claim validation run on `spillway`; nack
+  construction, session decision logic (feature/version negotiation, signal
+  recipients, wire builders, history trimming), and signal v1/v2 normalization
+  delegate to `Levee.Spillway` (`spillway/nack`, `spillway/session_logic`,
+  `spillway/signals`). Both paths share the one `spillway` protocol
+  implementation.
 
-  The Gleam module compiles to BEAM bytecode, so we can call
-  it directly using the Erlang module naming convention.
+  The Gleam modules compile to BEAM bytecode, so we can call
+  them directly using the Erlang module naming convention.
   """
 
   # Gleam modules compile to :module_name atoms
-  # Note: Gleam submodules use @ separator (e.g., :levee_protocol@sequencing)
-  @gleam_module :levee_protocol
-  @gleam_sequencing :levee_protocol@sequencing
+  # Note: Gleam submodules use @ separator (e.g., :spillway@sequencing)
+  @gleam_module :spillway
+  @gleam_sequencing :spillway@sequencing
 
   # Gleam modules are built separately and not visible to the Elixir compiler.
   # This directive tells the compiler these modules will exist at runtime.
+  # `spillway` and `signet` are declared as direct deps of the `levee_bridge`
+  # Gleam package (built via mix `gleam.build`), so their presence on the BEAM
+  # code path is owned by Levee rather than inherited transitively via floodgate.
   @compile {:no_warn_undefined,
             [
-              :levee_protocol,
-              :levee_protocol@sequencing,
-              :levee_protocol@nack,
-              :levee_protocol@session_logic,
-              :levee_protocol@signals
+              :spillway,
+              :spillway@sequencing,
+              :signet@types
             ]}
 
   @doc """
@@ -139,22 +147,23 @@ defmodule Levee.Protocol.Bridge do
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Nack generation helpers
+  #
+  # Nack construction delegates to Levee.Spillway (spillway/nack.gleam), the
+  # shared protocol implementation.
   # ─────────────────────────────────────────────────────────────────────────────
-
-  @gleam_nack :levee_protocol@nack
 
   @doc """
   Build a nack for an unknown client error.
   """
   def build_nack_unknown_client(client_id) do
-    @gleam_nack.unknown_client(client_id) |> nack_to_wire_map()
+    Levee.Spillway.nack_unknown_client(client_id) |> nack_to_wire_map()
   end
 
   @doc """
   Build a nack for a read-only client trying to write.
   """
   def build_nack_read_only do
-    @gleam_nack.read_only_client(:none) |> nack_to_wire_map()
+    Levee.Spillway.nack_read_only_client() |> nack_to_wire_map()
   end
 
   @doc """
@@ -165,19 +174,19 @@ defmodule Levee.Protocol.Bridge do
     nack =
       case reason do
         {:invalid_csn, expected, received} ->
-          @gleam_nack.invalid_csn(expected, received, :none)
+          Levee.Spillway.nack_invalid_csn(expected, received)
 
         {:invalid_rsn, current_sn, received_rsn} ->
-          @gleam_nack.invalid_rsn(current_sn, received_rsn, :none)
+          Levee.Spillway.nack_invalid_rsn(current_sn, received_rsn)
 
         {:unknown_client, client_id} ->
-          @gleam_nack.unknown_client(client_id)
+          Levee.Spillway.nack_unknown_client(client_id)
 
         {:invalid_summarize, msg} ->
-          @gleam_nack.bad_request("Invalid summarize op: #{msg}", :none)
+          Levee.Spillway.nack_bad_request("Invalid summarize op: #{msg}")
 
         _ ->
-          @gleam_nack.bad_request("Sequencing error: #{inspect(reason)}", :none)
+          Levee.Spillway.nack_bad_request("Sequencing error: #{inspect(reason)}")
       end
 
     # The nack wire map uses nil for operation, but we want to include the original op
@@ -190,7 +199,7 @@ defmodule Levee.Protocol.Bridge do
 
     content = %{
       "code" => code,
-      "type" => nack_error_type_to_string(error_type),
+      "type" => Levee.Spillway.nack_error_type_to_string(error_type),
       "message" => message
     }
 
@@ -206,11 +215,6 @@ defmodule Levee.Protocol.Bridge do
       "content" => content
     }
   end
-
-  defp nack_error_type_to_string(:throttling_error), do: "ThrottlingError"
-  defp nack_error_type_to_string(:invalid_scope_error), do: "InvalidScopeError"
-  defp nack_error_type_to_string(:bad_request_error), do: "BadRequestError"
-  defp nack_error_type_to_string(:limit_exceeded_error), do: "LimitExceededError"
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Message type helpers
@@ -250,15 +254,16 @@ defmodule Levee.Protocol.Bridge do
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Session logic helpers
+  #
+  # Delegates to Levee.Spillway (spillway/session_logic.gleam), the shared
+  # protocol implementation.
   # ─────────────────────────────────────────────────────────────────────────────
-
-  @gleam_session_logic :levee_protocol@session_logic
 
   @doc """
   Negotiate features between server and client capabilities.
   """
   def negotiate_features(server_features, client_features) when is_map(client_features) do
-    @gleam_session_logic.negotiate_features(server_features, client_features)
+    Levee.Spillway.negotiate_features(server_features, client_features)
   end
 
   def negotiate_features(server_features, _), do: server_features
@@ -267,7 +272,7 @@ defmodule Levee.Protocol.Bridge do
   Negotiate protocol version.
   """
   def negotiate_version(supported_versions, client_versions) when is_list(client_versions) do
-    @gleam_session_logic.negotiate_version(supported_versions, client_versions)
+    Levee.Spillway.negotiate_version(supported_versions, client_versions)
   end
 
   def negotiate_version(_supported_versions, _), do: "0.1.0"
@@ -276,21 +281,18 @@ defmodule Levee.Protocol.Bridge do
   Validate summarize operation contents.
   """
   def validate_summarize_contents(contents) when is_map(contents) do
-    case @gleam_session_logic.validate_summarize_contents(contents) do
-      {:ok, _} -> :ok
-      {:error, msg} -> {:error, msg}
-    end
+    Levee.Spillway.validate_summarize_contents(contents)
   end
 
   @doc """
   Determine signal recipients based on targeting rules.
   """
   def determine_signal_recipients(sender_client_id, signal, all_client_ids) do
-    targeted = wrap_option(signal["targetedClients"], &is_list/1)
-    ignored = wrap_option(signal["ignoredClients"], &is_list/1)
-    single_target = wrap_option(signal["targetClientId"], &is_binary/1)
+    targeted = validated(signal["targetedClients"], &is_list/1)
+    ignored = validated(signal["ignoredClients"], &is_list/1)
+    single_target = validated(signal["targetClientId"], &is_binary/1)
 
-    @gleam_session_logic.determine_signal_recipients(
+    Levee.Spillway.determine_signal_recipients(
       sender_client_id,
       targeted,
       ignored,
@@ -308,41 +310,36 @@ defmodule Levee.Protocol.Bridge do
        op["referenceSequenceNumber"] || 0, op["type"] || "op", op["contents"], op["metadata"],
        System.system_time(:millisecond)}
 
-    @gleam_session_logic.build_sequenced_op(params) |> Map.new()
+    Levee.Spillway.build_sequenced_op(params)
   end
 
   @doc """
   Build a summary ack for the wire format.
   """
   def build_summary_ack(handle, sn, msn) do
-    @gleam_session_logic.build_summary_ack(
-      handle,
-      sn,
-      msn,
-      System.system_time(:millisecond)
-    )
-    |> Map.new()
+    Levee.Spillway.build_summary_ack(handle, sn, msn, System.system_time(:millisecond))
   end
 
   @doc """
   Add an operation to history (newest first) and trim to max size.
   """
   def add_to_history(op, history, max_size) do
-    @gleam_session_logic.add_to_history(op, history, max_size)
+    Levee.Spillway.add_to_history(op, history, max_size)
   end
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Signal normalization helpers
+  #
+  # Delegates to Levee.Spillway (spillway/signals.gleam), the shared
+  # protocol implementation.
   # ─────────────────────────────────────────────────────────────────────────────
-
-  @gleam_signals :levee_protocol@signals
 
   @doc """
   Normalize a signal map (v1 or v2) to a consistent internal format.
   Returns an Elixir map with consistent keys.
   """
   def normalize_signal(signal) when is_map(signal) do
-    @gleam_signals.normalize_signal(signal) |> @gleam_signals.normalized_to_map()
+    Levee.Spillway.normalize_signal(signal)
   end
 
   @doc """
@@ -392,8 +389,13 @@ defmodule Levee.Protocol.Bridge do
         id -> {:some, id}
       end
 
-    {:token_claims, claims.documentId, claims.scopes, claims.tenantId, user, claims.iat,
-     claims.exp, Map.get(claims, :ver, "1.0"), jti}
+    # signet's TokenClaims.scopes is a typed List(Scope), not wire strings.
+    # Convert here at the interop boundary so the Gleam JWT functions (which
+    # match scopes structurally, e.g. list.contains) see the right atoms.
+    scopes = :signet@types.scopes_from_strings(claims.scopes)
+
+    {:token_claims, claims.documentId, scopes, claims.tenantId, user, claims.iat, claims.exp,
+     Map.get(claims, :ver, "1.0"), jti}
   end
 
   @doc """
@@ -453,12 +455,14 @@ defmodule Levee.Protocol.Bridge do
     end
   end
 
-  # Convert nil/empty values to Gleam Option
-  defp wrap_option(nil, _check_fn), do: :none
-  defp wrap_option([], _check_fn), do: :none
-  defp wrap_option("", _check_fn), do: :none
+  # Validate a signal targeting field's shape, returning nil (rather than a
+  # malformed value) when absent/empty/wrong-typed. Levee.Spillway wraps the
+  # nil-or-value result into a Gleam Option for spillway's targeting logic.
+  defp validated(nil, _check_fn), do: nil
+  defp validated([], _check_fn), do: nil
+  defp validated("", _check_fn), do: nil
 
-  defp wrap_option(value, check_fn) do
-    if check_fn.(value), do: {:some, value}, else: :none
+  defp validated(value, check_fn) do
+    if check_fn.(value), do: value, else: nil
   end
 end

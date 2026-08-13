@@ -88,7 +88,10 @@ pub fn verify(token: String, secret: String) -> Result(JwtPayload, JwtError) {
 }
 
 /// Get a required string claim from payload.
-pub fn get_string(payload: JwtPayload, key: String) -> Result(String, JwtError) {
+pub fn get_string(
+  payload: JwtPayload,
+  key: String,
+) -> Result(String, JwtError) {
   let value = case key {
     "sub" -> payload.sub
     "iss" -> payload.iss

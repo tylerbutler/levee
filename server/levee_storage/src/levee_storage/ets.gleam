@@ -21,7 +21,6 @@
 //// See: docs/adr/001-ets-public-access.md
 
 import gleam/bit_array
-import gleam/crypto
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/json
@@ -29,13 +28,13 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/order
 import gleam/result
-import gleam/string
 import levee_storage/types.{
   type Blob, type Commit, type Delta, type Document, type Ref, type StorageError,
   type Summary, type Tree, type TreeEntry, AlreadyExists, Blob, Commit, Document,
   NotFound, Ref, Summary, Tree, TreeEntry,
 }
 import shelf/set.{type PSet}
+import silt/object
 
 // ---------------------------------------------------------------------------
 // Table types
@@ -315,7 +314,8 @@ pub fn create_blob(
   tenant_id: String,
   content: Dynamic,
 ) -> Result(Blob, StorageError) {
-  let sha = compute_sha256(content)
+  let content_bits: BitArray = coerce(content)
+  let sha = object.blob_id(content_bits)
   let size = byte_size(content)
   let blob = Blob(sha: sha, content: content, size: size)
   let key = #(tenant_id, sha)
@@ -347,7 +347,7 @@ pub fn create_tree(
   entries: List(TreeEntry),
 ) -> Result(Tree, StorageError) {
   let tree_content = json_encode_entries(entries)
-  let sha = compute_sha256(tree_content)
+  let sha = object.sha1(bit_array.from_string(tree_content))
   let tree = Tree(sha: sha, tree: entries)
   let key = #(tenant_id, sha)
   let _ = set.insert(into: tables.trees, key: key, value: tree)
@@ -372,7 +372,11 @@ pub fn get_tree(
   }
 }
 
-fn expand_tree_recursive(tables: Tables, tenant_id: String, tree: Tree) -> Tree {
+fn expand_tree_recursive(
+  tables: Tables,
+  tenant_id: String,
+  tree: Tree,
+) -> Tree {
   let expanded =
     list.flat_map(tree.tree, fn(entry) {
       case entry.entry_type {
@@ -414,7 +418,7 @@ pub fn create_commit(
       #("author", json_from_dynamic(author)),
     ])
   let commit_content = json.to_string(commit_map)
-  let sha = compute_sha256(commit_content)
+  let sha = object.sha1(bit_array.from_string(commit_content))
   let commit =
     Commit(
       sha: sha,
@@ -636,13 +640,6 @@ fn update_document_latest_summary(
     }
     Error(_) -> Nil
   }
-}
-
-fn compute_sha256(content: a) -> String {
-  let bits: BitArray = coerce(content)
-  crypto.hash(crypto.Sha256, bits)
-  |> bit_array.base16_encode()
-  |> string.lowercase()
 }
 
 fn json_encode_entries(entries: List(TreeEntry)) -> String {

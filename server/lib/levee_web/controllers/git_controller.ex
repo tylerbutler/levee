@@ -7,11 +7,18 @@ defmodule LeveeWeb.GitController do
   - POST/GET /repos/:tenant_id/git/trees - Tree storage
   - POST/GET /repos/:tenant_id/git/commits - Commit storage
   - GET/POST/PATCH /repos/:tenant_id/git/refs - Reference management
+
+  Storage calls and Plug/Conn handling stay here; the response *shape*
+  (object/ref URLs, formatted response bodies) is delegated to the
+  `spillway/rest` module via `Levee.Spillway`, so the wire format for this
+  Storage/Historian-style surface lives in one spillway-owned place. See
+  `Levee.Spillway` module docs for the broader migration context.
   """
 
   use LeveeWeb, :controller
 
   alias Levee.Storage
+  alias Levee.Spillway
 
   # Blob operations
 
@@ -53,13 +60,15 @@ defmodule LeveeWeb.GitController do
         conn
         |> put_resp_header("cache-control", "public, max-age=31536000")
         |> put_status(:ok)
-        |> json(%{
-          sha: blob.sha,
-          size: blob.size,
-          content: Base.encode64(blob.content),
-          encoding: "base64",
-          url: blob_url(conn, tenant_id, blob.sha)
-        })
+        |> json(
+          Spillway.format_blob_response(
+            base_url(conn),
+            tenant_id,
+            blob.sha,
+            blob.size,
+            Base.encode64(blob.content)
+          )
+        )
 
       {:error, :not_found} ->
         conn
@@ -163,6 +172,46 @@ defmodule LeveeWeb.GitController do
     end
   end
 
+  @doc """
+  List commit history, newest first, following first parents.
+
+  GET /repos/:tenant_id/commits?sha=<ref-or-sha>&count=<n>
+
+  This is Historian's commit-history endpoint, which the official Routerlicious
+  driver calls from `getVersions`. It is not under `/git` because the driver's
+  `storageUrl` is `/repos/:tenant_id`.
+
+  `sha` is resolved as `refs/heads/<sha>` first (Fluid passes the document id),
+  falling back to treating it as a literal commit SHA. An unresolvable or
+  missing commit yields `[]`, matching Floodgate — a brand-new document has no
+  history, and that is not an error.
+  """
+  def list_commits(conn, %{"tenant_id" => tenant_id, "sha" => requested} = params) do
+    case parse_count(params) do
+      {:ok, count} ->
+        start_sha =
+          case Storage.get_ref(tenant_id, "refs/heads/" <> requested) do
+            {:ok, ref} -> ref.sha
+            {:error, :not_found} -> requested
+          end
+
+        conn
+        |> put_status(:ok)
+        |> json(commit_history(conn, tenant_id, start_sha, count))
+
+      :error ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: "count must be a positive integer"})
+    end
+  end
+
+  def list_commits(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "Missing required query parameter: sha"})
+  end
+
   # Reference operations
 
   @doc """
@@ -186,7 +235,7 @@ defmodule LeveeWeb.GitController do
   Example: GET /repos/tenant1/git/refs/heads/main
   """
   def show_ref(conn, %{"tenant_id" => tenant_id, "ref" => ref_parts}) do
-    ref_path = build_ref_path(ref_parts)
+    ref_path = Spillway.build_ref_path(ref_parts)
 
     case Storage.get_ref(tenant_id, ref_path) do
       {:ok, ref} ->
@@ -238,7 +287,7 @@ defmodule LeveeWeb.GitController do
   - sha: New commit SHA
   """
   def update_ref(conn, %{"tenant_id" => tenant_id, "ref" => ref_parts, "sha" => sha}) do
-    ref_path = build_ref_path(ref_parts)
+    ref_path = Spillway.build_ref_path(ref_parts)
 
     case Storage.update_ref(tenant_id, ref_path, sha) do
       {:ok, ref} ->
@@ -285,102 +334,84 @@ defmodule LeveeWeb.GitController do
   defp decode_blob_content(_), do: {:error, "Missing or invalid content"}
 
   defp blob_url(conn, tenant_id, sha) do
-    "#{base_url(conn)}/repos/#{tenant_id}/git/blobs/#{sha}"
-  end
-
-  defp tree_url(conn, tenant_id, sha) do
-    "#{base_url(conn)}/repos/#{tenant_id}/git/trees/#{sha}"
-  end
-
-  defp commit_url(conn, tenant_id, sha) do
-    "#{base_url(conn)}/repos/#{tenant_id}/git/commits/#{sha}"
-  end
-
-  defp ref_url(conn, tenant_id, ref_path) do
-    # Remove "refs/" prefix for URL
-    path = String.replace_prefix(ref_path, "refs/", "")
-    "#{base_url(conn)}/repos/#{tenant_id}/git/refs/#{path}"
+    Spillway.blob_url(base_url(conn), tenant_id, sha)
   end
 
   defp base_url(conn) do
-    port_suffix =
-      case {conn.scheme, conn.port} do
-        {:http, 80} -> ""
-        {:https, 443} -> ""
-        {_, port} -> ":#{port}"
-      end
-
-    "#{conn.scheme}://#{conn.host}#{port_suffix}"
+    Spillway.base_url(conn.scheme, conn.host, conn.port)
   end
 
   defp format_tree_response(conn, tenant_id, tree) do
-    formatted_entries =
+    entries =
       Enum.map(tree.tree, fn entry ->
-        entry_url =
-          case entry.type do
-            "blob" -> blob_url(conn, tenant_id, entry.sha)
-            "tree" -> tree_url(conn, tenant_id, entry.sha)
-            _ -> nil
-          end
-
-        %{
-          path: entry.path,
-          mode: entry.mode,
-          sha: entry.sha,
-          type: entry.type,
-          url: entry_url
-        }
+        {entry.path, entry.mode, entry.sha, entry.type}
       end)
 
-    %{
-      sha: tree.sha,
-      url: tree_url(conn, tenant_id, tree.sha),
-      tree: formatted_entries
-    }
+    Spillway.format_tree_response(base_url(conn), tenant_id, tree.sha, entries)
   end
 
   defp format_commit_response(conn, tenant_id, commit) do
-    %{
-      sha: commit.sha,
-      tree: %{
-        sha: commit.tree,
-        url: tree_url(conn, tenant_id, commit.tree)
-      },
-      parents:
-        Enum.map(commit.parents, fn parent_sha ->
-          %{
-            sha: parent_sha,
-            url: commit_url(conn, tenant_id, parent_sha)
-          }
-        end),
-      message: commit.message,
-      author: commit.author,
-      committer: commit.committer,
-      url: commit_url(conn, tenant_id, commit.sha)
-    }
+    Spillway.format_commit_response(
+      base_url(conn),
+      tenant_id,
+      commit.sha,
+      commit.tree,
+      commit.parents,
+      commit.message,
+      commit.author,
+      commit.committer
+    )
   end
 
   defp format_ref_response(conn, tenant_id, ref) do
-    %{
-      ref: ref.ref,
-      object: %{
-        sha: ref.sha,
-        type: "commit",
-        url: commit_url(conn, tenant_id, ref.sha)
-      },
-      url: ref_url(conn, tenant_id, ref.ref)
-    }
+    Spillway.format_ref_response(base_url(conn), tenant_id, ref.ref, ref.sha)
   end
 
-  defp build_ref_path(ref_parts) when is_list(ref_parts) do
-    "refs/" <> Enum.join(ref_parts, "/")
-  end
-
-  defp build_ref_path(ref_path) when is_binary(ref_path) do
-    if String.starts_with?(ref_path, "refs/") do
-      ref_path
-    else
-      "refs/" <> ref_path
+  defp parse_count(%{"count" => count}) when is_binary(count) do
+    case Integer.parse(count) do
+      {n, ""} when n > 0 -> {:ok, n}
+      _ -> :error
     end
+  end
+
+  defp parse_count(%{"count" => _}), do: :error
+  defp parse_count(_), do: {:ok, 1}
+
+  defp commit_history(_conn, _tenant_id, _sha, 0), do: []
+
+  defp commit_history(conn, tenant_id, sha, count) do
+    case Storage.get_commit(tenant_id, sha) do
+      {:error, :not_found} ->
+        []
+
+      {:ok, commit} ->
+        rest =
+          case commit.parents do
+            [parent | _] -> commit_history(conn, tenant_id, parent, count - 1)
+            [] -> []
+          end
+
+        [commit_details(conn, tenant_id, commit) | rest]
+    end
+  end
+
+  # ICommitDetails is a rearrangement of the ICommit fields Floodgate already
+  # formats, so the URL shapes stay Floodgate-owned and only the nesting is
+  # built here.
+  defp commit_details(conn, tenant_id, commit) do
+    formatted = format_commit_response(conn, tenant_id, commit)
+
+    %{
+      "sha" => formatted["sha"],
+      "url" => formatted["url"],
+      "commit" => %{
+        "url" => formatted["url"],
+        "author" => formatted["author"],
+        "committer" => formatted["committer"],
+        "message" => formatted["message"],
+        "tree" => formatted["tree"]
+      },
+      "parents" => formatted["parents"]
+    }
   end
 end

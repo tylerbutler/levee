@@ -62,6 +62,10 @@ Welcome to the Levee architecture talk. Levee is a from-scratch implementation o
 2. **levee-driver** - TypeScript driver implementing Fluid interfaces
 3. **levee-client** - High-level TypeScript API for applications
 
+> **Current ecosystem note:** Levee remains the Phoenix-based implementation
+> described here. Floodgate is a separate Gleam/Routerlicious-compatible
+> implementation with its own `@tylerbu/floodgate-client`; see ADR-004.
+
 <!--
 Levee has three main layers. The server handles all the real-time protocol logic — sequencing operations, managing sessions, storing snapshots. The driver is a TypeScript package that implements Fluid Framework's standard interfaces, so existing Fluid apps can connect to Levee with minimal changes. And the client package wraps the driver in a simpler API, similar to what fluid-static provides in the official Fluid ecosystem.
 -->
@@ -538,8 +542,8 @@ Wraps Gleam modules for ergonomic Elixir usage:
 
 ```elixir
 defmodule Levee.Protocol.Bridge do
-  # Gleam modules compile to atoms like :levee_protocol@sequencing
-  @sequencing :levee_protocol@sequencing
+  # Gleam modules compile to atoms like :spillway@sequencing
+  @sequencing :spillway@sequencing
 
   def assign_sequence_number(state, client_id, csn, rsn) do
     case @sequencing.assign_sequence_number(state, client_id, csn, rsn) do
@@ -549,13 +553,13 @@ defmodule Levee.Protocol.Bridge do
   end
 
   def build_nack(type, message) do
-    :levee_protocol@nack.bad_request(message)
+    :spillway@nack.bad_request(message)
   end
 end
 ```
 
 <!--
-The Protocol Bridge module is the glue between Elixir and Gleam. Gleam modules compile to Erlang modules with names like colon-levee_protocol-at-sequencing. The bridge wraps these calls with idiomatic Elixir patterns — converting Gleam result tuples, normalizing error types, and providing a clean API for the rest of the Elixir codebase. There's also a separate auth bridge — gleam_bridge.ex in the auth directory — that wraps the Gleam auth module for user management, sessions, and token operations.
+The Protocol Bridge module is the glue between Elixir and Gleam. Gleam modules compile to Erlang modules with names like colon-spillway-at-sequencing. The bridge wraps these calls with idiomatic Elixir patterns — converting Gleam result tuples, normalizing error types, and providing a clean API for the rest of the Elixir codebase. There's also a separate auth bridge — gleam_bridge.ex in the auth directory — that wraps the Gleam auth module for user management, sessions, and token operations.
 -->
 
 ---
@@ -714,7 +718,7 @@ Five Gleam packages provide the type-safe core:
 
 | Package | Purpose |
 |---------|---------|
-| **levee_protocol** | Message types, sequencing, validation, signals, nacks |
+| **spillway** (external, via floodgate) | Message types, sequencing, validation, signals, nacks |
 | **levee_auth** | JWT, password hashing, users, sessions, tenants |
 | **levee_storage** | Storage types, ETS backend, PostgreSQL backend |
 | **levee_oauth** | OAuth provider integration (GitHub) |
@@ -723,7 +727,7 @@ Five Gleam packages provide the type-safe core:
 All compile to BEAM bytecode and are called from Elixir via bridge modules
 
 <!--
-The Gleam code is organized into five packages. levee_protocol is the largest, containing all the Fluid Framework protocol logic. levee_auth handles everything authentication-related — not just JWTs, but also user management, password hashing, session management, and tenant operations. levee_storage provides the storage abstraction with both ETS and PostgreSQL backends implemented in Gleam using the bravo library for typed ETS access. levee_oauth is newer, handling the OAuth provider integration. And levee_admin is a Lustre single-page application for the admin dashboard. Each package is called from Elixir through dedicated bridge modules.
+The Fluid Framework protocol logic lives in the external spillway package (a dependency of floodgate), shared by both the classic Levee path and floodgate. The in-repo Gleam packages handle the rest: levee_auth handles everything authentication-related — not just JWTs, but also user management, password hashing, session management, and tenant operations. levee_storage provides the storage abstraction with both ETS and PostgreSQL backends implemented in Gleam using the bravo library for typed ETS access. levee_oauth is newer, handling the OAuth provider integration. And levee_admin is a Lustre single-page application for the admin dashboard. Each package is called from Elixir through dedicated bridge modules.
 -->
 
 ---
@@ -735,8 +739,8 @@ The Gleam code is organized into five packages. levee_protocol is the largest, c
 FROM elixir:1.18 AS build
 RUN curl -fsSL https://gleam.run/install.sh | sh
 WORKDIR /app
-COPY levee_protocol ./levee_protocol
-RUN cd levee_protocol && gleam build --target erlang
+COPY floodgate ./floodgate
+RUN cd floodgate && gleam build --target erlang
 COPY . .
 RUN mix release
 

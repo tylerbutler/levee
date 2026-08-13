@@ -214,15 +214,10 @@ defmodule Levee.Storage.GleamPG do
     parents = params["parents"] || []
     message = if params["message"], do: {:some, params["message"]}, else: :none
     author = params["author"]
-    now = DateTime.utc_now() |> DateTime.to_iso8601()
 
-    committer =
-      params["committer"] ||
-        %{
-          "name" => "Levee",
-          "email" => "server@fluid.local",
-          "date" => now
-        }
+    # See Levee.Storage.GleamEts.create_commit/2: gitrest and silt both default
+    # the committer to the author, so Levee must too.
+    committer = params["committer"] || author
 
     case @gleam_pg.create_commit(
            conn(),

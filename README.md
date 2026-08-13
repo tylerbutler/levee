@@ -31,7 +31,9 @@ levee/
 │       ├── levee-driver/            # Low-level Phoenix Channels Fluid driver
 │       ├── levee-client/            # High-level client API (fluid-static style)
 │       ├── levee-example/           # DiceRoller example app
-│       └── levee-presence-tracker/  # Presence tracking example
+│       ├── levee-presence-tracker/  # Presence tracking example
+│       ├── levee-todo-list/         # Collaborative todo-list example
+│       └── sandbag/                 # SvelteKit testing hub
 ├── justfile          # Task runner (orchestrates both)
 └── mise.toml         # Tool versions
 ```
@@ -51,6 +53,12 @@ just build-server     # Build Gleam packages + Elixir
 
 The server auto-registers a default dev tenant on startup. See [server/DEV.md](server/DEV.md) for server development details.
 
+### Floodgate
+
+The standalone Gleam server, Routerlicious client, examples, and conformance
+suites live in [tylerbutler/floodgate](https://github.com/tylerbutler/floodgate).
+Levee retains the Phoenix Channels server and client stack.
+
 ### Client
 
 ```bash
@@ -59,6 +67,7 @@ just test-client      # Run unit tests (vitest)
 just format-client    # Format with Biome
 just lint-client      # Lint with Biome
 ```
+
 
 ## Testing
 

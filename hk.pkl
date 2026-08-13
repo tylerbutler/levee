@@ -56,18 +56,38 @@ local config_linters = new Mapping<String, Step> {
 }
 
 hooks {
-    // Pre-commit: format all code and stage fixes
+    // Pre-commit: DISABLED.
+    //
+    // The fix+stage+stash combination below runs the formatters and then its
+    // "restore unstaged changes" step overwrites their output, so formatting
+    // fixes are reverted back out of the commit being made. Observed dropping
+    // staged files from a commit entirely and committing unformatted Gleam,
+    // silently — `gleam format --check` fails afterwards with no indication
+    // from the hook. Suspected cause is a version skew: this config amends the
+    // hk 1.32.0 schema while the installed binary is 1.54.0.
+    //
+    // Formatting is still enforced by `hk fix` / `hk check` below, by the
+    // pre-push hook, and in CI. Re-enable once the stash behaviour is fixed.
+    //
+    // The hook stays declared with no steps: `hk run pre-commit` exits 1 when
+    // the hook is absent entirely, which blocks every commit.
     ["pre-commit"] {
-        fix = true
-        stage = true
-        stash = "git"
-        steps {
-            ...gleam_linters
-            ...elixir_linters
-            ...client_linters
-            ...config_linters
-        }
+        steps {}
     }
+
+    // Original configuration, to restore:
+    //
+    // ["pre-commit"] {
+    //     fix = true
+    //     stage = true
+    //     stash = "git"
+    //     steps {
+    //         ...gleam_linters
+    //         ...elixir_linters
+    //         ...client_linters
+    //         ...config_linters
+    //     }
+    // }
 
     // Pre-push: run full test suite
     ["pre-push"] {

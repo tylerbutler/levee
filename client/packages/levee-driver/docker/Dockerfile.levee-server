@@ -7,7 +7,7 @@ FROM elixir:1.16-otp-26-alpine AS builder
 # Install build dependencies including Gleam
 RUN apk add --no-cache git build-base curl
 
-# Install Gleam (required for levee_protocol)
+# Install Gleam (required for the server's Gleam packages)
 ARG GLEAM_VERSION=1.9.1
 RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "aarch64" ]; then \

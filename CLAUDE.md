@@ -35,9 +35,10 @@ levee/
 │   │   └── levee_web/          # Web layer (routes, channels)
 │   ├── test/                   # Elixir tests
 │   ├── priv/                   # Static assets, migrations
-│   ├── levee_protocol/         # Gleam protocol types
 │   ├── levee_auth/             # Gleam auth library
 │   └── levee_admin/            # Lustre admin UI
+│   # Fluid protocol logic lives in the external `spillway` package
+│   # (declared by the `levee_bridge` package), not an in-repo Gleam package
 ├── client/                     # TypeScript client packages
 │   ├── package.json            # pnpm workspace root
 │   ├── pnpm-workspace.yaml     # Workspace config
@@ -49,7 +50,9 @@ levee/
 │       ├── levee-driver/       # Phoenix Channels Fluid driver
 │       ├── levee-client/       # High-level client API
 │       ├── levee-example/      # DiceRoller example app
-│       └── levee-presence-tracker/  # Presence tracking example
+│       ├── levee-presence-tracker/  # Presence tracking example
+│       ├── levee-todo-list/    # Collaborative todo-list example
+│       └── sandbag/            # SvelteKit testing hub
 ├── justfile                    # Task runner (orchestrates both)
 ├── mise.toml                   # Tool versions
 ├── hk.pkl                      # Git hooks config
@@ -80,6 +83,7 @@ Client → Phoenix Router → Auth Plug (JWT) → Controller/Channel → Session
 ### Client Package Dependency Graph
 ```
 levee-presence-tracker → levee-client → levee-driver
+levee-todo-list → levee-client → levee-driver
 levee-example → levee-driver
 ```
 
@@ -114,14 +118,20 @@ levee-example → levee-driver
 
 ### Gleam Packages
 
-- **levee_protocol/** - Protocol message types, sequencing, validation, schema generation
 - **levee_auth/** - JWT, password hashing, tenant/user management
 - **levee_storage/** - Storage types and ETS backend (bravo for typed ETS access)
 - **levee_admin/** - Lustre SPA for admin UI
 
+The Fluid protocol logic (message types, sequencing, validation, signals,
+nacks, Socket.IO framing, connect_document decisions, REST response shapes,
+schema generation) lives in the external **spillway** package, shared by both
+the classic Levee path (`Levee.Protocol.Bridge` / `Levee.Spillway`) and
+floodgate. Levee pulls it in through the `levee_bridge` Gleam package, so it
+compiles under `levee_bridge/build/`; floodgate declares it directly.
+
 ### Gleam Testing (startest)
 
-levee_protocol uses **startest** (not gleeunit) for tests.
+The Gleam packages use **startest** (not gleeunit) for tests.
 - `should.*` → `expect.*` (e.g., `expect.to_equal`, `expect.to_be_ok`)
 - **Gotcha:** `let assert Pattern = expr` inside startest tests wraps values in `Ok()` due to startest's rescue mechanism. Use `case` expressions for error variant destructuring instead of `let assert`.
 
@@ -144,10 +154,74 @@ cd server && mix phx.server                                    # Dev server
 
 | Package | Description |
 |---------|-------------|
-| `levee-driver` | Low-level Phoenix Channels Fluid Framework driver |
+| `levee-driver` | Low-level Phoenix Channels Fluid driver for Levee |
 | `levee-client` | High-level client wrapping the driver |
 | `levee-example` | DiceRoller example using driver directly |
 | `levee-presence-tracker` | Presence tracking example using client |
+| `levee-todo-list` | Collaborative todo-list example using client |
+| `sandbag` | SvelteKit testing hub for the examples |
+
+**Client compatibility strategy:** [ADR-004](docs/adr/004-coexisting-client-stacks.md) is the current source of truth. In summary:
+
+- Levee and Floodgate are independent supported server stacks
+- `levee-client` and `levee-driver` remain the Phoenix Channels client stack
+- Floodgate's client and examples live in
+  [tylerbutler/floodgate](https://github.com/tylerbutler/floodgate)
+- Shared protocol libraries and conformance fixtures are reused without merging the client packages
+
+**Floodgate is dual-mode** ([ADR-008](docs/adr/008-floodgate-phoenix-endpoint.md)): one
+Floodgate process serves both wire protocols from the same beryl coordinator,
+channels, session, and storage —
+
+- `/socket.io/` — official Fluid/Routerlicious drivers
+- `/socket/websocket` — Phoenix Channels (`levee-driver`/`levee-client`), wire-compatible
+  with the Elixir server's `DocumentChannel`
+
+so Floodgate is a drop-in replacement for the Elixir server for existing
+`levee-client` apps. Clients of both kinds can collaborate on one document.
+Verify with `just test-floodgate-dual-mode`, which runs both conformance suites
+plus cross-mode tests against a single server process.
+
+**Floodgate speaks server-backed presence** (`presence_v1`), on both socket
+endpoints, on top of beryl's presence registry — advertised as
+`supportedFeatures: {presence_v1: true}` in `connect_document_success`, driven by
+`joinPresence`/`updatePresence`/`leavePresence`, and answered with Phoenix-shaped
+`presence_state`/`presence_diff`/`presence_error`. `src/floodgate/presence_worker.gleam`
+owns the beryl handle: beryl's presence calls are 5-second `process.call`s that
+panic, and channel callbacks run inside the coordinator, so they cannot be made
+there. Identity (`key` from the token's user id, `client_id` from the
+server-assigned client id) is derived server-side and a client naming one is
+rejected. Cross-node replication enables itself only on a distributed node. See
+[Floodgate's README](https://github.com/tylerbutler/floodgate#presence) documents the wire contract. Levee
+(Elixir) does not advertise the capability, and clients fall back cleanly.
+
+**Floodgate is multi-tenant**, dynamically, not just via the one
+`FLOODGATE_TENANT_ID`/`FLOODGATE_JWT_SECRET` pair: tenants are created,
+listed, shown, and deleted through an admin API
+(`GET/POST /api/tenants`, `GET/DELETE /api/tenants/:id`,
+`POST /api/tenants/:id/secrets/:slot`) gated by a Floodgate admin session or
+`FLOODGATE_ADMIN_KEY`, with response shapes matching what
+`server/levee_admin`'s Lustre UI already expects.
+Each tenant has two rotating JWT secret slots — verification tries both, minting
+uses slot 1 — and tenants persist on whichever storage backend documents use
+(`FLOODGATE_STORAGE_BACKEND`). `FLOODGATE_TENANT_ID`/`FLOODGATE_JWT_SECRET`
+still seed/ensure that one tenant at boot, so existing single-tenant
+deployments, clients, tests, docker, and parity suites are unaffected. See
+[Floodgate's README](https://github.com/tylerbutler/floodgate#multi-tenancy) documents the full contract.
+Floodgate serves the shared Lustre UI itself and uses Vestibule for GitHub
+OAuth; the implementation and container remain Gleam/BEAM-only.
+
+**Drop-in parity check:** `just test-levee-suite-vs-floodgate` runs Levee's
+*unmodified* integration suites (`levee-driver`, `levee-client`,
+`levee-example`) against a containerised Floodgate, repointed only via
+`LEVEE_HTTP_URL`/`LEVEE_SOCKET_URL`/`LEVEE_TENANT_KEY`. Nothing in those suites
+is Floodgate-aware, so a failure there is a real behavioural difference between
+the servers. [ADR-009](docs/adr/009-floodgate-standalone-repo.md) records the
+parity surface, the known remaining gaps, and what blocks extracting Floodgate
+into its own repository.
+
+Floodgate lives at https://github.com/tylerbutler/floodgate with its container,
+client, examples, admin UI, conformance suites, and release workflow.
 
 ### Client Commands
 
@@ -180,9 +254,13 @@ just generate-schema-ts
 4. Run `just test-elixir` to verify
 
 ### Modifying Gleam Protocol
-1. Edit files in `server/levee_protocol/src/`
+1. Edit protocol logic in the external `spillway` package (repo:
+   tylerbutler/spillway); bump the pinned commit in **both**
+   `server/levee_bridge/manifest.toml` here and `manifest.toml` in Floodgate
+   so the two servers run the same protocol logic
 2. Run `just build-gleam` to compile
-3. Update `server/lib/levee/protocol/bridge.ex` if Elixir interop changes
+3. Update `server/lib/levee/protocol/bridge.ex` or `server/lib/levee/spillway.ex`
+   if Elixir interop changes
 4. Run `just test` to verify both Gleam and Elixir tests
 5. If schema types changed, run `just generate-schema-ts`
 
@@ -211,6 +289,8 @@ GET    /repos/:tenant_id/git/trees/:sha   Get tree
 POST   /repos/:tenant_id/git/trees        Create tree
 GET    /repos/:tenant_id/git/commits/:sha Get commit
 POST   /repos/:tenant_id/git/commits      Create commit
+GET    /repos/:tenant_id/commits          Commit history (?sha=&count=), for
+                                          the Routerlicious driver's getVersions
 GET    /refs/:tenant_id                   List refs
 GET    /refs/:tenant_id/*path             Get ref
 PATCH  /refs/:tenant_id/*path             Update ref
@@ -230,9 +310,9 @@ GET    /admin/*path                       SPA catch-all
 
 | Gleam File | Erlang/Elixir Module |
 |------------|---------------------|
-| `levee_protocol.gleam` | `:levee_protocol` |
-| `sequencing.gleam` | `:levee_protocol@sequencing` |
-| `message.gleam` | `:levee_protocol@message` |
+| `spillway.gleam` | `:spillway` |
+| `sequencing.gleam` | `:spillway@sequencing` |
+| `message.gleam` | `:spillway@message` |
 
 ### Type Conversions
 
@@ -255,6 +335,35 @@ GET    /admin/*path                       SPA catch-all
 | `SECRET_KEY_BASE` | Phoenix secret (production) |
 | `PHX_HOST` | Host for production |
 | `PORT` | HTTP port (default: 4000) |
+
+Floodgate (Gleam server) reads its own set:
+
+| Variable | Purpose |
+|----------|---------|
+| `FLOODGATE_TENANT_ID` | Id of the startup tenant, seeded from `FLOODGATE_JWT_SECRET` at boot if not already registered (default: `fluid`) |
+| `FLOODGATE_JWT_SECRET` | Required; the startup tenant's first secret slot |
+| `FLOODGATE_GITHUB_CLIENT_ID` / `FLOODGATE_GITHUB_CLIENT_SECRET` | GitHub OAuth App credentials for the admin UI |
+| `FLOODGATE_ADMIN_GITHUB_USERS` | Comma-separated GitHub usernames allowed to administer Floodgate; unset denies OAuth login |
+| `FLOODGATE_ADMIN_KEY` | Bearer key for the tenant management API (`GET/POST /api/tenants`, etc.); unset disables that API |
+| `PORT` / `FLOODGATE_PORT` | Listen port (default: `3000`; `PORT` wins) |
+| `FLOODGATE_BIND` | Listen interface (default: `localhost`); containers need `0.0.0.0` |
+| `FLOODGATE_TOKEN_MINT_SECRET` | Enables the token-mint endpoint |
+| `FLOODGATE_STORAGE_BACKEND` | `ets`/`shelf` (persistent, default) or `memory` — also where tenants persist |
+| `FLOODGATE_DATA_DIR` | Shelf DETS directory (default: `priv/floodgate_data`). **One DETS file per document** under `documents/t<hex tenant>/d<hex document id>.dets` — see [ADR-010](docs/adr/010-per-document-storage.md); refs, tenants and admin data stay in shared files |
+| `FLOODGATE_DOC_IDLE_MS` | How long an untouched document stays in memory (default 300000). Drops *both* its cached sequence state and its open DETS file; only ever a cache drop, since writes are already on disk. `0` disables |
+| `FLOODGATE_MAX_OPEN_DOCUMENTS` | Document files open at once (default 1024); at the cap the least recently used is closed. `0` disables |
+| `FLOODGATE_PUBLIC_URL` | Externally reachable base URL |
+| `FLOODGATE_ALLOWED_ORIGINS` | Origin allow-list for **both** socket endpoints (comma-separated, or `*` to disable checking). Defaults to same-origin, which rejects cross-origin browser upgrades; clients sending no `Origin`, including the official Fluid drivers, are always admitted |
+| `FLOODGATE_MAX_FRAME_BYTES` | Inbound frame ceiling (default 16 MiB). Also the `maxMessageSize` advertised in IConnected and the Engine.IO handshake's `maxPayload` — one value, so the three cannot drift |
+| `FLOODGATE_MAX_CONNECTIONS_PER_IP` / `FLOODGATE_MAX_CONNECTIONS` | Concurrent socket ceilings, per peer address (default 256) and node-wide (default 4096) |
+| `FLOODGATE_MESSAGE_RATE` / `_BURST`, `FLOODGATE_JOIN_RATE` / `_BURST` | Per-socket inbound frame and join rate limits (defaults 1000/2000, 100/200) |
+| `FLOODGATE_HEARTBEAT_INTERVAL_MS` / `FLOODGATE_HEARTBEAT_TIMEOUT_MS` | Suggested client ping cadence and the server-side staleness window (defaults 30000 / 60000). The timeout drives the coordinator sweep that evicts a socket which stopped heartbeating — and, via the registered closer, actually closes it, so its stale RSN stops pinning the document's MSN. beryl derives its check interval as `timeout / 2`, so the timeout must be at least 2 |
+
+Set any limit to `0` to disable it. Both socket endpoints now share the same guards —
+origin policy, connection ceilings, rate limits, frame cap, and coordinator-initiated
+close. Historically only the Phoenix endpoint had them, because `beryl_mist` applies them
+and `floodgate/socketio_transport.gleam` is separate code; any new guard added to
+`beryl_mist` should be checked against that file.
 
 ## Client Release Pipeline
 

@@ -102,7 +102,7 @@ defmodule Levee.Application do
     # In releases, Gleam packages are copied to /app/<package>.
     project_root = File.cwd!()
 
-    gleam_packages = ["levee_protocol", "levee_auth", "levee_oauth", "levee_storage"]
+    gleam_packages = ["levee_auth", "levee_oauth", "levee_storage", "levee_bridge"]
 
     base_paths =
       Enum.flat_map(gleam_packages, fn pkg ->
@@ -124,7 +124,19 @@ defmodule Levee.Application do
     end
 
     # Verify critical Gleam modules loaded successfully
-    required_modules = [:levee_protocol, :password_ffi, :tenant_secrets]
+    required_modules = [
+      :spillway,
+      :spillway@sequencing,
+      :signet@types,
+      :password_ffi,
+      :tenant_secrets,
+      :spillway@socketio,
+      :spillway@connect_document,
+      :spillway@session_logic,
+      :spillway@signals,
+      :spillway@nack,
+      :spillway@rest
+    ]
 
     Enum.each(required_modules, fn mod ->
       case :code.ensure_loaded(mod) do

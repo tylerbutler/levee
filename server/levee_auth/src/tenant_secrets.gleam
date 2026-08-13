@@ -188,7 +188,10 @@ pub fn generate_secret() -> String {
 // Message handler
 // ---------------------------------------------------------------------------
 
-fn handle_message(state: State, message: Message) -> actor.Next(State, Message) {
+fn handle_message(
+  state: State,
+  message: Message,
+) -> actor.Next(State, Message) {
   case message {
     CreateTenant(name:, reply_to:) -> {
       let existing_keys = dict.keys(state.tenants)
