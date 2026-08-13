@@ -1,8 +1,5 @@
 export interface LeveeConfig {
-	/**
-	 * HTTP URL of the service. When absent, the mounted app applies its own
-	 * default (e.g. Floodgate uses http://localhost:3000, Levee localhost:4000).
-	 */
+	/** HTTP URL of the service. */
 	httpUrl?: string;
 	/**
 	 * WebSocket URL of the service. When absent, the mounted app applies its
@@ -14,12 +11,6 @@ export interface LeveeConfig {
 	 */
 	tenantId?: string;
 	authToken?: string;
-	/**
-	 * Token mint credential for Floodgate apps.
-	 * Parsed from the `mintCredential` URL search param.
-	 * Distinct from Levee's session `authToken`.
-	 */
-	mintCredential?: string;
 	documentId?: string;
 }
 
@@ -36,7 +27,6 @@ export function parseConfigFromParams(params: URLSearchParams): LeveeConfig {
 		socketUrl: params.get("socketUrl") ?? undefined,
 		tenantId: params.get("tenantId") ?? undefined,
 		authToken: params.get("authToken") ?? undefined,
-		mintCredential: params.get("mintCredential") ?? undefined,
 		documentId: params.get("documentId") ?? undefined,
 	};
 }

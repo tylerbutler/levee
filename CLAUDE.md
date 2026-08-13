@@ -49,8 +49,6 @@ levee/
 │   └── packages/
 │       ├── levee-driver/       # Phoenix Channels Fluid driver
 │       ├── levee-client/       # High-level client API
-│       ├── floodgate-client/   # Official Routerlicious integration for Floodgate
-│       ├── floodgate-presence-tracker/ # Floodgate Presence example
 │       ├── levee-example/      # DiceRoller example app
 │       ├── levee-presence-tracker/  # Presence tracking example
 │       ├── levee-todo-list/    # Collaborative todo-list example
@@ -87,8 +85,6 @@ Client → Phoenix Router → Auth Plug (JWT) → Controller/Channel → Session
 levee-presence-tracker → levee-client → levee-driver
 levee-todo-list → levee-client → levee-driver
 levee-example → levee-driver
-floodgate-client → @fluidframework/routerlicious-driver
-floodgate-presence-tracker → floodgate-client → @fluidframework/routerlicious-driver
 ```
 
 ## Server (`server/`)
@@ -160,8 +156,6 @@ cd server && mix phx.server                                    # Dev server
 |---------|-------------|
 | `levee-driver` | Low-level Phoenix Channels Fluid driver for Levee |
 | `levee-client` | High-level client wrapping the driver |
-| `floodgate-client` | Floodgate client boundary using the official Routerlicious driver |
-| `floodgate-presence-tracker` | Presence tracking example using Floodgate |
 | `levee-example` | DiceRoller example using driver directly |
 | `levee-presence-tracker` | Presence tracking example using client |
 | `levee-todo-list` | Collaborative todo-list example using client |
@@ -171,14 +165,15 @@ cd server && mix phx.server                                    # Dev server
 
 - Levee and Floodgate are independent supported server stacks
 - `levee-client` and `levee-driver` remain the Phoenix Channels client stack
-- `floodgate-client` uses the official Routerlicious driver
+- Floodgate's client and examples live in
+  [tylerbutler/floodgate](https://github.com/tylerbutler/floodgate)
 - Shared protocol libraries and conformance fixtures are reused without merging the client packages
 
 **Floodgate is dual-mode** ([ADR-008](docs/adr/008-floodgate-phoenix-endpoint.md)): one
 Floodgate process serves both wire protocols from the same beryl coordinator,
 channels, session, and storage —
 
-- `/socket.io/` — official Fluid/Routerlicious drivers (`floodgate-client`)
+- `/socket.io/` — official Fluid/Routerlicious drivers
 - `/socket/websocket` — Phoenix Channels (`levee-driver`/`levee-client`), wire-compatible
   with the Elixir server's `DocumentChannel`
 
@@ -197,7 +192,7 @@ panic, and channel callbacks run inside the coordinator, so they cannot be made
 there. Identity (`key` from the token's user id, `client_id` from the
 server-assigned client id) is derived server-side and a client naming one is
 rejected. Cross-node replication enables itself only on a distributed node. See
-`server/floodgate/README.md`'s Presence section for the wire contract. Levee
+[Floodgate's README](https://github.com/tylerbutler/floodgate#presence) documents the wire contract. Levee
 (Elixir) does not advertise the capability, and clients fall back cleanly.
 
 **Floodgate is multi-tenant**, dynamically, not just via the one
@@ -212,7 +207,7 @@ uses slot 1 — and tenants persist on whichever storage backend documents use
 (`FLOODGATE_STORAGE_BACKEND`). `FLOODGATE_TENANT_ID`/`FLOODGATE_JWT_SECRET`
 still seed/ensure that one tenant at boot, so existing single-tenant
 deployments, clients, tests, docker, and parity suites are unaffected. See
-`server/floodgate/README.md`'s Multi-tenancy section for the full contract.
+[Floodgate's README](https://github.com/tylerbutler/floodgate#multi-tenancy) documents the full contract.
 Floodgate serves the shared Lustre UI itself and uses Vestibule for GitHub
 OAuth; the implementation and container remain Gleam/BEAM-only.
 
@@ -225,10 +220,8 @@ the servers. [ADR-009](docs/adr/009-floodgate-standalone-repo.md) records the
 parity surface, the known remaining gaps, and what blocks extracting Floodgate
 into its own repository.
 
-Floodgate has its own container image (`server/floodgate/Dockerfile`,
-`docker-compose.yml`) built from a `gleam export erlang-shipment` — no Elixir or
-Mix — plus its own `README.md`, `justfile`, and CI workflow, so it is ready to
-move out as a directory.
+Floodgate lives at https://github.com/tylerbutler/floodgate with its container,
+client, examples, admin UI, conformance suites, and release workflow.
 
 ### Client Commands
 
@@ -263,7 +256,7 @@ just generate-schema-ts
 ### Modifying Gleam Protocol
 1. Edit protocol logic in the external `spillway` package (repo:
    tylerbutler/spillway); bump the pinned commit in **both**
-   `server/levee_bridge/manifest.toml` and `server/floodgate/manifest.toml`
+   `server/levee_bridge/manifest.toml` here and `manifest.toml` in Floodgate
    so the two servers run the same protocol logic
 2. Run `just build-gleam` to compile
 3. Update `server/lib/levee/protocol/bridge.ex` or `server/lib/levee/spillway.ex`
@@ -375,7 +368,7 @@ and `floodgate/socketio_transport.gleam` is separate code; any new guard added t
 ## Client Release Pipeline
 
 ### Changie (Changelog Management)
-- Config: `client/.changie.yaml` (project mode with `levee-driver`, `levee-client`, and `floodgate-client`)
+- Config: `client/.changie.yaml` (project mode with `levee-driver` and `levee-client`)
 - Fragments go in `client/.changes/unreleased/` (root), NOT per-project subdirectories
 - Each fragment YAML needs a `project` field to route to the correct package
 - `changie` CLI is NOT in `mise.toml` — only available in CI via `miniscruff/changie-action`

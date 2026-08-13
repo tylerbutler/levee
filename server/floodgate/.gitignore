@@ -1,8 +1,0 @@
-*.beam
-*.ez
-/build
-erl_crash.dump
-
-# Shelf DETS files (default FLOODGATE_DATA_DIR + test data dirs)
-/priv/floodgate_data
-/build/floodgate_shelf_test

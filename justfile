@@ -26,16 +26,12 @@ build-gleam:
     cd server/levee_oauth && gleam build --target erlang
     cd server/levee_bridge && gleam build --target erlang
     cd server/levee_admin && gleam build --target javascript
-    cd server/floodgate && gleam build --target erlang
 
 # Build admin UI and copy to priv/static/admin
 build-admin: build-gleam
     mkdir -p server/priv/static/admin
     cp -r server/levee_admin/build/dev/javascript/* server/priv/static/admin/
     cp server/levee_admin/index.html server/priv/static/admin/
-    mkdir -p server/floodgate/priv/static/admin
-    cp -r server/levee_admin/build/dev/javascript/* server/floodgate/priv/static/admin/
-    cp server/levee_admin/index.html server/floodgate/priv/static/admin/
 
 # Build Elixir application
 build-elixir: build-gleam
@@ -67,7 +63,6 @@ test-gleam:
     cd server/levee_auth && gleam test
     cd server/levee_oauth && gleam test
     cd server/levee_admin && gleam test
-    cd server/floodgate && gleam test
 
 # Run Elixir tests
 test-elixir:
@@ -93,109 +88,13 @@ test-integration-down:
 test-integration-run:
     cd client && pnpm test:integration:run
 
-# Drop-in check: run the *unmodified* Levee integration suites — levee-driver,
-# levee-client, levee-example — against Floodgate instead of the Elixir server.
-# Nothing about those suites is Floodgate-aware; they are simply repointed via
-# LEVEE_HTTP_URL/LEVEE_SOCKET_URL/LEVEE_TENANT_KEY. Any failure here is a real
-# behavioural difference between the two servers.
-#
-# Compare against the same suites on Levee with `just test-integration`.
-test-levee-suite-vs-floodgate:
-    cd server/floodgate && docker compose up -d --wait --build
-    cd client && LEVEE_HTTP_URL=http://localhost:3000 \
-        LEVEE_SOCKET_URL=ws://localhost:3000/socket \
-        LEVEE_TENANT_KEY=dev-tenant-secret-key \
-        pnpm vitest run integration; \
-        result=$?; \
-        cd ../server/floodgate && docker compose down -v; \
-        exit $result
-
-# Same drop-in check against an already-running Floodgate (e.g. `just floodgate-server`).
+# Run Levee's unmodified integration suites against an external Floodgate on :3000.
+# Start Floodgate from https://github.com/tylerbutler/floodgate first.
 test-levee-suite-vs-floodgate-run:
     cd client && LEVEE_HTTP_URL=http://localhost:3000 \
         LEVEE_SOCKET_URL=ws://localhost:3000/socket \
         LEVEE_TENANT_KEY=${FLOODGATE_JWT_SECRET:-dev-tenant-secret-key} \
         pnpm vitest run integration
-
-# Start/stop the containerised Floodgate used by the drop-in check.
-floodgate-up:
-    cd server/floodgate && docker compose up -d --wait --build
-
-floodgate-down:
-    cd server/floodgate && docker compose down -v
-
-# Run Routerlicious driver compatibility contract against a running Floodgate server.
-# This is the north-star conformance suite for the Floodgate-first client
-# strategy (see docs/adr/002-client-compatibility-strategy.md): the official
-# Routerlicious driver becomes the primary client once this suite is green.
-test-floodgate-routerlicious:
-    cd client && pnpm test:floodgate-routerlicious
-
-# Run both wire protocols against ONE Floodgate process (ADR-008 dual mode):
-# the Routerlicious driver over Socket.IO and the full levee-driver over the
-# Phoenix endpoint, including cross-mode collaboration on a shared document.
-# Starts the server, waits for readiness, runs both suites, then stops it.
-test-floodgate-dual-mode:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    export FLOODGATE_JWT_SECRET=floodgate-routerlicious-compat-secret
-    export FLOODGATE_TOKEN_MINT_SECRET=floodgate-routerlicious-mint-secret
-    export FLOODGATE_STORAGE_BACKEND=memory
-
-    server_pid=""
-    cleanup() {
-        # Kill the entire process group to terminate BEAM descendants.
-        [ -n "$server_pid" ] && kill -- "-$server_pid" 2>/dev/null || true
-    }
-    trap cleanup EXIT INT TERM
-
-    # setsid: new session/PGID = $server_pid so kill -- -$server_pid reaches BEAM.
-    scripts/setsid-portable bash -c 'cd server/floodgate && gleam run' &
-    server_pid=$!
-
-    sleep 0.5
-    if ! kill -0 "$server_pid" 2>/dev/null; then
-        echo "ERROR: Floodgate server process exited immediately." >&2
-        exit 1
-    fi
-
-    echo "Waiting for Floodgate server to be ready..."
-    ready=false
-    for i in $(seq 1 30); do
-        code=$(curl --max-time 1 -s -o /dev/null -w "%{http_code}" \
-            -X POST http://localhost:3000/api/tenants/fluid/token-mint \
-            -H "Authorization: Bearer $FLOODGATE_TOKEN_MINT_SECRET" \
-            -H "Content-Type: application/json" \
-            -d '{"documentId":""}' \
-            2>/dev/null) || code="000"
-        if [ "$code" = "200" ]; then
-            echo "Floodgate server ready (HTTP 200)."
-            ready=true
-            break
-        fi
-        echo "  waiting... ($i/30)"
-        sleep 1
-    done
-    if [ "$ready" = "false" ]; then
-        echo "ERROR: Floodgate server not ready after 30s." >&2
-        exit 1
-    fi
-
-    cd client
-    echo "=== Socket.IO endpoint (Routerlicious driver) ==="
-    pnpm test:floodgate-routerlicious
-    echo "=== Phoenix endpoint (levee-driver) + cross-mode ==="
-    pnpm test:floodgate-phoenix
-
-# Check standalone Floodgate release readiness against a running direct target.
-# Levee remains an independent supported stack per ADR-004.
-check-floodgate-readiness:
-    cd client && pnpm check:floodgate-readiness
-
-# Check only that the repo-tracked readiness manifest matches the suite.
-check-floodgate-readiness-manifest:
-    cd client && pnpm check:floodgate-readiness-manifest
 
 # Run admin e2e tests (starts Docker server, runs Playwright, stops server)
 test-e2e:
@@ -221,7 +120,6 @@ format-gleam:
     cd server/levee_oauth && gleam format
     cd server/levee_bridge && gleam format
     cd server/levee_admin && gleam format
-    cd server/floodgate && gleam format
 
 # Format Elixir code
 format-elixir:
@@ -244,7 +142,6 @@ lint-gleam:
     cd server/levee_oauth && gleam format --check
     cd server/levee_bridge && gleam format --check
     cd server/levee_admin && gleam format --check
-    cd server/floodgate && gleam format --check
 
 # Lint Elixir code
 lint-elixir:
@@ -355,476 +252,6 @@ iex: build-gleam build-admin
 dev-sandbag:
     cd client/packages/sandbag && pnpm dev
 
-# === FLOODGATE STANDALONE ===
-
-# Start standalone Floodgate server on :3000 with example credentials
-floodgate-server:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    export FLOODGATE_JWT_SECRET=floodgate-example-jwt-secret
-    export FLOODGATE_TOKEN_MINT_SECRET=floodgate-example-mint-secret
-    export FLOODGATE_TOKEN_MINT_USER_ID=floodgate-example-user
-    export FLOODGATE_TOKEN_MINT_USER_NAME="Floodgate Example User"
-    export FLOODGATE_STORAGE_BACKEND=memory
-    cd server/floodgate && gleam run
-
-# Start Floodgate DiceRoller Vite dev server on :3001 (server must already be running).
-# Env vars are pinned to match the standalone Floodgate server credentials.
-dev-floodgate-example:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    export VITE_FLOODGATE_HTTP_URL=http://localhost:3000
-    export VITE_FLOODGATE_SOCKET_URL=http://localhost:3000
-    export VITE_FLOODGATE_TENANT_ID=fluid
-    export VITE_FLOODGATE_TOKEN_MINT_SECRET=floodgate-example-mint-secret
-    cd client/packages/floodgate-example && pnpm dev --port 3001 --strictPort
-
-# Start Floodgate Todo List Vite dev server on :3002 (server must already be running).
-# Env vars are pinned to match the standalone Floodgate server credentials.
-dev-floodgate-todo-list:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    export VITE_FLOODGATE_HTTP_URL=http://localhost:3000
-    export VITE_FLOODGATE_SOCKET_URL=http://localhost:3000
-    export VITE_FLOODGATE_TENANT_ID=fluid
-    export VITE_FLOODGATE_TOKEN_MINT_SECRET=floodgate-example-mint-secret
-    cd client/packages/floodgate-todo-list && pnpm dev --port 3002 --strictPort
-
-# Start Floodgate Presence Vite dev server on :3003 (server must already be running).
-# Env vars are pinned to match the standalone Floodgate server credentials.
-dev-floodgate-presence:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    export VITE_FLOODGATE_HTTP_URL=http://localhost:3000
-    export VITE_FLOODGATE_SOCKET_URL=http://localhost:3000
-    export VITE_FLOODGATE_TENANT_ID=fluid
-    export VITE_FLOODGATE_TOKEN_MINT_SECRET=floodgate-example-mint-secret
-    cd client/packages/floodgate-presence-tracker && pnpm dev --port 3003 --strictPort
-
-# Start standalone Floodgate server (:3000) + DiceRoller example (:3001) together.
-# Waits for the server to respond HTTP 200 before starting Vite. Terminates
-# both children when either exits. Press Ctrl-C to stop.
-# Uses example-only credentials — never use in production.
-floodgate-example:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    # Server env vars
-    export FLOODGATE_JWT_SECRET=floodgate-example-jwt-secret
-    export FLOODGATE_TOKEN_MINT_SECRET=floodgate-example-mint-secret
-    export FLOODGATE_TOKEN_MINT_USER_ID=floodgate-example-user
-    export FLOODGATE_TOKEN_MINT_USER_NAME="Floodgate Example User"
-    export FLOODGATE_STORAGE_BACKEND=memory
-
-    # Vite env vars — pinned to match server credentials and port
-    export VITE_FLOODGATE_HTTP_URL=http://localhost:3000
-    export VITE_FLOODGATE_SOCKET_URL=http://localhost:3000
-    export VITE_FLOODGATE_TENANT_ID=fluid
-    export VITE_FLOODGATE_TOKEN_MINT_SECRET=floodgate-example-mint-secret
-
-    floodgate_pid=""
-    vite_pid=""
-
-    cleanup() {
-        # Kill the entire process group for each child (setsid gives each its own PGID).
-        # This terminates BEAM/node descendants that outlive the group-leader bash.
-        [ -n "$floodgate_pid" ] && kill -- "-$floodgate_pid" 2>/dev/null || true
-        [ -n "$vite_pid" ] && kill -- "-$vite_pid" 2>/dev/null || true
-    }
-    trap cleanup EXIT INT TERM
-
-    # setsid creates a new session/process group (PGID = $!) so cleanup can kill
-    # the group leader and all descendants (gleam + BEAM, pnpm + node workers).
-    scripts/setsid-portable bash -c 'cd server/floodgate && gleam run' &
-    floodgate_pid=$!
-
-    # Wait for authenticated token-mint to return HTTP 200 (proves server is fully up)
-    echo "Waiting for Floodgate server to be ready..."
-    ready=false
-    for i in $(seq 1 30); do
-        if ! kill -0 "$floodgate_pid" 2>/dev/null; then
-            echo "ERROR: Floodgate server process exited unexpectedly." >&2
-            exit 1
-        fi
-        code=$(curl --max-time 1 -s -o /dev/null -w "%{http_code}" \
-            -X POST http://localhost:3000/api/tenants/fluid/token-mint \
-            -H "Authorization: Bearer $FLOODGATE_TOKEN_MINT_SECRET" \
-            -H "Content-Type: application/json" \
-            -d '{"documentId":""}' \
-            2>/dev/null) || code="000"
-        if [ "$code" = "200" ]; then
-            echo "  Floodgate server ready (HTTP 200)."
-            ready=true
-            break
-        fi
-        echo "  waiting... ($i/30)"
-        sleep 1
-    done
-    if [ "$ready" = "false" ]; then
-        echo "ERROR: Floodgate server not ready after 30s." >&2
-        exit 1
-    fi
-
-    # Start Vite on fixed port 3001 (--strictPort fails immediately if port is taken)
-    scripts/setsid-portable bash -c 'cd client/packages/floodgate-example && pnpm dev --port 3001 --strictPort' &
-    vite_pid=$!
-
-    # Detect immediate Vite startup failure (e.g., port 3001 in use)
-    sleep 2
-    if ! kill -0 "$vite_pid" 2>/dev/null; then
-        echo "ERROR: Vite dev server failed to start (port 3001 may be in use)." >&2
-        exit 1
-    fi
-
-    echo ""
-    echo "  Floodgate server:   http://localhost:3000"
-    echo "  DiceRoller example: http://localhost:3001"
-    echo ""
-    echo "  Press Ctrl-C to stop both processes."
-    echo ""
-
-    # Terminate the surviving child when either process exits
-    while kill -0 "$floodgate_pid" 2>/dev/null && kill -0 "$vite_pid" 2>/dev/null; do
-        sleep 1
-    done
-
-# Start standalone Floodgate server (:3000) + Presence demo (:3003) together.
-# Uses example-only credentials — never use in production.
-floodgate-presence:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    export FLOODGATE_JWT_SECRET=floodgate-example-jwt-secret
-    export FLOODGATE_TOKEN_MINT_SECRET=floodgate-example-mint-secret
-    export FLOODGATE_TOKEN_MINT_USER_ID=floodgate-example-user
-    export FLOODGATE_TOKEN_MINT_USER_NAME="Floodgate Example User"
-    export FLOODGATE_STORAGE_BACKEND=memory
-    export VITE_FLOODGATE_HTTP_URL=http://localhost:3000
-    export VITE_FLOODGATE_SOCKET_URL=http://localhost:3000
-    export VITE_FLOODGATE_TENANT_ID=fluid
-    export VITE_FLOODGATE_TOKEN_MINT_SECRET=floodgate-example-mint-secret
-
-    floodgate_pid=""
-    vite_pid=""
-    cleanup() {
-        [ -n "$floodgate_pid" ] && kill -- "-$floodgate_pid" 2>/dev/null || true
-        [ -n "$vite_pid" ] && kill -- "-$vite_pid" 2>/dev/null || true
-    }
-    trap cleanup EXIT INT TERM
-
-    scripts/setsid-portable bash -c 'cd server/floodgate && gleam run' &
-    floodgate_pid=$!
-
-    echo "Waiting for Floodgate server to be ready..."
-    ready=false
-    for i in $(seq 1 30); do
-        if ! kill -0 "$floodgate_pid" 2>/dev/null; then
-            echo "ERROR: Floodgate server process exited unexpectedly." >&2
-            exit 1
-        fi
-        code=$(curl --max-time 1 -s -o /dev/null -w "%{http_code}" \
-            -X POST http://localhost:3000/api/tenants/fluid/token-mint \
-            -H "Authorization: Bearer floodgate-example-mint-secret" \
-            -H "Content-Type: application/json" \
-            -d '{"documentId":""}' \
-            2>/dev/null) || code="000"
-        if [ "$code" = "200" ]; then
-            echo "  Floodgate server ready (HTTP 200)."
-            ready=true
-            break
-        fi
-        echo "  waiting... ($i/30)"
-        sleep 1
-    done
-    if [ "$ready" = "false" ]; then
-        echo "ERROR: Floodgate server not ready after 30s." >&2
-        exit 1
-    fi
-
-    scripts/setsid-portable bash -c 'cd client/packages/floodgate-presence-tracker && pnpm dev --port 3003 --strictPort' &
-    vite_pid=$!
-    sleep 2
-    if ! kill -0 "$vite_pid" 2>/dev/null; then
-        echo "ERROR: Vite dev server failed to start (port 3003 may be in use)." >&2
-        exit 1
-    fi
-
-    echo ""
-    echo "  Floodgate server: http://localhost:3000"
-    echo "  Presence demo:    http://localhost:3003"
-    echo ""
-    echo "  Press Ctrl-C to stop both processes."
-    echo ""
-
-    while kill -0 "$floodgate_pid" 2>/dev/null && kill -0 "$vite_pid" 2>/dev/null; do
-        sleep 1
-    done
-
-# Start standalone Floodgate server (:3000) + Todo List example (:3002) together.
-# Waits for the server to respond HTTP 200 before starting Vite. Terminates
-# both children when either exits. Press Ctrl-C to stop.
-# Uses example-only credentials — never use in production.
-floodgate-todo-list:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    # Server env vars
-    export FLOODGATE_JWT_SECRET=floodgate-example-jwt-secret
-    export FLOODGATE_TOKEN_MINT_SECRET=floodgate-example-mint-secret
-    export FLOODGATE_TOKEN_MINT_USER_ID=floodgate-example-user
-    export FLOODGATE_TOKEN_MINT_USER_NAME="Floodgate Example User"
-    export FLOODGATE_STORAGE_BACKEND=memory
-
-    # Vite env vars — pinned to match server credentials and port
-    export VITE_FLOODGATE_HTTP_URL=http://localhost:3000
-    export VITE_FLOODGATE_SOCKET_URL=http://localhost:3000
-    export VITE_FLOODGATE_TENANT_ID=fluid
-    export VITE_FLOODGATE_TOKEN_MINT_SECRET=floodgate-example-mint-secret
-
-    floodgate_pid=""
-    vite_pid=""
-
-    cleanup() {
-        # Kill the entire process group for each child (setsid gives each its own PGID).
-        # This terminates BEAM/node descendants that outlive the group-leader bash.
-        [ -n "$floodgate_pid" ] && kill -- "-$floodgate_pid" 2>/dev/null || true
-        [ -n "$vite_pid" ] && kill -- "-$vite_pid" 2>/dev/null || true
-    }
-    trap cleanup EXIT INT TERM
-
-    # setsid creates a new session/process group (PGID = $!) so cleanup can kill
-    # the group leader and all descendants (gleam + BEAM, pnpm + node workers).
-    scripts/setsid-portable bash -c 'cd server/floodgate && gleam run' &
-    floodgate_pid=$!
-
-    # Wait for authenticated token-mint to return HTTP 200 (proves server is fully up)
-    echo "Waiting for Floodgate server to be ready..."
-    ready=false
-    for i in $(seq 1 30); do
-        if ! kill -0 "$floodgate_pid" 2>/dev/null; then
-            echo "ERROR: Floodgate server process exited unexpectedly." >&2
-            exit 1
-        fi
-        code=$(curl --max-time 1 -s -o /dev/null -w "%{http_code}" \
-            -X POST http://localhost:3000/api/tenants/fluid/token-mint \
-            -H "Authorization: ******" \
-            -H "Content-Type: application/json" \
-            -d '{"documentId":""}' \
-            2>/dev/null) || code="000"
-        if [ "$code" = "200" ]; then
-            echo "  Floodgate server ready (HTTP 200)."
-            ready=true
-            break
-        fi
-        echo "  waiting... ($i/30)"
-        sleep 1
-    done
-    if [ "$ready" = "false" ]; then
-        echo "ERROR: Floodgate server not ready after 30s." >&2
-        exit 1
-    fi
-
-    # Start Vite on fixed port 3002 (--strictPort fails immediately if port is taken)
-    scripts/setsid-portable bash -c 'cd client/packages/floodgate-todo-list && pnpm dev --port 3002 --strictPort' &
-    vite_pid=$!
-
-    # Detect immediate Vite startup failure (e.g., port 3002 in use)
-    sleep 2
-    if ! kill -0 "$vite_pid" 2>/dev/null; then
-        echo "ERROR: Vite dev server failed to start (port 3002 may be in use)." >&2
-        exit 1
-    fi
-
-    echo ""
-    echo "  Floodgate server:  http://localhost:3000"
-    echo "  Todo List example: http://localhost:3002"
-    echo ""
-    echo "  Press Ctrl-C to stop both processes."
-    echo ""
-
-    # Terminate the surviving child when either process exits
-    while kill -0 "$floodgate_pid" 2>/dev/null && kill -0 "$vite_pid" 2>/dev/null; do
-        sleep 1
-    done
-
-# Run the two-client SharedMap sync integration test against standalone Floodgate.
-# Starts the server, polls the authenticated token-mint for HTTP 200, runs the
-# test, then stops the server. Fails explicitly if the server does not start.
-test-floodgate-sync:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    export FLOODGATE_JWT_SECRET=floodgate-example-jwt-secret
-    export FLOODGATE_TOKEN_MINT_SECRET=floodgate-example-mint-secret
-    export FLOODGATE_TOKEN_MINT_USER_ID=floodgate-example-user
-    export FLOODGATE_TOKEN_MINT_USER_NAME="Floodgate Example User"
-    export FLOODGATE_STORAGE_BACKEND=memory
-
-    server_pid=""
-    cleanup() {
-        # Kill the entire process group to terminate BEAM descendants.
-        [ -n "$server_pid" ] && kill -- "-$server_pid" 2>/dev/null || true
-    }
-    trap cleanup EXIT INT TERM
-
-    # setsid: new session/PGID = $server_pid so kill -- -$server_pid reaches BEAM.
-    scripts/setsid-portable bash -c 'cd server/floodgate && gleam run' &
-    server_pid=$!
-
-    # Detect immediate server startup failure
-    sleep 0.5
-    if ! kill -0 "$server_pid" 2>/dev/null; then
-        echo "ERROR: Floodgate server process exited immediately." >&2
-        exit 1
-    fi
-
-    # Poll authenticated token-mint; require HTTP 200 to confirm server is fully up
-    echo "Waiting for Floodgate server to be ready..."
-    ready=false
-    for i in $(seq 1 30); do
-        code=$(curl --max-time 1 -s -o /dev/null -w "%{http_code}" \
-            -X POST http://localhost:3000/api/tenants/fluid/token-mint \
-            -H "Authorization: Bearer $FLOODGATE_TOKEN_MINT_SECRET" \
-            -H "Content-Type: application/json" \
-            -d '{"documentId":""}' \
-            2>/dev/null) || code="000"
-        if [ "$code" = "200" ]; then
-            echo "Floodgate server ready (HTTP 200)."
-            ready=true
-            break
-        fi
-        echo "  waiting... ($i/30)"
-        sleep 1
-    done
-    if [ "$ready" = "false" ]; then
-        echo "ERROR: Floodgate server not ready after 30s." >&2
-        exit 1
-    fi
-
-    cd client/packages/floodgate-example
-    FLOODGATE_INTEGRATION=1 \
-    FLOODGATE_HTTP_URL=http://localhost:3000 \
-    FLOODGATE_MINT_CREDENTIAL=floodgate-example-mint-secret \
-    pnpm test:vitest:integration
-
-# Run the two-client SharedTree + SharedString sync integration test against standalone Floodgate.
-# Starts the server, polls the authenticated token-mint for HTTP 200, runs the
-# test, then stops the server. Fails explicitly if the server does not start.
-test-floodgate-todo-sync:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    export FLOODGATE_JWT_SECRET=floodgate-example-jwt-secret
-    export FLOODGATE_TOKEN_MINT_SECRET=floodgate-example-mint-secret
-    export FLOODGATE_TOKEN_MINT_USER_ID=floodgate-example-user
-    export FLOODGATE_TOKEN_MINT_USER_NAME="Floodgate Example User"
-    export FLOODGATE_STORAGE_BACKEND=memory
-
-    server_pid=""
-    cleanup() {
-        # Kill the entire process group to terminate BEAM descendants.
-        [ -n "$server_pid" ] && kill -- "-$server_pid" 2>/dev/null || true
-    }
-    trap cleanup EXIT INT TERM
-
-    # setsid: new session/PGID = $server_pid so kill -- -$server_pid reaches BEAM.
-    scripts/setsid-portable bash -c 'cd server/floodgate && gleam run' &
-    server_pid=$!
-
-    # Detect immediate server startup failure
-    sleep 0.5
-    if ! kill -0 "$server_pid" 2>/dev/null; then
-        echo "ERROR: Floodgate server process exited immediately." >&2
-        exit 1
-    fi
-
-    # Poll authenticated token-mint; require HTTP 200 to confirm server is fully up
-    echo "Waiting for Floodgate server to be ready..."
-    ready=false
-    for i in $(seq 1 30); do
-        code=$(curl --max-time 1 -s -o /dev/null -w "%{http_code}" \
-            -X POST http://localhost:3000/api/tenants/fluid/token-mint \
-            -H "Authorization: Bearer $FLOODGATE_TOKEN_MINT_SECRET" \
-            -H "Content-Type: application/json" \
-            -d '{"documentId":""}' \
-            2>/dev/null) || code="000"
-        if [ "$code" = "200" ]; then
-            echo "Floodgate server ready (HTTP 200)."
-            ready=true
-            break
-        fi
-        echo "  waiting... ($i/30)"
-        sleep 1
-    done
-    if [ "$ready" = "false" ]; then
-        echo "ERROR: Floodgate server not ready after 30s." >&2
-        exit 1
-    fi
-
-    cd client/packages/floodgate-todo-list
-    FLOODGATE_INTEGRATION=1 \
-    FLOODGATE_HTTP_URL=http://localhost:3000 \
-    FLOODGATE_MINT_CREDENTIAL=floodgate-example-mint-secret \
-    pnpm test:vitest:integration
-
-# Run two-client Fluid Presence state and notification synchronization.
-test-floodgate-presence-sync:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    export FLOODGATE_JWT_SECRET=floodgate-example-jwt-secret
-    export FLOODGATE_TOKEN_MINT_SECRET=floodgate-example-mint-secret
-    export FLOODGATE_TOKEN_MINT_USER_ID=floodgate-example-user
-    export FLOODGATE_TOKEN_MINT_USER_NAME="Floodgate Example User"
-    export FLOODGATE_STORAGE_BACKEND=memory
-
-    server_pid=""
-    cleanup() {
-        [ -n "$server_pid" ] && kill -- "-$server_pid" 2>/dev/null || true
-    }
-    trap cleanup EXIT INT TERM
-
-    scripts/setsid-portable bash -c 'cd server/floodgate && gleam run' &
-    server_pid=$!
-
-    sleep 0.5
-    if ! kill -0 "$server_pid" 2>/dev/null; then
-        echo "ERROR: Floodgate server process exited immediately." >&2
-        exit 1
-    fi
-
-    echo "Waiting for Floodgate server to be ready..."
-    ready=false
-    for i in $(seq 1 30); do
-        if ! kill -0 "$server_pid" 2>/dev/null; then
-            echo "ERROR: Floodgate server process exited unexpectedly." >&2
-            exit 1
-        fi
-        code=$(curl --max-time 1 -s -o /dev/null -w "%{http_code}" \
-            -X POST http://localhost:3000/api/tenants/fluid/token-mint \
-            -H "Authorization: Bearer floodgate-example-mint-secret" \
-            -H "Content-Type: application/json" \
-            -d '{"documentId":""}' \
-            2>/dev/null) || code="000"
-        if [ "$code" = "200" ]; then
-            echo "Floodgate server ready (HTTP 200)."
-            ready=true
-            break
-        fi
-        echo "  waiting... ($i/30)"
-        sleep 1
-    done
-    if [ "$ready" = "false" ]; then
-        echo "ERROR: Floodgate server not ready after 30s." >&2
-        exit 1
-    fi
-
-    cd client/packages/floodgate-presence-tracker
-    FLOODGATE_INTEGRATION=1 \
-    FLOODGATE_HTTP_URL=http://localhost:3000 \
-    FLOODGATE_MINT_CREDENTIAL=floodgate-example-mint-secret \
-    pnpm test:vitest:integration
-
 # === UNDERTOW (.NET) ===
 
 # Build the Undertow .NET solution
@@ -903,11 +330,11 @@ test-undertow-dual-mode:
         exit 1
     fi
 
-    cd client
+    cd ${FLOODGATE_REPO:-../floodgate}/client
     echo "=== Socket.IO endpoint (Routerlicious driver) ==="
-    pnpm test:floodgate-routerlicious
+    pnpm test:routerlicious
     echo "=== Phoenix endpoint (levee-driver) + cross-mode ==="
-    pnpm test:floodgate-phoenix
+    pnpm test:phoenix
 
 # Drop-in parity: run Levee's unmodified integration suites against a
 # containerised Undertow, repointed only via LEVEE_* env. Nothing in the

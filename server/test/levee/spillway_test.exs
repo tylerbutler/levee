@@ -10,9 +10,9 @@ defmodule Levee.SpillwayTest do
 
   These exercise the bridge directly (no live socket/session runtime
   needed) so framing/decision regressions show up fast, independent of the
-  live Routerlicious-driver conformance suite in
-  `client/packages/levee-driver/test/integration/floodgate-routerlicious.test.ts`
-  and the full-stack controller tests in
+  live Routerlicious-driver conformance suite in the
+  [Floodgate repository](https://github.com/tylerbutler/floodgate) and the
+  full-stack controller tests in
   `test/levee_web/controllers/{git,delta,document}_controller_test.exs`.
   """
 

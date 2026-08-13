@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tags:
-        description: 'Space-separated list of tags to publish and release (e.g. "levee-driver/v0.1.0 floodgate-client/v0.1.0")'
+        description: 'Space-separated list of tags to publish and release (e.g. "levee-driver/v0.1.0 levee-client/v0.1.0")'
         required: true
         type: string
 

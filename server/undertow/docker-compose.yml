@@ -1,9 +1,9 @@
 # Docker Compose for the standalone Undertow server.
 #
-# Mirrors server/floodgate/docker-compose.yml so the same integration suites
-# can be pointed at either stack (Gleam Floodgate or .NET Undertow). While the
-# shadow differ is live, the FLOODGATE_* config fallback means either compose
-# file can drive either binary with only `image:` swapped.
+# Mirrors Floodgate's container contract so the same integration suites can be
+# pointed at either stack (Gleam Floodgate or .NET Undertow). While the shadow
+# differ is live, the FLOODGATE_* config fallback means either compose file can
+# drive either binary with only `image:` swapped.
 #
 # Usage:
 #   docker compose up -d --wait     # Start (builds from local source)

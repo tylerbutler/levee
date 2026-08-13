@@ -35,7 +35,7 @@ jobs:
         uses: tylerbutler/actions/changie-check@d6442585b31f72e73b950f455deab089211ef1ed # ratchet:tylerbutler/actions/changie-check@main
         with:
           working-directory: client
-          projects: levee-driver,levee-client,floodgate-client
+          projects: levee-driver,levee-client
           base-sha: ${{ github.event.pull_request.base.sha }}
           head-sha: ${{ github.event.pull_request.head.sha }}
 

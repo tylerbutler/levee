@@ -49,26 +49,11 @@ function sorted(values: string[]): string[] {
 }
 
 describe("client release configuration", () => {
-	it("keeps Floodgate publishable and transport-independent", () => {
-		const packageJson = JSON.parse(
-			readFileSync(
-				`${clientRoot}/packages/floodgate-client/package.json`,
-				"utf8",
-			),
-		) as {
-			name?: string;
-			private?: boolean;
-			files?: string[];
-			dependencies?: Record<string, string>;
-		};
-
-		expect(packageJson.name).toBe("@tylerbu/floodgate-client");
-		expect(packageJson.private).not.toBe(true);
-		expect(packageJson.files).toContain("esm");
-		expect(packageJson.dependencies).not.toHaveProperty(
-			"@tylerbu/levee-driver",
-		);
-		expect(changieProjects).toContain("floodgate-client");
+	it("leaves Floodgate release ownership in its repository", () => {
+		expect(changieProjects).not.toContain("floodgate-client");
+		expect(
+			existsSync(`${clientRoot}/packages/floodgate-client/package.json`),
+		).toBe(false);
 		expect(workspacePackageJson.scripts?.["ci:publish"]).toContain(
 			"pnpm publish -r",
 		);

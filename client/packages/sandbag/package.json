@@ -14,9 +14,6 @@
 		"test:vitest": "vitest run test/unit"
 	},
 	"dependencies": {
-		"@tylerbu/floodgate-example": "workspace:^",
-		"@tylerbu/floodgate-presence-tracker": "workspace:^",
-		"@tylerbu/floodgate-todo-list": "workspace:^",
 		"@tylerbu/levee-example": "workspace:^",
 		"@tylerbu/levee-presence-tracker": "workspace:^",
 		"@tylerbu/levee-todo-list": "workspace:^"

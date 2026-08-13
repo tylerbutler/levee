@@ -2,8 +2,7 @@
  * Unit tests for Sandbag URL/config helpers.
  *
  * Verifies that parseConfigFromParams correctly parses all known parameters
- * from URL search params, including the new mintCredential field, without
- * conflating it with the Levee-specific authToken.
+ * from URL search params.
  */
 
 import { describe, expect, it } from "vitest";
@@ -29,11 +28,6 @@ describe("parseConfigFromParams — defaults", () => {
 	it("authToken is undefined when not in params", () => {
 		const config = parseConfigFromParams(new URLSearchParams());
 		expect(config.authToken).toBeUndefined();
-	});
-
-	it("mintCredential is undefined when not in params", () => {
-		const config = parseConfigFromParams(new URLSearchParams());
-		expect(config.mintCredential).toBeUndefined();
 	});
 
 	it("documentId is undefined when not in params", () => {
@@ -71,45 +65,10 @@ describe("parseConfigFromParams — explicit values", () => {
 		expect(config.authToken).toBe("tok-abc");
 	});
 
-	it("parses mintCredential", () => {
-		const config = parseConfigFromParams(
-			new URLSearchParams("mintCredential=floodgate-example-mint-secret"),
-		);
-		expect(config.mintCredential).toBe("floodgate-example-mint-secret");
-	});
-
 	it("parses documentId", () => {
 		const config = parseConfigFromParams(
 			new URLSearchParams("documentId=doc-123"),
 		);
 		expect(config.documentId).toBe("doc-123");
-	});
-});
-
-describe("parseConfigFromParams — isolation of authToken vs mintCredential", () => {
-	it("authToken and mintCredential are parsed independently", () => {
-		const config = parseConfigFromParams(
-			new URLSearchParams(
-				"authToken=levee-session-token&mintCredential=floodgate-mint-secret",
-			),
-		);
-		expect(config.authToken).toBe("levee-session-token");
-		expect(config.mintCredential).toBe("floodgate-mint-secret");
-	});
-
-	it("authToken present but mintCredential absent", () => {
-		const config = parseConfigFromParams(
-			new URLSearchParams("authToken=levee-session-token"),
-		);
-		expect(config.authToken).toBe("levee-session-token");
-		expect(config.mintCredential).toBeUndefined();
-	});
-
-	it("mintCredential present but authToken absent", () => {
-		const config = parseConfigFromParams(
-			new URLSearchParams("mintCredential=mint-only"),
-		);
-		expect(config.mintCredential).toBe("mint-only");
-		expect(config.authToken).toBeUndefined();
 	});
 });

@@ -22,7 +22,7 @@ jobs:
         with:
           token: ${{ secrets.RELEASE_PAT }}
           working-directory: client
-          projects: levee-driver,levee-client,floodgate-client
+          projects: levee-driver,levee-client
           labels: release:client
           pr-title-template: 'Release client packages {version}'
           branch-template: 'release/client-next'

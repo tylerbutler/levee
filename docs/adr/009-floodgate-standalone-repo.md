@@ -1,7 +1,6 @@
 # ADR-009: Extracting Floodgate into its own repository
 
-- **Status:** Accepted (preparation); blocking coupling resolved 2026-08-10
-  (see "Resolution" below); extraction not yet performed
+- **Status:** Completed 2026-08-12
 - **Date:** 2026-08-05
 - **Supersedes:** nothing
 - **Related:** [ADR-004](004-coexisting-client-stacks.md), [ADR-005](005-floodgate-storage-backend.md), [ADR-008](008-floodgate-phoenix-endpoint.md)
@@ -24,7 +23,7 @@ importantly — the one coupling that genuinely blocks it.
 
 ## Decision
 
-Prepare Floodgate for extraction now; do not extract yet. Specifically:
+Prepare Floodgate for extraction, then move it to its own repository:
 
 1. Give Floodgate the operational surface a standalone service needs
    (`/health`, configurable port and bind address, a container image).
@@ -169,13 +168,16 @@ pass on the freshly resolved tree.
 
 ## Consequences
 
-- Floodgate has a container image (`server/floodgate/Dockerfile`,
-  `docker-compose.yml`) that mirrors how Levee is run for integration testing,
+- Floodgate has a container image (`Dockerfile`, `docker-compose.yml`) that
+  mirrors how Levee is run for integration testing,
   built from a `gleam export erlang-shipment` — no Elixir or Mix in the image.
 - `PORT`/`FLOODGATE_PORT` and `FLOODGATE_BIND` make the listener configurable;
   Mist binds to localhost by default, which is unreachable from outside a
   container.
-- Floodgate carries its own `README.md`, `justfile`, and CI workflow, so the
-  extraction is a directory move plus a remote, not a reconstruction.
-- Until the coupling above is resolved, `server/floodgate/` must stay in this
-  repository.
+- Floodgate carries its own `README.md`, `justfile`, CI, client release
+  workflows, admin UI, examples, and conformance suites.
+- The filtered-history extraction landed at
+  https://github.com/tylerbutler/floodgate from Levee commit
+  `bd956de060979c18e93b3592062c383c308c88b9`.
+- Levee and Floodgate now own independent admin UI copies and share protocol
+  behavior through `spillway`, not a repository dependency.

@@ -62,10 +62,9 @@ mix test test/levee/documents/session_test.exs:42   # Specific line
 
 ## Gleam Protocol
 
-The `levee_auth/`, `levee_oauth/`, `levee_storage/`, `levee_admin/`, and
-`floodgate/` directories contain Gleam packages that compile to BEAM. The Fluid
-protocol logic (sequencing, sessions, signals, JWT) lives in the external
-`spillway` package, pulled in as a dependency of `floodgate`.
+The `levee_auth/`, `levee_oauth/`, `levee_storage/`, `levee_bridge/`, and
+`levee_admin/` directories contain Gleam packages. Shared Fluid protocol logic
+lives in the external `spillway` package through `levee_bridge`.
 
 After modifying Gleam files:
 
@@ -74,8 +73,6 @@ After modifying Gleam files:
 just build-gleam
 cd server && mix compile --force    # Reload BEAM modules
 
-# Or directly
-cd server/floodgate && gleam build
 cd server && mix compile --force
 ```
 
