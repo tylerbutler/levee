@@ -194,7 +194,8 @@ driver. Use `@tylerbu/levee-client` for a higher-level Levee API.
 ### See Also
 
 - [ADR-004: Coexisting client stacks](../../../docs/adr/004-coexisting-client-stacks.md) — Current architectural decision
-- [`floodgate-routerlicious.test.ts`](test/integration/floodgate-routerlicious.test.ts) — Conformance test suite
+- [Floodgate conformance tests](https://github.com/tylerbutler/floodgate/tree/main/client/test/conformance)
+  — Routerlicious, Phoenix, and cross-mode suites
 - `levee-client` — High-level Levee/Phoenix client
 - `floodgate-client` — Official Routerlicious integration for Floodgate
 

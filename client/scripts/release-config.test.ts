@@ -89,15 +89,13 @@ describe("client release configuration", () => {
 	});
 
 	it("routes every unreleased fragment to a registered project", () => {
-		const fragments = readdirSync(`${clientRoot}/.changes/unreleased`).filter(
-			(file) => file.endsWith(".yaml"),
-		);
+		const unreleasedPath = `${clientRoot}/.changes/unreleased`;
+		const fragments = existsSync(unreleasedPath)
+			? readdirSync(unreleasedPath).filter((file) => file.endsWith(".yaml"))
+			: [];
 
 		for (const fragment of fragments) {
-			const contents = readFileSync(
-				`${clientRoot}/.changes/unreleased/${fragment}`,
-				"utf8",
-			);
+			const contents = readFileSync(`${unreleasedPath}/${fragment}`, "utf8");
 			const project = contents.match(/^project:\s*(\S+)\s*$/m)?.[1];
 
 			expect(project, `${fragment} must declare a project`).toBeDefined();

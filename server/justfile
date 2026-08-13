@@ -5,7 +5,6 @@ build-gleam:
     cd levee_auth && gleam build --target erlang
     cd levee_storage && gleam build --target erlang
     cd levee_oauth && gleam build --target erlang
-    cd floodgate && gleam build --target erlang
 
 # Build admin UI (JavaScript target)
 build-admin: build-gleam

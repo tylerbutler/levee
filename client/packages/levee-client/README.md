@@ -340,7 +340,8 @@ neither server stack replaces the other.
 ### See Also
 
 - [ADR-004: Coexisting client stacks](../../../docs/adr/004-coexisting-client-stacks.md) — Current architectural decision
-- [`floodgate-routerlicious.test.ts`](../levee-driver/test/integration/floodgate-routerlicious.test.ts) — Conformance test suite
+- [Floodgate conformance tests](https://github.com/tylerbutler/floodgate/tree/main/client/test/conformance)
+  — Routerlicious, Phoenix, and cross-mode suites
 - `@tylerbu/levee-driver` — Lower-level driver documentation
 - `@tylerbu/floodgate-client` — Floodgate/Routerlicious client package
 

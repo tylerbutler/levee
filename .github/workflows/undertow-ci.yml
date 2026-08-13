@@ -26,6 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: tylerbutler/floodgate
+          path: floodgate
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
@@ -64,11 +68,13 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: client/pnpm-lock.yaml
+          cache-dependency-path: floodgate/client/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-        working-directory: client
+        working-directory: floodgate/client
       - uses: extractions/setup-just@v2
       # The dual-mode gate: 38 Routerlicious + 7 Phoenix/cross-mode against
       # one Undertow process. The suites fail loudly on any count regression,
       # so the recorded baseline (38 + 7) gates the merge.
       - run: just test-undertow-dual-mode
+        env:
+          FLOODGATE_REPO: floodgate

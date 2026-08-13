@@ -7,7 +7,7 @@ The TypeScript types in `src/generated/protocol-types.ts` are auto-generated fro
 ### Schema Architecture
 
 ```
-spillway/src/spillway/schema.gleam  (Source of truth, via floodgate dep)
+spillway/src/spillway/schema.gleam  (Source of truth, via levee_bridge dep)
                         │
                         ▼ mix generate_schema
 levee/priv/protocol-schema.json
@@ -43,7 +43,7 @@ This runs `json2ts` to convert the JSON schema to TypeScript interfaces.
 
 | Location | File | Purpose |
 |----------|------|---------|
-| Levee server | `spillway/src/spillway/schema.gleam` (external dep via `floodgate`) | Gleam type definitions (source of truth) |
+| Levee server | `spillway/src/spillway/schema.gleam` (external dep via `levee_bridge`) | Gleam type definitions (source of truth) |
 | Levee server | `lib/mix/tasks/generate_schema.ex` | Mix task to generate JSON schema |
 | Levee server | `priv/protocol-schema.json` | Generated JSON schema |
 | This package | `schemas/protocol-schema.json` | Copied JSON schema |
